@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-B</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2109,7 +2109,7 @@
           <div class="card-title">Trabajo y presupuesto</div>
           <div class="field"><label>Trabajo a realizar</label><input type="text" id="r-trabajo" placeholder="Ej: Cambio de pantalla (repuesto calidad Incell)"></div>
           <div class="field">
-            <label>Repuestos del inventario <span style="color:var(--text3);font-weight:400">(se descuentan al pasar a "Reparado")</span></label>
+            <label>Repuestos — inventario + caja de piezas <span style="color:var(--text3);font-weight:400">(se descuentan al pasar a "Reparado")</span></label>
             <div style="display:flex;gap:6px;margin-bottom:8px;">
               <select id="r-rep-sel" style="flex:1;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"></select>
               <input type="number" id="r-rep-qty" value="1" min="1" step="1" style="width:70px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;">
@@ -2605,6 +2605,7 @@ async function init() {
     onSnapshot(myQ(repuestosCol), snap => {
       repuestosItems = snap.docs.map(d=>({id:d.id,...d.data()}));
       if(currentPage==='repuestos') deb('rp',renderRepInv);
+      if(currentPage==='rep') populateRepuestoSelects(); // el selector de la orden ofrece estas piezas
       if(currentPage==='home') deb('home',renderHome);
       setSyncDot('ok');
     }, snapErr);
@@ -6931,11 +6932,52 @@ window.eliminarInv = async function(){
 
 let repRepuestos = []; // form de alta: {refId, nombre, qty, costo, moneda}
 
+// ── Repuestos para reparaciones: dos orígenes ──
+// 'inv' = colección `inventario` (genérico: {nombre, qty, costo, moneda})
+// 'rep' = colección `repuestos`  (caja de piezas: {modelo, tipo, color, qty, valorRef} — siempre USD)
+// Las líneas viejas no tienen `origen`; se asumen 'inv' para no romper tickets existentes.
+function origenRep(x){ return x && x.origen==='rep' ? 'rep' : 'inv'; }
+function colRep(origen){ return origen==='rep' ? 'repuestos' : 'inventario'; }
+function nombrePiezaRep(p){
+  const t = RP_TIPOS[p.tipo]||RP_TIPOS.otro;
+  return `${p.modelo||'—'} · ${t.n}${p.color?' '+p.color:''}`;
+}
+function itemRepuesto(origen, id){
+  return (origen==='rep'?repuestosItems:invItems).find(x=>x.id===id) || null;
+}
+// value del <select>: "inv:<id>" / "rep:<id>" (sin prefijo = inventario, por compatibilidad)
+function parseRepSel(v){
+  if(!v) return null;
+  const i = v.indexOf(':');
+  return i<0 ? {origen:'inv', id:v} : {origen:v.slice(0,i), id:v.slice(i+1)};
+}
+// Línea de repuesto normalizada, con el costo de la fuente que corresponda
+function lineaRepuesto(origen, p, qty){
+  return origen==='rep'
+    ? {refId:p.id, origen:'rep', nombre:nombrePiezaRep(p), qty, costo:p.valorRef||0, moneda:'USD'}
+    : {refId:p.id, origen:'inv', nombre:p.nombre,          qty, costo:p.costo||0,   moneda:p.moneda||'ARS'};
+}
+// Suma delta al stock de la pieza en SU colección (delta negativo descuenta)
+async function ajustarStockRepuesto(origen, id, delta){
+  const p = itemRepuesto(origen, id); if(!p) return;
+  await updateDoc(doc(db, colRep(origen), id), {qty: Math.max(0,(p.qty||0)+delta)});
+}
+
 function repuestoOptions(){
-  return '<option value="">— elegir repuesto —</option>' +
-    invItems.filter(p=>(p.qty||0)>0).map(p=>
-      `<option value="${p.id}">${esc(p.nombre)} (${p.qty} disp. · ${p.moneda==='ARS'?fmtARS(p.costo||0):'u$s '+(p.costo||0)})</option>`
+  const inv = invItems.filter(p=>(p.qty||0)>0).map(p=>
+    `<option value="inv:${p.id}">${esc(p.nombre)} (${p.qty} disp. · ${p.moneda==='ARS'?fmtARS(p.costo||0):'u$s '+(p.costo||0)})</option>`
+  ).join('');
+  const rep = repuestosItems.filter(p=>(p.qty||0)>0)
+    .sort((a,b)=>
+      cmpModeloRep(a.modelo||'', b.modelo||'') ||
+      RP_ORDEN.indexOf(a.tipo)-RP_ORDEN.indexOf(b.tipo) ||
+      COLL.compare(a.color||'', b.color||'')
+    ).map(p=>
+      `<option value="rep:${p.id}">${esc(nombrePiezaRep(p))} (${p.qty} disp. · ${p.valorRef!=null?'u$s '+p.valorRef:'sin precio'})</option>`
     ).join('');
+  return '<option value="">— elegir repuesto —</option>' +
+    (inv ? `<optgroup label="📦 Inventario">${inv}</optgroup>` : '') +
+    (rep ? `<optgroup label="🧩 Repuestos — caja de piezas">${rep}</optgroup>` : '');
 }
 
 function populateRepuestoSelects(){
@@ -6947,20 +6989,22 @@ function populateRepuestoSelects(){
 
 function renderRepuestosTags(){
   document.getElementById('r-repuestos-tags').innerHTML = repRepuestos.map((r,i)=>
-    `<div class="medio-tag"><span>${r.qty}x ${esc(r.nombre)}${r.libre?' · u$s '+(r.costo||0)+' 🛒':''}</span><button onclick="delRepuesto(${i})">×</button></div>`
+    `<div class="medio-tag"><span>${r.libre?'':(origenRep(r)==='rep'?'🧩 ':'📦 ')}${r.qty}x ${esc(r.nombre)}${r.libre?' · u$s '+(r.costo||0)+' 🛒':''}</span><button onclick="delRepuesto(${i})">×</button></div>`
   ).join('');
 }
 
 window.addRepuesto = function(){
   const sel = document.getElementById('r-rep-sel');
   const qty = parseInt(document.getElementById('r-rep-qty').value)||1;
-  if(!sel.value){ showToast('Elegí un repuesto.', true); return; }
-  const p = invItems.find(x=>x.id===sel.value); if(!p) return;
-  const yaUsado = repRepuestos.filter(r=>r.refId===p.id).reduce((s,r)=>s+r.qty,0);
+  const s = parseRepSel(sel.value);
+  if(!s){ showToast('Elegí un repuesto.', true); return; }
+  const p = itemRepuesto(s.origen, s.id); if(!p) return;
+  const mismo = r => r.refId===p.id && origenRep(r)===s.origen;
+  const yaUsado = repRepuestos.filter(mismo).reduce((acc,r)=>acc+r.qty,0);
   if(yaUsado + qty > (p.qty||0)){ showToast('No hay stock suficiente.', true); return; }
-  const ex = repRepuestos.find(r=>r.refId===p.id);
+  const ex = repRepuestos.find(mismo);
   if(ex) ex.qty += qty;
-  else repRepuestos.push({refId:p.id, nombre:p.nombre, qty, costo:p.costo||0, moneda:p.moneda||'ARS'});
+  else repRepuestos.push(lineaRepuesto(s.origen, p, qty));
   document.getElementById('r-rep-qty').value = 1;
   sel.value = '';
   renderRepuestosTags();
@@ -7066,19 +7110,21 @@ window.addRepuestoModal = async function(){
   const r = reps.find(x=>x.id===repEditId); if(!r) return;
   const sel = document.getElementById('rm-rep-sel');
   const qty = parseInt(document.getElementById('rm-rep-qty').value)||1;
-  if(!sel.value){ showToast('Elegí un repuesto.', true); return; }
-  const p = invItems.find(x=>x.id===sel.value); if(!p) return;
+  const s = parseRepSel(sel.value);
+  if(!s){ showToast('Elegí un repuesto.', true); return; }
+  const p = itemRepuesto(s.origen, s.id); if(!p) return;
   if(qty > (p.qty||0)){ showToast('No hay stock suficiente.', true); return; }
   const repuestos = [...(r.repuestos||[])];
-  const ex = repuestos.find(x=>x.refId===p.id);
+  const linea = lineaRepuesto(s.origen, p, qty);
+  const ex = repuestos.find(x=>x.refId===p.id && origenRep(x)===s.origen);
   if(ex) ex.qty += qty;
-  else repuestos.push({refId:p.id, nombre:p.nombre, qty, costo:p.costo||0, moneda:p.moneda||'ARS'});
-  const hist = [...(r.historial||[]), {fecha:today(), texto:`Repuesto agregado: ${qty}x ${p.nombre}`}];
+  else repuestos.push(linea);
+  const hist = [...(r.historial||[]), {fecha:today(), texto:`Repuesto agregado: ${qty}x ${linea.nombre}`}];
   setSyncDot('syncing');
   try{
     // si ya se había descontado stock (estado reparado), descontar este también ahora
     if(r.stockDescontado){
-      await updateDoc(doc(db,'inventario',p.id), {qty: Math.max(0,(p.qty||0)-qty)});
+      await ajustarStockRepuesto(s.origen, p.id, -qty);
     }
     await updateDoc(doc(db,'reparaciones',repEditId), {repuestos, historial:hist});
     setTimeout(()=>abrirRep(repEditId), 300);
@@ -7094,10 +7140,9 @@ window.quitarRepuestoModal = async function(idx){
   const hist = [...(r.historial||[]), {fecha:today(), texto:`Repuesto quitado: ${quitado.qty}x ${quitado.nombre}`}];
   setSyncDot('syncing');
   try{
-    // si ya estaba descontado, devolver al inventario
-    if(r.stockDescontado){
-      const p = invItems.find(x=>x.id===quitado.refId);
-      if(p) await updateDoc(doc(db,'inventario',quitado.refId), {qty:(p.qty||0)+quitado.qty});
+    // si ya estaba descontado, devolver el stock a su colección de origen
+    if(r.stockDescontado && !quitado.libre && quitado.refId){
+      await ajustarStockRepuesto(origenRep(quitado), quitado.refId, +quitado.qty);
     }
     await updateDoc(doc(db,'reparaciones',repEditId), {repuestos, historial:hist});
     setTimeout(()=>abrirRep(repEditId), 300);
@@ -7419,10 +7464,10 @@ window.abrirRep = function(id){
   populateRepuestoSelects();
   document.getElementById('rm-repuestos-list').innerHTML = (r.repuestos||[]).length
     ? r.repuestos.map((x,i)=>`<div class="pago-item">
-        <div class="pago-info"><div style="font-size:13px;">${x.qty}x ${esc(x.nombre)}${x.libre?' <span style="font-size:10px;color:var(--text3);">🛒 comprado aparte</span>':''}</div>
+        <div class="pago-info"><div style="font-size:13px;">${x.libre?'':(origenRep(x)==='rep'?'🧩 ':'📦 ')}${x.qty}x ${esc(x.nombre)}${x.libre?' <span style="font-size:10px;color:var(--text3);">🛒 comprado aparte</span>':''}</div>
         <div class="pago-fecha">${x.moneda==='ARS'?fmtARS((x.costo||0)*x.qty):'u$s '+((x.costo||0)*x.qty)}</div></div>
         <button class="ei-btn del" onclick="quitarRepuestoModal(${i})">×</button>
-      </div>`).join('') + (r.stockDescontado?'<div style="font-size:11px;color:var(--text3);margin-top:4px;">✓ Ya descontados del inventario</div>':'')
+      </div>`).join('') + (r.stockDescontado?'<div style="font-size:11px;color:var(--text3);margin-top:4px;">✓ Ya descontados del stock</div>':'')
     : '<div style="font-size:12px;color:var(--text3);">Sin repuestos cargados.</div>';
 
   const h = (r.historial||[]).slice().reverse();
@@ -7458,11 +7503,11 @@ window.cambiarEstadoRep = async function(){
     // Al pasar a "reparado": descontar repuestos del inventario (una sola vez)
     if(nuevo==='reparado' && !r.stockDescontado && (r.repuestos||[]).length){
       for(const x of r.repuestos){
-        const p = invItems.find(i=>i.id===x.refId);
-        if(p) await updateDoc(doc(db,'inventario',x.refId), {qty: Math.max(0,(p.qty||0)-(x.qty||1))});
+        if(x.libre || !x.refId) continue; // comprado aparte: no toca stock
+        await ajustarStockRepuesto(origenRep(x), x.refId, -(x.qty||1));
       }
       updates.stockDescontado = true;
-      hist.push({fecha:today(), texto:'Repuestos descontados del inventario'});
+      hist.push({fecha:today(), texto:'Repuestos descontados del stock'});
     }
     // Refurbishment terminado: sumar el costo de repuestos al costo del equipo
     if(r.origen==='refurb' && (nuevo==='reparado' || nuevo==='retirado') && r.refEquipoId){
