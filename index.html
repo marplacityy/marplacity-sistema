@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-B</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-C</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -1508,9 +1508,15 @@
         <button class="btn-secondary" id="btn-migrar" onclick="migrarDatos()">Migrar datos existentes</button>
       </div>
 
+      <div class="card">
+        <div class="card-title">Backup</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Descarga todos tus datos en un archivo JSON: gastos, ingresos, ventas, stock, consignación, reparaciones, repuestos, clientes, cierres y la configuración del local. Guardalo cada tanto — es tu copia fuera de Firebase.</p>
+        <button class="btn-secondary" id="btn-export" onclick="exportarBackup()">⬇ Descargar backup (JSON)</button>
+      </div>
+
       <div class="card danger-zone">
         <div class="card-title" style="color:var(--neg)">Zona de peligro</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Borra TODOS los gastos de Firebase. No se puede deshacer.</p>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Borra TODOS tus datos de Firebase. No se puede deshacer. Antes de borrar se descarga un backup automáticamente y hay que escribir una frase de confirmación.</p>
         <button class="btn-danger" onclick="borrarTodo()">Borrar todos los datos</button>
       </div>
     </div>
@@ -9470,11 +9476,66 @@ window.guardarConfig=async function(){
   catch(e){showToast('Error al guardar',true);setSyncDot('error');}
 };
 
-window.borrarTodo=async function(){
-  if(!confirm('⚠️ ¿Seguro? Se borran TODOS los datos — gastos, ingresos, stock, consignación y pagos. No se puede deshacer.'))return;
+// Fuente única de las colecciones del usuario: la usan el backup y el borrado.
+// Si agregás una colección al sistema, sumala acá o va a quedar fuera del backup.
+const TODAS_LAS_COLS = [
+  ['gastos',gastosCol], ['ingresos',ingresosCol], ['amorts',amortsCol], ['stock',stockCol],
+  ['consig',consigCol], ['pagos_consig',pagosCol], ['gastos_fijos',fijosCol], ['pagos_fijos',pagosFijosCol],
+  ['reparaciones',repCol], ['inventario',invCol], ['clientes',clientesCol], ['cierres',cierresCol],
+  ['cola_impresion',colaCol], ['encargues',encarguesCol], ['repuestos',repuestosCol], ['precios_repuestos',preciosRepCol],
+];
+
+function descargarJSON(nombre, obj){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+// Descarga TODO lo del usuario en un JSON. Devuelve la cantidad de registros, o null si falló.
+window.exportarBackup = async function(){
+  const btn = document.getElementById('btn-export');
+  if(btn){ btn.disabled = true; btn.textContent = 'Generando…'; }
   setSyncDot('syncing');
   try{
-    const cols=[gastosCol,ingresosCol,amortsCol,stockCol,consigCol,pagosCol,fijosCol,pagosFijosCol,repCol,invCol,clientesCol,cierresCol,colaCol,encarguesCol,repuestosCol,preciosRepCol];
+    const data = {
+      sistema: 'MarplaCity',
+      exportadoEl: new Date().toISOString(),
+      uid,
+      email: (auth.currentUser && auth.currentUser.email) || null,
+      colecciones: {}
+    };
+    for(const [nombre, col] of TODAS_LAS_COLS){
+      const snap = await getDocs(myQ(col));
+      data.colecciones[nombre] = snap.docs.map(d=>({id:d.id, ...d.data()}));
+    }
+    const cfgSnap = await getDoc(cfgDoc);
+    data.config = cfgSnap.exists() ? cfgSnap.data() : null;
+    const total = Object.values(data.colecciones).reduce((s,a)=>s+a.length, 0);
+    descargarJSON(`marplacity-backup-${today()}.json`, data);
+    showToast(`Backup descargado ✓ — ${total} registros`);
+    setSyncDot('ok');
+    return total;
+  }catch(e){
+    console.error(e); showToast('Error al exportar: '+e.message, true); setSyncDot('error');
+    return null;
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = '⬇ Descargar backup (JSON)'; }
+  }
+};
+
+window.borrarTodo=async function(){
+  const FRASE = 'BORRAR TODO';
+  if(!confirm('⚠️ Esto borra TODOS tus datos: gastos, ingresos, ventas, stock, consignación, reparaciones, repuestos, clientes y cierres.\n\nPrimero se va a descargar un backup en JSON. Guardalo antes de seguir.')) return;
+  const total = await window.exportarBackup();
+  if(total === null && !confirm('No se pudo generar el backup.\n\n¿Borrar igual, sin respaldo?')) return;
+  const escrito = prompt(`Último paso — esto no se puede deshacer.\n\nSe van a borrar ${total!=null?total+' registros':'todos tus datos'}.\n\nEscribí  ${FRASE}  para confirmar:`);
+  if((escrito||'').trim().toUpperCase() !== FRASE){ showToast('Cancelado — no se borró nada.'); return; }
+  setSyncDot('syncing');
+  try{
+    const cols = TODAS_LAS_COLS.map(([,col])=>col);
     for(const col of cols){
       const snap=await getDocs(myQ(col));
       if(snap.empty) continue;
