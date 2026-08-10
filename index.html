@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-C</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-D</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -5353,8 +5353,9 @@ window.importarPreciosIA = async function(){
       method:'POST',
       headers: await workerHeaders(),
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 4000,
+        model: 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: { effort: 'low' },
         messages: [{ role:'user', content:
 `Sos experto en repuestos de celulares. Te paso el texto crudo copiado de una página de un proveedor de repuestos (puede venir con menús, basura, precios en varias calidades). Extraé los precios de las piezas.
 
@@ -5388,7 +5389,7 @@ ${texto}` }]
     });
     if(!resp.ok) throw new Error('El servidor respondió '+resp.status);
     const data = await resp.json();
-    let txt = (data.content||[]).map(b=>b.text||'').join('').trim().replace(/```json|```/g,'').trim();
+    const txt = textoDeIA(data).replace(/```json|```/g,'').trim();
     const arr = JSON.parse(txt);
     if(!Array.isArray(arr) || !arr.length) throw new Error('No se detectaron precios de piezas en ese texto');
 
@@ -5494,8 +5495,9 @@ window.cargarCajaIA = async function(){
       method:'POST',
       headers: await workerHeaders(),
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20250929',
-        max_tokens: 4000,
+        model: 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: { effort: 'low' },
         messages: [{ role:'user', content:
 `Sos experto en repuestos de celulares. Te paso una lista de piezas sueltas y equipos donantes que hay en una caja. Devolvé SOLO un JSON array válido, sin texto ni markdown ni backticks.
 
@@ -5522,8 +5524,7 @@ ${texto}` }]
     });
     if(!resp.ok) throw new Error('El servidor respondió '+resp.status);
     const data = await resp.json();
-    let txt = (data.content||[]).map(b=>b.text||'').join('').trim();
-    txt = txt.replace(/```json|```/g,'').trim();
+    const txt = textoDeIA(data).replace(/```json|```/g,'').trim();
     const arr = JSON.parse(txt);
     if(!Array.isArray(arr) || !arr.length) throw new Error('No se detectaron piezas');
 
@@ -8426,8 +8427,9 @@ window.interpretarLista = async function(){
       method: 'POST',
       headers: await workerHeaders(),
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1000,
+        model: 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: { effort: 'low' },
         messages: [{
           role: 'user',
           content: `Sos un experto en listas de productos de celulares. Analizá esta lista y extraé TODA la información de cada equipo, sin importar el formato (puede venir desordenado, con emojis, abreviado, en varias líneas por item). Devolvé SOLO un JSON array válido, sin texto adicional, sin markdown, sin backticks.
@@ -8455,9 +8457,7 @@ ${texto}`
 
     const data = await response.json();
     console.log('API response:', JSON.stringify(data).slice(0, 500));
-    if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-    if(!data.content || !data.content[0]) throw new Error('Respuesta inesperada: ' + JSON.stringify(data).slice(0,200));
-    const raw = data.content[0].text.trim().replace(/```json|```/g,'');
+    const raw = textoDeIA(data).replace(/```json|```/g,'').trim();
     listaParseada = JSON.parse(raw);
 
     // Render preview
@@ -9034,6 +9034,27 @@ async function workerHeaders(){
   }catch(e){ console.warn('No se pudo obtener el token', e); }
   return h;
 }
+
+// Lee el texto de una respuesta de la API de Claude.
+// OJO: no sirve content[0].text — los modelos actuales piensan por defecto y el
+// primer bloque de content es de tipo "thinking" (sin campo .text). Hay que
+// juntar los bloques de tipo "text".
+function textoDeIA(data){
+  if(!data) throw new Error('Sin respuesta del servidor');
+  if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  if(data.stop_reason === 'refusal') throw new Error('La IA rechazó la consulta por sus políticas de contenido.');
+  const txt = (Array.isArray(data.content) ? data.content : [])
+    .filter(b => b.type === 'text')
+    .map(b => b.text || '')
+    .join('')
+    .trim();
+  if(!txt){
+    throw new Error(data.stop_reason === 'max_tokens'
+      ? 'La respuesta se cortó por límite de tokens. Probá con menos datos de entrada.'
+      : 'La IA no devolvió texto: ' + JSON.stringify(data).slice(0,200));
+  }
+  return txt;
+}
 let aiChatHistory = [];
 let aiReportContext = null;
 
@@ -9201,15 +9222,15 @@ window.generarReporteIA = async function(){
       method: 'POST',
       headers: await workerHeaders(),
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 2000,
+        model: 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: { effort: 'medium' },
         system: systemPrompt,
         messages: aiChatHistory
       })
     });
     const data2 = await response.json();
-    if(data2.error) throw new Error(data2.error.message);
-    const reply = data2.content[0].text;
+    const reply = textoDeIA(data2);
     aiChatHistory.push({ role: 'assistant', content: reply });
     removeTyping();
     addChatMessage('ai', reply);
@@ -9240,15 +9261,15 @@ window.enviarPreguntaIA = async function(){
       method: 'POST',
       headers: await workerHeaders(),
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1000,
+        model: 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: { effort: 'medium' },
         system: buildSystemPrompt(aiReportContext),
         messages: aiChatHistory
       })
     });
     const data = await response.json();
-    if(data.error) throw new Error(data.error.message);
-    const reply = data.content[0].text;
+    const reply = textoDeIA(data);
     aiChatHistory.push({ role: 'assistant', content: reply });
     removeTyping();
     addChatMessage('ai', reply);

@@ -116,7 +116,8 @@ Agregar una colección son 4 pasos: `collection(db, ...)` → array global → `
 
 ### Servicios externos
 
-- `WORKER_URL` (`anthropic-proxy.fiwind702050.workers.dev`) — proxy Cloudflare hacia la API de Anthropic para los reportes y el chat con IA. Autenticado con `X-Firebase-Token` (ID token de Firebase) vía `workerHeaders()`.
+- `WORKER_URL` (`anthropic-proxy.fiwind702050.workers.dev`) — proxy Cloudflare hacia la API de Anthropic para los reportes y el chat con IA. Autenticado con `X-Firebase-Token` (ID token de Firebase) vía `workerHeaders()`. El Worker es **transparente**: valida el token y reenvía el body tal cual, así que el modelo y todos los parámetros se definen acá en el HTML.
+  - **Para leer la respuesta usá `textoDeIA(data)`, nunca `data.content[0].text`.** Los modelos actuales piensan por defecto y el primer bloque de `content` es de tipo `thinking` (sin campo `.text`), así que indexar el primero devuelve `undefined`. El helper junta los bloques `text` y traduce `refusal` y `max_tokens` a errores legibles.
 - `cfg.imeiWorker` — URL configurable por el usuario en Configuración, para chequeo de IMEI. Los service IDs son `0` (modelo, gratis), `81` (modelo+color+capacidad), `4` (FMI/iCloud), `55` (blacklist); `correrCheck` los consulta en serie y `guardarEstadoCheck` persiste el resultado.
 - Dependencias por CDN (cdnjs + gstatic): sin red no arranca ni Firebase ni la generación de PDFs/etiquetas.
 
