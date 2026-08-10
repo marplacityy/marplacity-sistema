@@ -1,0 +1,60 @@
+rules_version = '2';
+
+// Reglas de seguridad de Firestore — proyecto mis-gastos-21e7b
+//
+// Modelo: cada documento lleva `userId` (lo inyecta withUser() en index.html) y
+// toda lectura va filtrada por myQ() => where('userId','==',uid).
+// Estas reglas hacen cumplir eso del lado del servidor: la config de Firebase es
+// pública (está en index.html, repo público), así que ESTA es la única barrera real.
+//
+// Deploy:  firebase deploy --only firestore:rules
+// Test:    firebase emulators:start --only firestore
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function loggedIn() {
+      return request.auth != null;
+    }
+
+    // El doc que ya existe pertenece al usuario que hace el pedido
+    function owns() {
+      return loggedIn() && resource.data.userId == request.auth.uid;
+    }
+
+    // El doc que se está por escribir se atribuye al usuario que hace el pedido
+    function writesAsSelf() {
+      return loggedIn() && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Config del usuario: un doc por uid, la clave del doc ES el uid.
+    match /config/{uid} {
+      allow read, write: if loggedIn() && request.auth.uid == uid;
+    }
+
+    // Colecciones de datos: todas siguen el mismo patrón userId.
+    function esColeccionDeDatos(col) {
+      return col in [
+        'gastos', 'ingresos', 'amorts',
+        'stock', 'consig', 'pagos_consig',
+        'gastos_fijos', 'pagos_fijos',
+        'reparaciones', 'repuestos', 'precios_repuestos',
+        'inventario', 'clientes', 'encargues',
+        'cierres', 'cola_impresion'
+      ];
+    }
+
+    match /{col}/{docId} {
+      allow read:   if esColeccionDeDatos(col) && owns();
+      allow create: if esColeccionDeDatos(col) && writesAsSelf();
+      // update: hay que ser dueño del doc actual Y no poder reasignarlo a otro usuario
+      allow update: if esColeccionDeDatos(col) && owns() && writesAsSelf();
+      allow delete: if esColeccionDeDatos(col) && owns();
+    }
+
+    // Todo lo demás queda cerrado.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
