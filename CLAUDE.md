@@ -90,6 +90,20 @@ onSnapshot(myQ(col))  →  applySnap('nombre', snap)  →  array global  →  de
 
 Agregar una colección son 4 pasos: `collection(db, ...)` → array global → `onSnapshot` en `init()` → función `renderX()` llamada vía `deb`.
 
+### Ventana de datos (colecciones acotadas por fecha)
+
+`gastos`, `ingresos` y `cierres` **no se traen completas**: se acotan con `where('fecha','>=', ventanaDesde)` (default 12 meses, configurable en Configuración y guardado en `cfg.ventanaMeses`). Sin esto el arranque lee todo el histórico y agota la cuota diaria de Firebase. Sus listeners viven en `attachListenersVentana()` y se re-arman enteros desde `setVentanaDatos(meses)`.
+
+Tres reglas que no se pueden violar acá:
+
+- **Las escrituras a esas colecciones siempre deben poner `fecha`, nunca `''`.** Un documento sin ese campo queda fuera de toda consulta por rango y se vuelve invisible. `verificarFechasVacias()` detecta los que ya existían y avisa.
+- **Al re-suscribir hay que limpiar `_stores`.** El listener nuevo no emite `removed` de lo que quedó afuera de la ventana, así que los docs viejos sobrevivirían en el `Map` incremental.
+- **Toda vista que muestre totales de esas colecciones debe llamar `avisoVentana()`**, o los números de un período viejo salen incompletos sin que nada lo indique.
+
+**Por qué las demás no se acotan** (no es un olvido): `reparaciones` alimenta `nextRepNum()`, que saca el correlativo del array — acotarla duplicaría números de ticket. `consig`/`pagos_consig` alimentan el FIFO de deuda de `proveedorAging()`, que necesita el historial completo para no mostrar como impaga una deuda ya pagada. El resto son de estado actual (stock, inventario, repuestos, clientes) y no crecen igual.
+
+Las consultas acotadas necesitan índices compuestos (`userId` + `fecha`), versionados en `firestore.indexes.json` y desplegados con `firebase deploy --only firestore:indexes`. `subVentana()` cae a la consulta sin acotar si el índice falta, para no dejar la pantalla vacía.
+
 ### Arranque y routing
 
 `onAuthStateChanged` (email/password) → setea `uid` y `cfgDoc` → `init()` (lee config, engancha todos los `onSnapshot`, oculta `#loading`) → `goTo('home')`.

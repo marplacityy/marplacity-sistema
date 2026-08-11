@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-E</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-F</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -1506,6 +1506,22 @@
         <div class="card-title">Migración de datos</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Si tenés datos cargados de antes del sistema de usuarios, esto te los asigna a tu cuenta. Ejecutalo una sola vez.</p>
         <button class="btn-secondary" id="btn-migrar" onclick="migrarDatos()">Migrar datos existentes</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Datos cargados</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Para que el sistema arranque rápido y no agote la cuota diaria de lecturas de Firebase, los <b>gastos, ingresos y cierres de caja</b> se cargan solo desde esta fecha en adelante. Todo lo demás (stock, reparaciones, consignación, clientes, repuestos) se carga completo siempre.<br><br>Si necesitás ver o reportar períodos más viejos, ampliá el rango — se recarga al instante y podés volver a achicarlo después.</p>
+        <div class="field">
+          <label>Rango de datos históricos</label>
+          <select id="cfg-ventana" onchange="setVentanaDatos(this.value)">
+            <option value="6">Últimos 6 meses</option>
+            <option value="12">Últimos 12 meses</option>
+            <option value="24">Últimos 2 años</option>
+            <option value="36">Últimos 3 años</option>
+            <option value="0">Todo el histórico</option>
+          </select>
+        </div>
+        <div id="cfg-ventana-info" style="font-size:12px;color:var(--text3);"></div>
       </div>
 
       <div class="card">
@@ -2528,6 +2544,110 @@ let uid = null;
 const withUser = (obj) => ({...obj, userId: uid});
 // Query filtrada por usuario
 const myQ = (col) => query(col, where('userId','==',uid));
+
+// ── Ventana de datos ─────────────────────────────────────────────────────
+// Sin esto el sistema se trae TODOS los documentos de cada colección en cada
+// arranque, para siempre: es lo que agota la cuota diaria de lecturas cuando
+// se acumulan años. Solo se acotan las colecciones históricas de alto volumen
+// (gastos, ingresos, cierres). NO se acotan reparaciones (nextRepNum() saca el
+// correlativo del array y se duplicarían números), ni consignación/pagos (el
+// FIFO de deuda necesita el historial completo), ni las de estado actual.
+// ventanaMeses = 0/null → sin límite.
+let ventanaMeses = 12;
+let ventanaDesde = null;
+let unsubVentana = [];
+function calcVentanaDesde(meses){
+  if(!meses) return null;
+  const d = new Date();
+  d.setMonth(d.getMonth() - meses);
+  d.setDate(1);
+  return isoLocal(d);
+}
+function textoVentana(){
+  return ventanaDesde ? `Datos desde ${ventanaDesde}` : 'Histórico completo';
+}
+// Aviso visible: sin esto, los totales de un período viejo saldrían incompletos
+// sin que nada lo indique, que es peor que salir lentos.
+function avisoVentana(){
+  return ventanaDesde
+    ? `<div class="empty" style="padding:.5rem;">📅 ${textoVentana()} — lo anterior no está cargado. Ampliá el rango en Configuración.</div>`
+    : '';
+}
+// Suscribe acotando por fecha. Si falta el índice compuesto en Firebase, cae a
+// la consulta sin acotar en vez de dejar la pantalla vacía.
+function subVentana(col, cb){
+  const q = ventanaDesde
+    ? query(col, where('userId','==',uid), where('fecha','>=',ventanaDesde))
+    : myQ(col);
+  return onSnapshot(q, cb, err => {
+    if(err && err.code === 'failed-precondition' && ventanaDesde){
+      console.warn('Falta el índice compuesto en Firestore; cargando sin acotar.', err);
+      showToast('Falta un índice en Firebase — se carga todo el histórico.', true);
+      unsubVentana.push(onSnapshot(myQ(col), cb, snapErr));
+    } else snapErr(err);
+  });
+}
+
+// Los tres listeners acotados. Se re-arman enteros cuando cambia la ventana.
+function attachListenersVentana(){
+  unsubVentana.push(subVentana(gastosCol, snap => {
+    const _g = applySnap('gastos', snap);
+    if(_g){ gastos = _g; gastos.sort((a,b)=>{ const fd=(b.fecha||'').localeCompare(a.fecha||''); if(fd!==0)return fd; const at=(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0); return at; }); }
+    updateConceptosDL();
+    buildMonthChips();
+    if (currentPage==='listado') { refreshDropdowns(); renderListado(); }
+    if (currentPage==='reportes') renderReporte();
+    setSyncDot('ok');
+  }));
+  unsubVentana.push(subVentana(ingresosCol, snap => {
+    const _i = applySnap('ingresos', snap);
+    if(_i){ ingresos = _i; ingresos.sort((a,b)=>{ const fd=(b.fecha||'').localeCompare(a.fecha||''); if(fd!==0)return fd; return (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0); }); }
+    if(currentPage==='facturas') deb('inc',renderIngresos);
+    if(currentPage==='home') deb('home',renderHome);
+    if(currentPage==='ingresos'){ deb('grid',renderPosGrid); }
+    if(currentPage==='reportes') renderReporte();
+    setSyncDot('ok');
+  }));
+  unsubVentana.push(subVentana(cierresCol, snap => {
+    cierresItems = snap.docs.map(d=>({id:d.id,...d.data()}));
+    cierresItems.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+    if(currentPage==='caja') deb('caja',renderCaja);
+    setSyncDot('ok');
+  }));
+}
+
+// Un documento sin `fecha` (o con fecha '') queda FUERA de cualquier consulta por
+// rango, así que sería invisible mientras la ventana esté activa. Avisamos en vez
+// de dejar que desaparezca en silencio.
+async function verificarFechasVacias(){
+  if(!ventanaDesde) return;
+  try{
+    const snap = await getDocs(query(ingresosCol, where('userId','==',uid), where('fecha','==','')));
+    if(!snap.empty){
+      console.warn(`${snap.size} ingresos sin fecha quedan fuera de la ventana de datos.`);
+      showToast(`⚠️ Hay ${snap.size} ingresos sin fecha que no se ven con el rango acotado. Poné "Todo el histórico" en Configuración.`, true);
+    }
+  }catch(e){ console.warn('No se pudo verificar fechas vacías', e); }
+}
+
+window.setVentanaDatos = async function(meses){
+  const m = parseInt(meses);
+  ventanaMeses = (isNaN(m) || m<=0) ? null : m;
+  ventanaDesde = calcVentanaDesde(ventanaMeses);
+  // Cortar los listeners viejos y limpiar los Map incrementales: al angostar la
+  // ventana el listener nuevo no emite 'removed' de lo que quedó afuera, así que
+  // sin esto los documentos viejos sobrevivirían en memoria.
+  unsubVentana.forEach(u=>{ try{ u(); }catch(e){} });
+  unsubVentana = [];
+  delete _stores.gastos; delete _stores.ingresos;
+  gastos = []; ingresos = []; cierresItems = [];
+  setSyncDot('syncing');
+  attachListenersVentana();
+  const info = document.getElementById('cfg-ventana-info');
+  if(info) info.textContent = textoVentana();
+  try{ await setDoc(cfgDoc, {ventanaMeses: ventanaMeses||0}, {merge:true}); }catch(e){ console.warn(e); }
+  showToast(ventanaDesde ? `Cargando desde ${ventanaDesde} ✓` : 'Cargando histórico completo ✓');
+};
 const gastosCol = collection(db, 'gastos');
 const ingresosCol = collection(db, 'ingresos');
 const stockCol = collection(db, 'stock');
@@ -2593,21 +2713,17 @@ async function init() {
       const d = cfgSnap.data();
       if (d.cats) cats = d.cats;
       if (d.medios) medios = d.medios;
+      if (d.ventanaMeses !== undefined) ventanaMeses = d.ventanaMeses || null;
     } else {
       await setDoc(cfgDoc, withUser({ tc:'1410', nombre:'Mi negocio', cats, medios, icats }));
     }
+    ventanaDesde = calcVentanaDesde(ventanaMeses); // antes de enganchar los listeners
+
     if (listenersReady) { document.getElementById('loading').classList.add('hidden'); return; }
     listenersReady = true;
 
-    onSnapshot(myQ(gastosCol), snap => {
-      const _g = applySnap('gastos', snap);
-      if(_g){ gastos = _g; gastos.sort((a,b)=>{ const fd=(b.fecha||'').localeCompare(a.fecha||''); if(fd!==0)return fd; const at=(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0); return at; }); }
-      updateConceptosDL();
-      buildMonthChips();
-      if (currentPage==='listado') { refreshDropdowns(); renderListado(); }
-      if (currentPage==='reportes') renderReporte();
-      setSyncDot('ok');
-    }, snapErr);
+    attachListenersVentana(); // gastos, ingresos y cierres: acotados por fecha
+    verificarFechasVacias();  // avisa si hay registros viejos sin fecha
     onSnapshot(myQ(repuestosCol), snap => {
       repuestosItems = snap.docs.map(d=>({id:d.id,...d.data()}));
       if(currentPage==='repuestos') deb('rp',renderRepInv);
@@ -2625,12 +2741,6 @@ async function init() {
       encarguesItems.sort((a,b)=>(b.fechaEncargue||'').localeCompare(a.fechaEncargue||''));
       if(currentPage==='encargues') deb('enc',renderEncargues);
       if(currentPage==='home') deb('home',renderHome);
-      setSyncDot('ok');
-    }, snapErr);
-    onSnapshot(myQ(cierresCol), snap => {
-      cierresItems = snap.docs.map(d=>({id:d.id,...d.data()}));
-      cierresItems.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
-      if(currentPage==='caja') deb('caja',renderCaja);
       setSyncDot('ok');
     }, snapErr);
     onSnapshot(myQ(clientesCol), snap => {
@@ -2682,14 +2792,6 @@ async function init() {
       if(currentPage==='stock') renderStock();
       setSyncDot('ok');
     }, snapErr);
-    onSnapshot(myQ(ingresosCol), snap => {
-      const _i = applySnap('ingresos', snap);
-      if(_i){ ingresos = _i; ingresos.sort((a,b)=>{ const fd=(b.fecha||'').localeCompare(a.fecha||''); if(fd!==0)return fd; return (b.createdAt?.seconds||0)-(a.createdAt?.seconds||0); }); }
-      if(currentPage==='facturas') deb('inc',renderIngresos);
-      if(currentPage==='home') deb('home',renderHome);
-      if(currentPage==='ingresos'){ deb('grid',renderPosGrid); }
-      if(currentPage==='reportes') renderReporte();
-    });
     onSnapshot(myQ(amortsCol), snap => {
       amorts = snap.docs.map(d=>({id:d.id,...d.data()}));
       if (currentPage==='amort') renderAmort();
@@ -2716,6 +2818,8 @@ async function init() {
         document.getElementById('cfg-cort-vidrio').value = d.cortVidrio||'';
         document.getElementById('cfg-print-mode').value = d.printMode||'pantalla';
         document.getElementById('cfg-imei-worker').value = d.imeiWorker||'';
+        document.getElementById('cfg-ventana').value = String(d.ventanaMeses ?? 12);
+        document.getElementById('cfg-ventana-info').textContent = textoVentana();
         document.getElementById('cfg-cort-funda').value = d.cortFunda||'';
       }
     });
@@ -3095,7 +3199,7 @@ function renderListado(){
   const _totG = items.length;
   if(_totG > 100) items = items.slice(0, 100);
 
-  document.getElementById('listado-body').innerHTML=(_totG>100?`<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totG} — refiná los filtros para ver el resto.</div>`:'')+items.map(g=>{
+  document.getElementById('listado-body').innerHTML=avisoVentana()+(_totG>100?`<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totG} — refiná los filtros para ver el resto.</div>`:'')+items.map(g=>{
     const pagado=g.pagado!==false;
     const hoy=today();
     const venc=g.vencimiento||null;
@@ -3509,7 +3613,7 @@ function renderIngresos(){
   if(!items.length){document.getElementById('inc-list-body').innerHTML='<div class="empty">Sin ingresos en este filtro.</div>';return;}
   const _totF = items.length;
   if(_totF > 100) items = items.slice(0, 100);
-  document.getElementById('inc-list-body').innerHTML=(_totF>200?`<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totF} — refiná la búsqueda o el rango de fechas.</div>`:'')+items.map(g=>{
+  document.getElementById('inc-list-body').innerHTML=avisoVentana()+(_totF>200?`<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totF} — refiná la búsqueda o el rango de fechas.</div>`:'')+items.map(g=>{
     const mediosStr=g.medios&&g.medios.length?g.medios.map(m=>`${esc(m.medio)} ${m.moneda==='USD'?'u$s':'$'}${Number(m.valor).toLocaleString('es-AR')}`).join(' + '):'';
     const permutaStr=g.permuta?` + 💱 ${esc(g.permuta.descripcion||'Permuta')} ${g.permuta.moneda==='USD'?'u$s':'$'}${Number(g.permuta.valor).toLocaleString('es-AR')}`:'';
     const ganValUSD=g.gananciaUSD!=null&&(g.totalUSD||0)>0?g.gananciaUSD:null;
@@ -3959,7 +4063,9 @@ window.importarRD = async function(){
         enBatch++;
         const ref = doc(ingresosCol);
         batch.set(ref, withUser({
-          fecha: f.fecha||'',
+          // Nunca vacía: un doc con fecha '' queda fuera de toda consulta por
+          // rango y sería invisible mientras la ventana de datos esté activa.
+          fecha: f.fecha||today(),
           numVenta: f.numVenta||null,
           nombre: f.nombre||'Venta',
           categoria: 'Venta producto',
@@ -9479,7 +9585,7 @@ function renderReporte(){
       </table></div>
     </div>`;
   }
-  document.getElementById('reporte-content').innerHTML=html;
+  document.getElementById('reporte-content').innerHTML=avisoVentana()+html;
 }
 
 // ── Amortizaciones ──
