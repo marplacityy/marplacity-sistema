@@ -62,6 +62,17 @@ Las páginas son `page-cargar`, `listado`, `reportes`, `amort`, `config`, `ingre
 
 El HTML usa `onclick="..."` inline, pero la lógica vive en un ES module (scope propio). Por eso **todo handler invocado desde el HTML se declara como `window.nombre = function(){...}`**. Si agregás un handler y no lo colgás de `window`, el onclick falla silenciosamente en runtime.
 
+Esto vale también para las **variables**: `onclick="f(repEditId)"` no funciona, porque el atributo se evalúa en scope global y `repEditId` es del módulo. El handler tiene que ser un wrapper global que lea la variable por su cuenta (ver `labelReparacionActual`).
+
+Al final del módulo hay un `Object.assign(window, {...})` para las funciones que se llaman desde el HTML pero se declaran como `function` sueltas. Para auditar que no falte ninguna:
+
+```bash
+grep -oE 'on(click|change|input|keydown)="[a-zA-Z_$][a-zA-Z0-9_$]*\(' index.html \
+  | sed -E 's/.*"([a-zA-Z_$][a-zA-Z0-9_$]*)\(/\1/' | sort -u
+```
+
+Comparar esa lista contra lo expuesto en `window`; lo único que puede sobrar legítimamente es `if` (de algún `onclick="if(...)"`).
+
 Como consecuencia, el HTML se genera con template strings + `innerHTML`: usá `esc()` para texto y `escJs()` para valores que entran dentro de un `onclick='...'`.
 
 ### Firestore como única fuente de datos

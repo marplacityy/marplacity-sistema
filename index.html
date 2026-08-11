@@ -1077,7 +1077,7 @@
       <button class="btn-secondary" onclick="eliminarRep()">Eliminar</button>
       <button class="btn-secondary" onclick="abrirRepEdit()">✏️ Editar</button>
       <button class="btn-print" onclick="imprimirTicket()">🖨 Imprimir ticket</button>
-      <button class="btn-print" onclick="labelReparacion(repEditId)" title="Etiqueta 62x100mm para pegar en el equipo">🏷 Etiqueta</button>
+      <button class="btn-print" onclick="labelReparacionActual()" title="Etiqueta 62x100mm para pegar en el equipo">🏷 Etiqueta</button>
     </div>
   </div>
 </div>
@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.11-C</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.11-D</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -5004,6 +5004,13 @@ window.labelConsig = function(id){
 };
 
 // ── Etiqueta de REPARACIÓN ──
+// Los onclick del HTML corren en scope global y NO ven las variables del módulo
+// (como repEditId), por eso el botón tiene que llamar a un wrapper global.
+window.labelReparacionActual = function(){
+  if(!repEditId){ showToast('Abrí la reparación primero.', true); return; }
+  window.labelReparacion(repEditId);
+};
+
 window.labelReparacion = function(id){
   const r = reps.find(x=>x.id===id); if(!r) return;
   const local = cfg.localNombre || 'MarplaCity';
@@ -9874,6 +9881,13 @@ window.migrarDatos = async function(){
 };
 
 // ── Arranque: espera el estado de auth ──
+// ── Funciones invocadas desde atributos del HTML ─────────────────────────────
+// Los onclick/onchange/oninput corren en scope GLOBAL y no ven nada declarado
+// dentro de este módulo. Estas se llamaban desde el HTML sin estar expuestas:
+// tiraban ReferenceError y el control quedaba muerto sin ningún síntoma visible.
+// Si agregás un handler inline que llame a una función del módulo, sumala acá.
+Object.assign(window, { deb, renderCaja, renderCart, renderRepInv, renderReporte, renderTkHistory });
+
 onAuthStateChanged(auth, async (user) => {
   const loginScreen = document.getElementById('login-screen');
   const loadingEl   = document.getElementById('loading');
