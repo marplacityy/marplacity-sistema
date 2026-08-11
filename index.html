@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.11-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.11-B</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -4928,9 +4928,11 @@ function abrirLabel(html){
   w.document.close();
 }
 
-// ── Etiqueta de EQUIPO en stock ──
-window.labelEquipo = function(id){
-  const s = stockItems.find(x=>x.id===id); if(!s) return;
+// ── Etiqueta 62x100 de EQUIPO ──
+// Compartida por stock y consignación: mismo diseño, solo cambia la línea de
+// origen (PROPIO / PERMUTA / CONSIGNACIÓN) y de dónde salen los campos.
+// Consignación no tiene chequeo de FMI ni blacklist: van como '—'.
+function etiquetaEquipo(s, origen){
   const local = cfg.localNombre || 'MarplaCity';
   const imei = (s.imei||'').trim();
   const bat = s.bateria!=null ? s.bateria+'%' + (s.ciclos!=null?` · ${s.ciclos} cic`:'') : '—';
@@ -4949,15 +4951,18 @@ window.labelEquipo = function(id){
     : (/^limpio$/i.test(bl.trim()) || /\b(no|clean|whitelist|false)\b/i.test(bl)
         ? '<span class="lb-ok">BL: LIMPIO</span>' : '<span class="lb-bad">BL: REPORTADO</span>');
   // IMPORTANTE: la etiqueta muestra el PRECIO DE VENTA, nunca el costo.
+  // En consignación eso es doblemente importante: `precio` es lo que se le debe
+  // al proveedor y no puede terminar impreso en una etiqueta que ve el cliente.
   const precio = s.precioVentaUSD ? 'u$s '+Math.round(s.precioVentaUSD) : '';
-  const titulo = [s.nombre, s.gb, s.color].filter(Boolean).join(' · ');
+  // stock usa `nombre`, consignación usa `producto`
+  const titulo = [s.nombre||s.producto, s.gb, s.color].filter(Boolean).join(' · ');
 
   abrirLabel(`
     <div class="lb-top">
       <div class="lb-meta">
         <div class="lb-marca">${esc(local.toUpperCase())}</div>
         <div>${s.fechaEntrada||today()}</div>
-        <div>${s.tipo==='permuta'?'PERMUTA':'PROPIO'}${s.estadoProducto?' · '+esc(s.estadoProducto):''}</div>
+        <div>${esc(origen)}${s.estadoProducto?' · '+esc(s.estadoProducto):''}</div>
       </div>
       <div class="lb-bc">
         ${imei?`<svg data-bc="${esc(imei)}"></svg><div class="lb-imei">IMEI: ${esc(imei)}</div>`:'<div class="lb-imei">SIN IMEI</div>'}
@@ -4980,6 +4985,16 @@ window.labelEquipo = function(id){
       <div class="lb-precio">${precio}</div>
       ${imei?`<canvas class="lb-qr" data-qr="${esc(imei)}"></canvas>`:''}
     </div>`);
+}
+
+window.labelEquipo = function(id){
+  const s = stockItems.find(x=>x.id===id); if(!s) return;
+  etiquetaEquipo(s, s.tipo==='permuta' ? 'PERMUTA' : 'PROPIO');
+};
+
+window.labelConsig = function(id){
+  const g = consigItems.find(x=>x.id===id); if(!g) return;
+  etiquetaEquipo(g, 'CONSIGNACIÓN');
 };
 
 // ── Etiqueta de REPARACIÓN ──
@@ -8885,6 +8900,7 @@ function renderConsig(){
         ${g.precioARS!=null?`<div class="stock-sub">${fmtARS(g.precioARS)}</div>`:''}
       </div>
       <div class="ei-actions">
+        <button class="ei-btn" onclick="labelConsig('${g.id}')" title="Imprimir etiqueta 62x100mm">🏷</button>
         <button class="ei-btn" onclick="editarConsig('${g.id}')" title="Editar">✎</button>
         <button class="ei-btn" onclick="marcarConsigVendido('${g.id}',${vendido})" title="${vendido?'Volver a stock':'Marcar vendido'}">${vendido?'↩':'✓'}</button>
         <button class="ei-btn del" onclick="eliminarConsig('${g.id}')" title="Eliminar">×</button>
