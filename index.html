@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-D</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-E</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -3090,7 +3090,12 @@ function renderListado(){
 
   if(!items.length){document.getElementById('listado-body').innerHTML='<div class="empty">Sin gastos en este filtro.</div>';return;}
 
-  document.getElementById('listado-body').innerHTML=items.map(g=>{
+  // Tope de filas: las métricas de arriba siguen calculadas sobre TODO el filtro,
+  // solo se acota el DOM (miles de filas congelan el navegador).
+  const _totG = items.length;
+  if(_totG > 100) items = items.slice(0, 100);
+
+  document.getElementById('listado-body').innerHTML=(_totG>100?`<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totG} — refiná los filtros para ver el resto.</div>`:'')+items.map(g=>{
     const pagado=g.pagado!==false;
     const hoy=today();
     const venc=g.vencimiento||null;
@@ -6043,6 +6048,40 @@ function opsDeCliente(cl){
   return {ventas, repas};
 }
 
+// Índice para el listado de clientes: una sola pasada por ingresos y reparaciones,
+// en vez de escanear ambos arrays por cada cliente que se renderiza.
+function indiceOpsClientes(){
+  const porId = new Map(), porNombre = new Map();
+  const push = (m, k, campo, v) => {
+    if(!k) return;
+    let o = m.get(k);
+    if(!o){ o = {ventas:[], repas:[]}; m.set(k, o); }
+    o[campo].push(v);
+  };
+  ingresos.forEach(v=>{
+    push(porId, v.clienteId, 'ventas', v);
+    push(porNombre, (v.clienteNombre||'').toLowerCase(), 'ventas', v);
+  });
+  reps.forEach(r=>{
+    push(porId, r.clienteId, 'repas', r);
+    push(porNombre, (r.cliente||'').toLowerCase(), 'repas', r);
+  });
+  return {porId, porNombre};
+}
+// Mismo resultado que opsDeCliente() pero en O(1). Deduplica porque un documento
+// puede matchear por id y por nombre a la vez.
+function opsDeClienteIdx(cl, idx){
+  const a = idx.porId.get(cl.id) || {ventas:[], repas:[]};
+  const b = idx.porNombre.get((cl.nombre||'').toLowerCase()) || {ventas:[], repas:[]};
+  const unir = (x, y) => {
+    if(!y.length) return x;
+    if(!x.length) return y;
+    const vistos = new Set(x.map(d=>d.id));
+    return x.concat(y.filter(d=>!vistos.has(d.id)));
+  };
+  return {ventas: unir(a.ventas, b.ventas), repas: unir(a.repas, b.repas)};
+}
+
 function renderClientes(){
   const fBus = (document.getElementById('cl-buscar').value||'').toLowerCase().trim();
   let items = clientesItems.filter(x=>{
@@ -6061,8 +6100,9 @@ function renderClientes(){
     return;
   }
 
+  const _idxOps = indiceOpsClientes();
   document.getElementById('cl-list').innerHTML = (_totC>100?`<div class="empty" style="grid-column:1/-1;padding:.5rem;">Mostrando 100 de ${_totC} — usá el buscador.</div>`:'') + items.map(cl=>{
-    const {ventas, repas} = opsDeCliente(cl);
+    const {ventas, repas} = opsDeClienteIdx(cl, _idxOps);
     const gastoUSD = ventas.reduce((s,v)=>s+(v.totalUSD||0),0);
     const gastoARS = ventas.reduce((s,v)=>s+(v.totalARS||0),0);
     const gastoStr = gastoUSD>0.01 ? fmtUSD(Math.round(gastoUSD*100)/100) : (gastoARS>0 ? fmtARS(gastoARS) : '—');
@@ -8276,7 +8316,11 @@ function renderStock(){
     return;
   }
 
-  document.getElementById('stock-list-body').innerHTML = items.map(s=>{
+  // Tope de filas (las métricas de arriba siguen sobre todo el filtro)
+  const _totS = items.length;
+  if(_totS > 100) items = items.slice(0, 100);
+
+  document.getElementById('stock-list-body').innerHTML = (_totS>100?`<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totS} — refiná los filtros para ver el resto.</div>`:'') + items.map(s=>{
     const vendido = s.status==='vendido';
     const badge = vendido
       ? '<span class="stock-badge-vend">Vendido</span>'
@@ -8754,15 +8798,25 @@ function esProvFijo(prov){
   return consigItems.some(g=>g.proveedor===prov && g.tipoProveedor==='fijo');
 }
 
-function proveedorAging(prov){
+// Agrupa consignación y pagos por proveedor en una sola pasada, para que el
+// listado no re-escanee ambos arrays una vez por proveedor.
+function indiceProveedores(){
+  const items = new Map(), pagos = new Map();
+  const push = (m, k, v) => { if(!k) return; const a = m.get(k); if(a) a.push(v); else m.set(k, [v]); };
+  consigItems.forEach(g=>push(items, g.proveedor, g));
+  pagosItems.forEach(p=>push(pagos, p.proveedor, p));
+  return {items, pagos};
+}
+
+function proveedorAging(prov, idx){
   // Antigüedad de la deuda: hace cuántos días se liberó plata que todavía no se pagó
-  const items = consigItems.filter(g=>g.proveedor===prov);
+  const items = idx ? (idx.items.get(prov)||[]) : consigItems.filter(g=>g.proveedor===prov);
   const vendidos = items.filter(g=>g.status==='vendido' && g.fechaVenta);
   const hoy = new Date(today());
   const fijo = esProvFijo(prov);
   const liberados = vendidos.filter(g=>fijo || (hoy-new Date(g.fechaVenta))/86400000>=2)
     .sort((a,b)=>a.fechaVenta.localeCompare(b.fechaVenta)); // más viejo primero
-  const pagosProv = pagosItems.filter(p=>p.proveedor===prov);
+  const pagosProv = idx ? (idx.pagos.get(prov)||[]) : pagosItems.filter(p=>p.proveedor===prov);
   const pagadoUSD = pagosProv.filter(p=>p.moneda==='USD').reduce((s,p)=>s+(p.monto||0),0);
   // FIFO: los pagos consumen la deuda más vieja primero
   let restante = pagadoUSD;
@@ -8782,11 +8836,12 @@ function renderProveedores(){
   if(!provs.length){document.getElementById('proveedores-list').innerHTML='<div class="empty">Sin proveedores registrados aún.</div>';return;}
 
   // Ordenar: deuda más vieja primero (los que urge pagar arriba de todo)
-  const conAging = provs.map(prov=>({prov, dias: proveedorAging(prov)}));
+  const _idxProv = indiceProveedores();
+  const conAging = provs.map(prov=>({prov, dias: proveedorAging(prov, _idxProv)}));
   conAging.sort((a,b)=>(b.dias??-1)-(a.dias??-1));
 
   document.getElementById('proveedores-list').innerHTML=conAging.map(({prov,dias})=>{
-    const items=consigItems.filter(g=>g.proveedor===prov);
+    const items=_idxProv.items.get(prov)||[];
     const esFijo = items.some(g=>g.tipoProveedor==='fijo');
     const enStock=items.filter(g=>g.status==='en_stock');
     const vendidos=items.filter(g=>g.status==='vendido');
