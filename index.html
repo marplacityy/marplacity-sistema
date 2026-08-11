@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.11-B</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.11-C</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -4953,7 +4953,13 @@ function etiquetaEquipo(s, origen){
   // IMPORTANTE: la etiqueta muestra el PRECIO DE VENTA, nunca el costo.
   // En consignación eso es doblemente importante: `precio` es lo que se le debe
   // al proveedor y no puede terminar impreso en una etiqueta que ve el cliente.
-  const precio = s.precioVentaUSD ? 'u$s '+Math.round(s.precioVentaUSD) : '';
+  // El precio de venta puede haber quedado sin convertir a USD (se carga en ARS
+  // sin TC y la conversión da null), así que antes de imprimir vacío se cae al
+  // `precioVenta` en su propia moneda. NUNCA se usa `precio`/`precioUSD`: en
+  // consignación eso es lo que se le debe al proveedor.
+  const precio = s.precioVentaUSD ? 'u$s '+Math.round(s.precioVentaUSD)
+    : (s.precioVenta ? (s.moneda==='ARS' ? fmtARS(s.precioVenta) : 'u$s '+Math.round(s.precioVenta))
+    : '');
   // stock usa `nombre`, consignación usa `producto`
   const titulo = [s.nombre||s.producto, s.gb, s.color].filter(Boolean).join(' · ');
 
@@ -8892,6 +8898,7 @@ function renderConsig(){
           ${g.bateria?`<span>🔋 ${esc(g.bateria)}%</span>`:''}
           ${g.ciclos?`<span>${esc(g.ciclos)} ciclos</span>`:''}
           <span>${g.fechaEntrada||''}</span>
+          ${(g.precioVentaUSD==null && !g.precioVenta && !vendido)?'<span style="color:var(--neg);">⚠ sin precio de venta</span>':''}
         </div>
         ${g.notas?`<div style="font-size:12px;color:var(--text3);margin-top:2px;font-style:italic;">${esc(g.notas)}</div>`:''}
       </div>
@@ -9148,6 +9155,7 @@ window.editarConsig = function(id){
   document.getElementById('sm-nombre').value=g.producto||'';
   document.getElementById('sm-imei').value=g.imei||'';
   document.getElementById('sm-valor').value=g.precio||'';
+  document.getElementById('sm-precio-venta').value=g.precioVentaUSD||'';
   document.getElementById('sm-moneda').value=g.moneda||'USD';
   document.getElementById('sm-tc').value=g.tc||'';
   document.getElementById('sm-fecha').value=g.fechaEntrada||today();
@@ -9179,9 +9187,15 @@ window.saveConsigModal = async function(){
   const precioUSD=moneda==='USD'?precio:(tc?Math.round(precio/tc*100)/100:null);
   const precioARS=moneda==='ARS'?precio:(tc?Math.round(precio*tc):null);
   const status=document.getElementById('sm-status').value;
+  // El modal pide el precio de venta en USD; `precioVenta` se mantiene coherente
+  // en la moneda del ítem para que las dos vistas muestren lo mismo.
+  const precioVentaUSD=parseFloat(document.getElementById('sm-precio-venta').value)||null;
+  const precioVenta=precioVentaUSD==null ? null
+    : (moneda==='USD' ? precioVentaUSD : (tc ? Math.round(precioVentaUSD*tc) : null));
   const data={
     producto, imei:document.getElementById('sm-imei').value.trim(),
     precio, moneda, tc, precioUSD, precioARS,
+    precioVenta, precioVentaUSD,
     fechaEntrada:document.getElementById('sm-fecha').value||today(),
     proveedor:document.getElementById('sm-origen').value.trim(),
     color:document.getElementById('sm-color').value.trim(),
