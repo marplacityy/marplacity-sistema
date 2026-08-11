@@ -1134,7 +1134,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.10-F</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.11-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -4936,10 +4936,18 @@ window.labelEquipo = function(id){
   const bat = s.bateria!=null ? s.bateria+'%' + (s.ciclos!=null?` · ${s.ciclos} cic`:'') : '—';
   const fmi = s.fmi!=null ? String(s.fmi) : null;
   const bl  = s.blacklist!=null ? String(s.blacklist) : null;
+  // El valor guardado es el canónico del sistema ('OFF'/'ON', 'LIMPIO'/'REPORTADO'),
+  // pero puede venir crudo de la API de chequeo ('clean', 'no', 'blocked'…). Hay que
+  // contemplar los dos: el regex de valores crudos NO matchea 'LIMPIO', y por eso un
+  // equipo limpio salía impreso como REPORTADO.
+  // Ante un valor desconocido se imprime el estado malo: en una etiqueta que mira un
+  // cliente, errar hacia REPORTADO es recuperable; errar hacia LIMPIO no.
   const fmiTxt = fmi===null ? 'FMI: —'
-    : (/off|no|clean|false/i.test(fmi) ? '<span class="lb-ok">FMI: OFF</span>' : '<span class="lb-bad">FMI: ON</span>');
+    : (/^off$/i.test(fmi.trim()) || /\b(off|no|clean|false)\b/i.test(fmi)
+        ? '<span class="lb-ok">FMI: OFF</span>' : '<span class="lb-bad">FMI: ON</span>');
   const blTxt = bl===null ? 'BL: —'
-    : (/no|clean|whitelist|false/i.test(bl) ? '<span class="lb-ok">BL: LIMPIO</span>' : '<span class="lb-bad">BL: REPORTADO</span>');
+    : (/^limpio$/i.test(bl.trim()) || /\b(no|clean|whitelist|false)\b/i.test(bl)
+        ? '<span class="lb-ok">BL: LIMPIO</span>' : '<span class="lb-bad">BL: REPORTADO</span>');
   // IMPORTANTE: la etiqueta muestra el PRECIO DE VENTA, nunca el costo.
   const precio = s.precioVentaUSD ? 'u$s '+Math.round(s.precioVentaUSD) : '';
   const titulo = [s.nombre, s.gb, s.color].filter(Boolean).join(' · ');
