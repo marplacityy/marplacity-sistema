@@ -32,6 +32,12 @@ service cloud.firestore {
       allow read, write: if loggedIn() && request.auth.uid == uid;
     }
 
+    // Base de conocimiento del bot de Instagram: mismo patrón que config,
+    // un doc por uid con los datos del local en texto libre.
+    match /conocimiento/{uid} {
+      allow read, write: if loggedIn() && request.auth.uid == uid;
+    }
+
     // Colecciones de datos: todas siguen el mismo patrón userId.
     function esColeccionDeDatos(col) {
       return col in [
@@ -40,8 +46,23 @@ service cloud.firestore {
         'gastos_fijos', 'pagos_fijos',
         'reparaciones', 'repuestos', 'precios_repuestos',
         'inventario', 'clientes', 'encargues',
-        'cierres', 'cola_impresion'
+        'cierres', 'cola_impresion', 'listas_precios'
       ];
+    }
+
+    // Documentos compartidos por link de WhatsApp (facturas y órdenes en PDF).
+    // El id del doc ES un token aleatorio de 128 bits que sólo viaja en el link
+    // que se le manda al cliente. Por eso:
+    //   - `get`: abierto. Quien tiene el link, lee ese doc y nada más.
+    //   - `list`: PROHIBIDO. Si acá dijera `allow read` (que es get + list),
+    //     cualquiera podría pedir la colección entera y bajarse las facturas y
+    //     órdenes de todos los clientes. El token dejaría de proteger nada.
+    match /docs_publicos/{token} {
+      allow get:    if true;
+      allow list:   if false;
+      allow create: if writesAsSelf();
+      allow update: if owns() && writesAsSelf();
+      allow delete: if owns();
     }
 
     match /{col}/{docId} {

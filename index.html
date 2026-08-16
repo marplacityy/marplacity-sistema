@@ -1045,7 +1045,7 @@
     <div class="field">
       <label>Avisar por WhatsApp</label>
       <div class="wa-row">
-        <button class="btn-wa" onclick="enviarWa('creado')">📩 Orden creada</button>
+        <button class="btn-wa" onclick="enviarOrdenWa()" title="Manda el mensaje de orden creada con el PDF de la orden">📩 Orden creada + PDF</button>
         <button class="btn-wa" onclick="enviarWa('listo')">✅ Listo p/ retirar</button>
         <button class="btn-wa" onclick="enviarWa('gracias')">🙏 Agradecimiento</button>
       </div>
@@ -1077,6 +1077,7 @@
       <button class="btn-secondary" onclick="eliminarRep()">Eliminar</button>
       <button class="btn-secondary" onclick="abrirRepEdit()">✏️ Editar</button>
       <button class="btn-print" onclick="imprimirTicket()">🖨 Imprimir ticket</button>
+      <button class="btn-print" onclick="ordenPDFActual()" title="Orden en A4 (imprimir o guardar PDF)">📄 Orden A4</button>
       <button class="btn-print" onclick="labelReparacionActual()" title="Etiqueta 62x100mm para pegar en el equipo">🏷 Etiqueta</button>
     </div>
   </div>
@@ -1134,7 +1135,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.11-D</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.16-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -1180,6 +1181,9 @@
       </a>
       <a onclick="goTo('repuestos')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>Repuestos
+      </a>
+      <a onclick="goTo('conocimiento')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Base de conocimiento
       </a>
       <a onclick="goTo('caja')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="15"/></svg>Caja
@@ -1229,6 +1233,9 @@
       </button>
       <button class="mobile-tab" onclick="goTo('fijos')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Fijos
+      </button>
+      <button class="mobile-tab" onclick="goTo('conocimiento')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Bot
       </button>
       <button class="mobile-tab" onclick="goTo('amort')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Bienes
@@ -2434,6 +2441,116 @@
         <div id="rp-precios-list"></div>
       </div>
     </div>
+
+    <!-- BASE DE CONOCIMIENTO (bot de Instagram) -->
+    <div id="page-conocimiento" class="page">
+      <div class="page-header">
+        <h1>Base de conocimiento</h1>
+        <p>Lo que el bot de Instagram necesita saber para contestar: datos del local y listas de precios al público.</p>
+      </div>
+
+      <div class="tab-btns" style="margin-bottom:14px;">
+        <button class="tab-btn active" id="kb-tab-datos" onclick="setKbTab('datos',this)">🏪 Datos del local</button>
+        <button class="tab-btn" id="kb-tab-mdp" onclick="setKbTab('mdp',this)">📋 Lista Mar del Plata</button>
+        <button class="tab-btn" id="kb-tab-caba" onclick="setKbTab('caba',this)">🚚 Lista CABA</button>
+      </div>
+
+      <!-- TAB: Datos del local -->
+      <div id="kb-sec-datos">
+        <div class="card">
+          <div class="card-title">Datos del local</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Escribilo como se lo contarías a un cliente: el bot usa este texto tal cual para responder. Dejá vacío lo que no aplique.</p>
+          <div class="field"><label>Horarios de atención</label><textarea id="kb-horarios" placeholder="Lunes a viernes de 10 a 19, sábados de 10 a 14..."></textarea></div>
+          <div class="field"><label>Dirección</label><textarea id="kb-direccion" placeholder="Calle, número, local, ciudad..."></textarea></div>
+          <div class="field"><label>Medios de pago</label><textarea id="kb-mediosPago" placeholder="Efectivo, transferencia, débito, crédito en cuotas, USD..."></textarea></div>
+          <div class="field"><label>Garantía</label><textarea id="kb-garantia" placeholder="Qué cubre, por cuánto tiempo, qué la anula..."></textarea></div>
+          <div class="field"><label>Política de seña</label><textarea id="kb-politicaSena" placeholder="Cuánto se seña, si se devuelve, cuánto se reserva el equipo..."></textarea></div>
+          <div class="field"><label>Cómo llegar</label><textarea id="kb-comoLlegar" placeholder="Referencias, colectivos, estacionamiento..."></textarea></div>
+          <div class="field"><label>Notas extra</label><textarea id="kb-notasExtra" placeholder="Cualquier otra cosa que el bot deba saber." style="height:110px;"></textarea></div>
+          <button class="btn-save" id="btn-kb-guardar-datos" onclick="guardarConocimiento()">Guardar</button>
+        </div>
+      </div>
+
+      <!-- TAB: Lista Mar del Plata -->
+      <div id="kb-sec-mdp" style="display:none;">
+        <div id="kb-mdp-estado"></div>
+        <div class="card">
+          <div class="card-title">Cargar lista de Mar del Plata</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Pegá la lista tal como te llega por WhatsApp — la IA la interpreta y te muestra una vista previa para confirmar antes de guardar. <b>Los precios se guardan tal cual: ya son el precio final al público.</b></p>
+          <div class="field">
+            <label>Lista pegada</label>
+            <textarea id="kb-mdp-texto" style="height:180px;font-family:'DM Mono',monospace;font-size:13px;" placeholder="Pegá la lista acá en cualquier formato..."></textarea>
+          </div>
+          <div class="field" style="max-width:220px;">
+            <label>Moneda de los precios</label>
+            <select id="kb-mdp-moneda"><option value="USD">USD u$s</option><option value="ARS">ARS $</option></select>
+          </div>
+          <button class="btn-save" id="btn-kb-mdp-interpretar" onclick="interpretarListaKb('mdp')">✨ Interpretar con IA</button>
+        </div>
+        <div id="kb-mdp-preview" style="display:none;">
+          <div class="card">
+            <div class="card-title">Vista previa — confirmá antes de guardar</div>
+            <div id="kb-mdp-preview-items"></div>
+            <div style="display:flex;gap:8px;margin-top:1rem;">
+              <button class="btn-secondary" onclick="cancelarListaKb('mdp')">Cancelar</button>
+              <button class="btn-save" id="btn-kb-mdp-guardar" onclick="guardarListaKb('mdp')">Guardar lista</button>
+            </div>
+          </div>
+        </div>
+        <div class="filters-bar" style="margin:12px 0;">
+          <input type="text" id="kb-mdp-buscar" placeholder="🔎 Buscar producto, GB, color..." oninput="deb('kbMdpB',function(){renderKbLista('mdp')})" style="flex:2;">
+          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="borrarListaKb('mdp')" title="Borrar la lista mostrada">🗑 Borrar lista</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table class="rp-table">
+              <thead><tr><th>Producto</th><th style="width:90px;">GB</th><th style="width:150px;">Color</th><th style="text-align:right;width:130px;">Precio público</th></tr></thead>
+              <tbody id="kb-mdp-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Lista CABA -->
+      <div id="kb-sec-caba" style="display:none;">
+        <div id="kb-caba-estado"></div>
+        <div class="card">
+          <div class="card-title">Cargar lista de CABA (por encargue)</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Lista de equipos que se traen por encargue. No vence: actualizala cuando quieras. <b>Los precios se guardan tal cual: ya son el precio final al público.</b></p>
+          <div class="field">
+            <label>Lista pegada</label>
+            <textarea id="kb-caba-texto" style="height:180px;font-family:'DM Mono',monospace;font-size:13px;" placeholder="Pegá la lista acá en cualquier formato..."></textarea>
+          </div>
+          <div class="field" style="max-width:220px;">
+            <label>Moneda de los precios</label>
+            <select id="kb-caba-moneda"><option value="USD">USD u$s</option><option value="ARS">ARS $</option></select>
+          </div>
+          <button class="btn-save" id="btn-kb-caba-interpretar" onclick="interpretarListaKb('caba')">✨ Interpretar con IA</button>
+        </div>
+        <div id="kb-caba-preview" style="display:none;">
+          <div class="card">
+            <div class="card-title">Vista previa — confirmá antes de guardar</div>
+            <div id="kb-caba-preview-items"></div>
+            <div style="display:flex;gap:8px;margin-top:1rem;">
+              <button class="btn-secondary" onclick="cancelarListaKb('caba')">Cancelar</button>
+              <button class="btn-save" id="btn-kb-caba-guardar" onclick="guardarListaKb('caba')">Guardar lista</button>
+            </div>
+          </div>
+        </div>
+        <div class="filters-bar" style="margin:12px 0;">
+          <input type="text" id="kb-caba-buscar" placeholder="🔎 Buscar producto, GB, color..." oninput="deb('kbCabaB',function(){renderKbLista('caba')})" style="flex:2;">
+          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="borrarListaKb('caba')" title="Borrar la lista mostrada">🗑 Borrar lista</button>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table class="rp-table">
+              <thead><tr><th>Producto</th><th style="width:90px;">GB</th><th style="width:150px;">Color</th><th style="text-align:right;width:130px;">Precio público</th></tr></thead>
+              <tbody id="kb-caba-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -2664,7 +2781,9 @@ const repuestosCol = collection(db, 'repuestos');
 const preciosRepCol = collection(db, 'precios_repuestos');
 const pagosFijosCol = collection(db, 'pagos_fijos');
 const amortsCol = collection(db, 'amorts');
+const listasCol = collection(db, 'listas_precios');
 let cfgDoc = null; // se setea al loguear: doc(db,'config',uid)
+let conocDoc = null; // idem: doc(db,'conocimiento',uid)
 
 // ── State ──
 let gastos = [], amorts = [], cfg = { tc:'1410', nombre:'Mi negocio' };
@@ -2684,6 +2803,8 @@ let cierresItems = [];
 let encarguesItems = [];
 let repuestosItems = [];
 let preciosRepItems = [];
+let listasItems = [];        // listas_precios: una lista de precios al público por doc
+let conoc = {};              // conocimiento/{uid}: datos del local para el bot de IG
 let icats = ['Accesorios','Repuestos','Fundas','Vidrios','Cargadores','Cables','Insumos','Otros'];
 let repTab = 'activas';
 let pagosFijosItems = [];
@@ -2796,6 +2917,16 @@ async function init() {
       amorts = snap.docs.map(d=>({id:d.id,...d.data()}));
       if (currentPage==='amort') renderAmort();
     });
+    onSnapshot(myQ(listasCol), snap => {
+      listasItems = snap.docs.map(d=>({id:d.id,...d.data()}));
+      listasItems.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+      if(currentPage==='conocimiento') deb('kb',renderConocimiento);
+      setSyncDot('ok');
+    }, snapErr);
+    onSnapshot(conocDoc, snap => {
+      conoc = snap.exists() ? snap.data() : {};
+      if(currentPage==='conocimiento') pintarConocimiento();
+    }, snapErr);
     onSnapshot(cfgDoc, snap => {
       if (snap.exists()) {
         const d = snap.data();
@@ -2976,6 +3107,7 @@ window.goTo = function(page) {
   if(page==='caja'){ const cf=document.getElementById('caja-fecha'); if(!cf.value) cf.value=today(); renderCaja(); }
   if(page==='encargues'){ const ms=document.getElementById('en-sena-medio'); if(!ms.options.length) ms.innerHTML=medios.map(m=>`<option>${esc(m)}</option>`).join(''); renderEncargues(); }
   if(page==='repuestos'){ initRepPiezasGrid(); populateRepModelosDL(); renderRepInv(); renderPreciosRef(); }
+  if(page==='conocimiento'){ pintarConocimiento(); renderConocimiento(); }
   if(page==='listado'){
     if(!window._glInit){ window._glInit=true; const r=fechasPreset('hoy'); document.getElementById('fl-desde').value=r.d; document.getElementById('fl-hasta').value=r.h; }
     buildMonthChips();renderListado();
@@ -4365,7 +4497,66 @@ window.saveFE = async function(){
 };
 
 
-// ── Enviar factura por WhatsApp (PDF) ─────────────────
+// ── Publicar un PDF y mandarlo por WhatsApp ───────────
+//
+// WhatsApp no deja adjuntar un archivo desde un link wa.me: sólo viaja texto.
+// Así que el PDF se guarda en `docs_publicos` bajo un token aleatorio y al
+// cliente le mandamos el link a ver.html, que lo muestra y lo deja descargar.
+// El token es lo único que protege el documento (las reglas permiten `get`
+// pero no `list`), por eso sale de crypto y no de un contador.
+
+const BASE_PUBLICA = 'https://marplacityy.github.io/marplacity-sistema/';
+
+function tokenPublico(){
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  return [...b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+async function publicarPDF(pdf, meta){
+  const b64 = (pdf.output('datauristring').split(',')[1]||'');
+  if(!b64) throw new Error('no se pudo serializar el PDF');
+  // Firestore corta en 1 MiB por documento; el resto de los campos es despreciable
+  // pero dejamos margen para no chocar contra el límite justo al guardar.
+  if(b64.length > 800000) throw new Error('el PDF pesa demasiado para enviarse por link');
+  const token = tokenPublico();
+  await setDoc(doc(db,'docs_publicos',token), withUser({...meta, pdf:b64, createdAt: serverTimestamp()}));
+  return BASE_PUBLICA + 'ver.html?id=' + token;
+}
+
+// La pestaña hay que abrirla ANTES del await de publicarPDF: si se abriera
+// después, el navegador ya perdió el gesto del usuario y la bloquea como popup.
+function abrirPestanaDiferida(){
+  let w = null;
+  try{ w = window.open('', '_blank'); }catch(e){ /* bloqueada */ }
+  if(w && w.document){
+    w.document.write('<!doctype html><meta charset="utf-8"><title>Preparando…</title>'+
+      '<body style="font-family:system-ui,sans-serif;display:grid;place-items:center;'+
+      'height:100vh;margin:0;color:#57534e">Preparando el envío…</body>');
+    w.document.close();
+  }
+  return w;
+}
+
+async function mandarLinkWa(w, num, msg){
+  const url = 'https://wa.me/'+num+'?text='+encodeURIComponent(msg);
+  if(w && !w.closed){ w.location.href = url; return; }
+  if(window.open(url, '_blank')) return;
+  // Popup bloqueado y sin pestaña previa: al menos que no pierda el mensaje
+  try{
+    await navigator.clipboard.writeText(msg);
+    showToast('El navegador bloqueó la ventana — copiamos el mensaje con el link al portapapeles 📋');
+  }catch(e){
+    showToast('El navegador bloqueó la ventana de WhatsApp. Permití las ventanas emergentes de este sitio.', true);
+  }
+}
+
+// Teléfono del cliente de una factura: ficha en Clientes → tel suelto (importadas)
+function telDeFactura(v){
+  let tel = '';
+  if(v.clienteId) tel = clientesItems.find(x=>x.id===v.clienteId)?.tel || '';
+  return tel || v.tel || '';
+}
 
 function generarFacturaPDF(v){
   const { jsPDF } = window.jspdf;
@@ -4450,34 +4641,40 @@ window.enviarFacturaWa = async function(id){
   const v = ingresos.find(x=>x.id===id);
   if(!v){ showToast('Factura no encontrada.', true); return; }
 
-  // Teléfono: ficha del cliente → fallback tel de la factura (importadas)
-  let tel = '';
-  if(v.clienteId){ tel = clientesItems.find(x=>x.id===v.clienteId)?.tel || ''; }
-  if(!tel) tel = v.tel || '';
+  const tel = telDeFactura(v);
   if(!tel){ showToast('El cliente de esta factura no tiene teléfono cargado. Agregalo en Clientes.', true); return; }
   const num = waNumber(tel);
+  if(!num){ showToast('El teléfono del cliente no es válido.', true); return; }
 
   const nombreArchivo = 'Factura-'+(v.numVenta?('V-'+v.numVenta):(v.fecha||''))+'.pdf';
   let pdf;
   try{ pdf = generarFacturaPDF(v); }
   catch(e){ console.error(e); showToast('Error generando el PDF: '+e.message, true); return; }
 
-  const msg = `Hola ${(v.clienteNombre||'').split(' ')[0]}! 🧾 Te enviamos la factura ${v.numVenta?'#V-'+v.numVenta:''} de tu compra en ${cfg.localNombre||'MarplaCity'}. ¡Gracias por elegirnos!`;
+  const w = abrirPestanaDiferida();
+  const saludo = `Hola ${(v.clienteNombre||'').split(' ')[0]}! 🧾 Te enviamos la factura ${v.numVenta?'#V-'+v.numVenta:''} de tu compra en ${cfg.localNombre||'MarplaCity'}. ¡Gracias por elegirnos!`;
 
-  // Móvil: compartir el archivo directo (se adjunta solo en WhatsApp)
+  let link;
   try{
-    const blob = pdf.output('blob');
-    const file = new File([blob], nombreArchivo, {type:'application/pdf'});
-    if(navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({files:[file], text: msg});
-      return;
-    }
-  }catch(e){ if(e.name==='AbortError') return; /* canceló el share */ }
+    link = await publicarPDF(pdf, {
+      tipo:    'factura',
+      titulo:  'Factura' + (v.numVenta?' #V-'+v.numVenta:''),
+      cliente: (v.clienteNombre && v.clienteNombre!=='Consumidor final') ? v.clienteNombre : '',
+      fecha:   v.fecha || today(),
+      local:   cfg.localNombre || 'MarplaCity',
+      archivo: nombreArchivo
+    });
+  }catch(e){
+    console.error(e);
+    // Sin link no se pierde el envío: se descarga el PDF y se adjunta a mano
+    if(w && !w.closed) w.close();
+    pdf.save(nombreArchivo);
+    await mandarLinkWa(null, num, saludo);
+    showToast('No se pudo publicar el link ('+e.message+') — PDF descargado, arrastralo al chat 📎', true);
+    return;
+  }
 
-  // Desktop: descargar el PDF + abrir el chat con el mensaje
-  pdf.save(nombreArchivo);
-  window.open('https://wa.me/'+num+'?text='+encodeURIComponent(msg), '_blank');
-  showToast('PDF descargado — arrastralo al chat que se abrió 📎');
+  await mandarLinkWa(w, num, saludo + '\n\n📄 Descargala acá:\n' + link);
 };
 
 // ── Reimpresión de facturas ──────────────────────────
@@ -8200,6 +8397,195 @@ window.imprimirTicket = function(){
   printTicket80('Ticket reparación');
 };
 
+// ── Orden de reparación en PDF A4 ─────────────────────
+// `opts.publico` omite la clave del equipo: el PDF que sale por WhatsApp queda
+// detrás de un link, y una clave de desbloqueo no viaja por ahí.
+
+function generarOrdenPDF(r, opts){
+  const publico = !!(opts && opts.publico);
+  const { jsPDF } = window.jspdf;
+  const d = new jsPDF({unit:'mm', format:'a4'});
+  const money = v => {
+    if(!v) return r.moneda==='ARS' ? '$ 0' : 'u$s 0';
+    const base = r.moneda==='ARS' ? '$ '+Math.round(v).toLocaleString('es-AR') : 'u$s '+v;
+    const alt  = r.tc ? (r.moneda==='ARS' ? 'u$s '+(Math.round(v/r.tc*100)/100)
+                                          : '$ '+Math.round(v*r.tc).toLocaleString('es-AR')) : null;
+    return alt ? base+' / '+alt : base;
+  };
+
+  // Encabezado
+  d.setFontSize(18); d.setFont(undefined,'bold');
+  d.text(cfg.localNombre||'MarplaCity', 14, 20);
+  d.setFontSize(9); d.setFont(undefined,'normal');
+  let y = 26;
+  if(cfg.localDir){ d.text(cfg.localDir, 14, y); y+=4.5; }
+  if(cfg.localTel){ d.text('Tel: '+cfg.localTel, 14, y); y+=4.5; }
+  if(cfg.localWeb){ d.text(cfg.localWeb, 14, y); y+=4.5; }
+
+  d.setFontSize(15); d.setFont(undefined,'bold');
+  d.text('ORDEN DE REPARACIÓN', 196, 20, {align:'right'});
+  d.setFontSize(13);
+  d.text('#'+(r.num||''), 196, 26.5, {align:'right'});
+  d.setFontSize(9); d.setFont(undefined,'normal');
+  d.text('Fecha: '+(r.fecha||'')+' '+(r.hora||''), 196, 32, {align:'right'});
+
+  d.setDrawColor(0); d.setLineWidth(0.8);
+  const yTop = Math.max(y, 36);
+  d.line(14, yTop, 196, yTop);
+
+  // Cliente y equipo, en dos columnas
+  const datos = [
+    ['Cliente', r.cliente||'—',            'Equipo',  r.equipo||'—'],
+    ['Teléfono', r.tel||'—',               'IMEI',    r.imei||'—'],
+    ['Garantía', r.garantia||'—',          'Batería', r.bateria?(r.bateria+'%'):'—'],
+    ['Entrega estimada', r.entrega||'a confirmar',
+     publico ? '' : 'Clave', publico ? '' : (r.clave||'—')]
+  ];
+  d.autoTable({
+    startY: yTop+4,
+    body: datos,
+    theme: 'plain',
+    styles: {fontSize:9, cellPadding:1.6},
+    columnStyles: {
+      0:{fontStyle:'bold', cellWidth:32}, 1:{cellWidth:58},
+      2:{fontStyle:'bold', cellWidth:26}, 3:{cellWidth:'auto'}
+    },
+    margin: {left:14, right:14}
+  });
+
+  // Trabajo a realizar
+  let yy = d.lastAutoTable.finalY + 5;
+  d.setFontSize(10); d.setFont(undefined,'bold');
+  d.text('TRABAJO A REALIZAR', 14, yy); yy += 5;
+  d.setFontSize(9); d.setFont(undefined,'normal');
+  const lTrabajo = d.splitTextToSize(r.trabajo||'—', 182);
+  d.text(lTrabajo, 14, yy); yy += lTrabajo.length*4.2 + 3;
+
+  // Estado al ingresar (checklist en dos columnas)
+  const mitad = Math.ceil(CHECKLIST.length/2);
+  const filasChk = [];
+  for(let i=0; i<mitad; i++){
+    const a = CHECKLIST[i], b = CHECKLIST[i+mitad];
+    const val = it => { const v = it && r.checklist?.[it.k]; return v===true?'SÍ':v===false?'NO':'—'; };
+    filasChk.push([a?a.label:'', val(a), b?b.label:'', b?val(b):'']);
+  }
+  d.autoTable({
+    startY: yy,
+    head: [['Estado al ingresar','','','']],
+    body: filasChk,
+    theme: 'plain',
+    styles: {fontSize:8.5, cellPadding:1.4, lineColor:[220,220,220], lineWidth:{bottom:0.1}},
+    headStyles: {fontStyle:'bold', fontSize:10, lineWidth:{bottom:0.6}, lineColor:[0,0,0]},
+    columnStyles: {
+      0:{cellWidth:60}, 1:{cellWidth:31, fontStyle:'bold'},
+      2:{cellWidth:60}, 3:{cellWidth:31, fontStyle:'bold'}
+    },
+    margin: {left:14, right:14}
+  });
+  yy = d.lastAutoTable.finalY + 5;
+
+  if(r.obs){
+    d.setFontSize(9); d.setFont(undefined,'bold');
+    d.text('Observaciones: ', 14, yy);
+    d.setFont(undefined,'normal');
+    const lObs = d.splitTextToSize(r.obs, 182);
+    d.text(lObs, 14, yy+4.2); yy += lObs.length*4.2 + 6;
+  }
+
+  // Importes
+  d.setDrawColor(0); d.setLineWidth(0.5); d.line(120, yy, 196, yy); yy += 5;
+  d.setFontSize(9); d.setFont(undefined,'normal');
+  d.text('Presupuesto', 120, yy); d.text(money(r.precio), 196, yy, {align:'right'}); yy += 4.8;
+  if(r.sena){
+    d.text('Seña'+(r.medio?' ('+r.medio+')':''), 120, yy);
+    d.text(money(r.sena), 196, yy, {align:'right'}); yy += 4.8;
+  }
+  d.setFont(undefined,'bold'); d.setFontSize(11);
+  d.text((r.saldo>0?'SALDO A ABONAR':'PAGADO'), 120, yy);
+  d.text(money(r.saldo>0?r.saldo:0), 196, yy, {align:'right'}); yy += 5;
+  if(r.tc){
+    d.setFont(undefined,'normal'); d.setFontSize(8);
+    d.text('TC del día: '+r.tc, 196, yy, {align:'right'}); yy += 4;
+  }
+
+  // Términos
+  yy += 3;
+  d.setLineWidth(0.5); d.line(14, yy, 196, yy); yy += 5;
+  d.setFontSize(9); d.setFont(undefined,'bold');
+  d.text('TÉRMINOS Y CONDICIONES', 14, yy); yy += 4.5;
+  d.setFont(undefined,'normal'); d.setFontSize(7.5);
+  const lTerms = d.splitTextToSize(cfg.terms||TERMS_DEFAULT, 182);
+  d.text(lTerms, 14, yy);
+  yy += lTerms.length*3.2 + 8;
+
+  if(yy > 258) yy = 258;
+  d.setFontSize(9);
+  d.line(24, yy+12, 90, yy+12);   d.text('Firma del cliente', 57, yy+16.5, {align:'center'});
+  d.line(120, yy+12, 186, yy+12); d.text('Firma y sello del local', 153, yy+16.5, {align:'center'});
+  d.setFontSize(8);
+  d.text('Presentar esta orden para retirar el equipo.', 105, yy+24, {align:'center'});
+
+  return d;
+}
+
+// Manda la orden en PDF por WhatsApp, como link a ver.html
+window.enviarOrdenWa = async function(id){
+  const r = reps.find(x=>x.id===(id||repEditId));
+  if(!r){ showToast('Ticket no encontrado.', true); return; }
+  if(!r.tel){ showToast('Este ticket no tiene teléfono cargado. Agregalo con ✏️ Editar.', true); return; }
+  const num = waNumber(r.tel);
+  if(!num){ showToast('El teléfono del ticket no es válido.', true); return; }
+
+  const nombreArchivo = 'Orden-'+(r.num||'')+'.pdf';
+  let pdf;
+  try{ pdf = generarOrdenPDF(r, {publico:true}); }
+  catch(e){ console.error(e); showToast('Error generando el PDF: '+e.message, true); return; }
+
+  const w = abrirPestanaDiferida();
+  const tpl = waTpl(cfg.waCreado, WA_DEFAULTS.creado);
+  const texto = tpl
+    .replaceAll('{cliente}', (r.cliente||'').split(' ')[0])
+    .replaceAll('{ticket}',  String(r.num||''))
+    .replaceAll('{equipo}',  r.equipo||'')
+    .replaceAll('{imei}',    r.imei||'—')
+    .replaceAll('{trabajo}', r.trabajo||'')
+    .replaceAll('{saldo}',   (r.saldo||0)>0 ? ('Saldo a abonar: '+(r.moneda==='ARS'?fmtARS(r.saldo):'u$s '+r.saldo)+'. ') : '')
+    .replaceAll('{horario}', cfg.localHorario||'consultar')
+    .replaceAll('{local}',   cfg.localNombre||'MarplaCity');
+
+  let link;
+  try{
+    link = await publicarPDF(pdf, {
+      tipo:    'orden',
+      titulo:  'Orden de reparación #'+(r.num||''),
+      cliente: r.cliente||'',
+      fecha:   r.fecha || today(),
+      local:   cfg.localNombre || 'MarplaCity',
+      archivo: nombreArchivo
+    });
+  }catch(e){
+    console.error(e);
+    if(w && !w.closed) w.close();
+    pdf.save(nombreArchivo);
+    await mandarLinkWa(null, num, texto);
+    showToast('No se pudo publicar el link ('+e.message+') — PDF descargado, arrastralo al chat 📎', true);
+    return;
+  }
+
+  await mandarLinkWa(w, num, texto + '\n\n📄 Tu orden en PDF:\n' + link);
+
+  const hist = [...(r.historial||[]), {fecha:today(), texto:'📱 WhatsApp enviado: orden creada (PDF)'}];
+  updateDoc(doc(db,'reparaciones',r.id), {historial:hist}).catch(()=>{});
+};
+
+// Descargar la orden en A4 sin enviarla (acá sí va la clave del equipo)
+window.ordenPDFActual = function(){
+  const r = reps.find(x=>x.id===repEditId);
+  if(!r){ showToast('Ticket no encontrado.', true); return; }
+  try{ generarOrdenPDF(r).save('Orden-'+(r.num||'')+'.pdf'); }
+  catch(e){ console.error(e); showToast('Error generando el PDF: '+e.message, true); }
+};
+
 // ── Stock permutas ────────────────────────────────────
 
 async function handleStockFromIngreso(inc){
@@ -9880,6 +10266,225 @@ window.migrarDatos = async function(){
   btn.disabled = false; btn.textContent = 'Migrar datos existentes';
 };
 
+// ── Base de conocimiento (bot de Instagram) ──────────────
+// Dos cosas viven acá: el doc conocimiento/{uid} con los datos del local en texto
+// libre (lo que el bot contesta tal cual), y la colección listas_precios, un doc
+// por lista cargada. OJO: el precio de esas listas YA ES el precio final al
+// público — no se le aplica margen en ningún punto del flujo.
+
+const KB_CAMPOS = ['horarios','direccion','mediosPago','garantia','politicaSena','comoLlegar','notasExtra'];
+const KB_ORIGENES = { mdp: 'Mar del Plata', caba: 'CABA' };
+
+let kbParseada = { mdp: [], caba: [] };
+
+window.setKbTab = function(tab, btn){
+  try{
+    document.querySelectorAll('#page-conocimiento .tab-btn').forEach(b=>b.classList.remove('active'));
+    if(btn) btn.classList.add('active');
+    ['datos','mdp','caba'].forEach(t=>{
+      const el = document.getElementById('kb-sec-'+t);
+      if(el) el.style.display = t===tab?'block':'none';
+    });
+    if(tab==='datos') pintarConocimiento(); else renderKbLista(tab);
+  }catch(e){ console.error('setKbTab', e); showToast('Error: '+e.message, true); }
+};
+
+// ── Datos del local ──
+// Vuelca el doc a los textareas. No pisa el campo que se está editando: el
+// snapshot vuelve también después de guardar y movería el cursor.
+function pintarConocimiento(){
+  KB_CAMPOS.forEach(k=>{
+    const el = document.getElementById('kb-'+k);
+    if(!el || el===document.activeElement) return;
+    const v = conoc[k] || '';
+    if(el.value !== v) el.value = v;
+  });
+}
+
+window.guardarConocimiento = async function(){
+  const btn = document.getElementById('btn-kb-guardar-datos');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  setSyncDot('syncing');
+  try{
+    const data = {};
+    KB_CAMPOS.forEach(k=>{ data[k] = (document.getElementById('kb-'+k).value||'').trim(); });
+    await setDoc(conocDoc, withUser({...data, updatedAt: serverTimestamp()}), {merge:true});
+    showToast('Datos del local guardados ✓');
+  }catch(e){ console.error(e); showToast('Error al guardar', true); setSyncDot('error'); }
+  btn.disabled = false; btn.textContent = 'Guardar';
+};
+
+// ── Listas de precios ──
+// listasItems viene ordenado por fecha desc, así que la primera de cada origen
+// es la vigente. Las anteriores quedan como historial.
+function kbUltimaLista(origen){ return listasItems.find(l => l.origen === origen) || null; }
+
+function kbFecha(iso){
+  const p = String(iso||'').split('-');
+  return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : (iso||'—');
+}
+function fmtPrecioKb(n, moneda){
+  if(n==null || n==='' || isNaN(Number(n))) return '—';
+  return moneda==='ARS' ? fmtARS(Number(n)) : fmtUSD(Number(n));
+}
+
+function renderKbEstado(origen){
+  const box = document.getElementById('kb-'+origen+'-estado');
+  if(!box) return;
+  const l = kbUltimaLista(origen);
+  if(!l){
+    box.innerHTML = `<div class="card" style="background:#FDF6EC;border-color:#F2C48D;">
+      <div style="font-size:14px;color:#854F0B;font-weight:600;">Todavía no cargaste ninguna lista de ${esc(KB_ORIGENES[origen])}.</div>
+      <div style="font-size:13px;color:#854F0B;margin-top:4px;">Pegala abajo y dale a "Interpretar con IA".</div>
+    </div>`;
+    return;
+  }
+  // Sólo la de MDP vence: es la lista del día. La de CABA se actualiza a demanda.
+  const vieja = origen==='mdp' && l.fecha !== today();
+  const n = (l.items||[]).length;
+  box.innerHTML = `<div class="card" style="${vieja?'background:#FDF6EC;border-color:#F2C48D;':''}">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:600;margin-bottom:4px;">Última lista cargada</div>
+    <div style="font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.1;">${esc(kbFecha(l.fecha))}${l.fecha===today()?' <span style="font-size:12px;font-weight:500;vertical-align:middle;background:var(--inc-bg);color:var(--inc);border-radius:100px;padding:3px 10px;">hoy</span>':''}</div>
+    <div style="font-size:13px;color:var(--text2);margin-top:4px;">${n} producto${n===1?'':'s'} · precios al público en ${esc(l.moneda||'USD')}${origen==='caba'?' · no vence: actualizala cuando quieras':''}</div>
+    ${vieja?`<div style="margin-top:12px;font-size:15px;font-weight:600;color:#854F0B;">⚠️ Lista desactualizada — es del ${esc(kbFecha(l.fecha))}. Pedí la de hoy y cargala.</div>`:''}
+  </div>`;
+}
+
+window.renderKbLista = function(origen){
+  renderKbEstado(origen);
+  const tb = document.getElementById('kb-'+origen+'-body');
+  if(!tb) return;
+  const l = kbUltimaLista(origen);
+  const q = (document.getElementById('kb-'+origen+'-buscar').value||'').trim().toLowerCase();
+  let items = (l && Array.isArray(l.items)) ? l.items : [];
+  if(q) items = items.filter(it => `${it.producto||''} ${it.gb||''} ${it.color||''}`.toLowerCase().includes(q));
+  if(!items.length){
+    const msg = !l ? 'Todavía no cargaste ninguna lista.' : (q ? 'Ningún producto coincide con la búsqueda.' : 'La lista está vacía.');
+    tb.innerHTML = `<tr><td colspan="4"><div class="empty">${msg}</div></td></tr>`;
+    return;
+  }
+  const moneda = (l && l.moneda) || 'USD';
+  tb.innerHTML = items.map(it=>`<tr>
+    <td>${esc(it.producto||'')}</td>
+    <td>${esc(it.gb||'')}</td>
+    <td>${esc(it.color||'')}</td>
+    <td style="text-align:right;font-weight:600;white-space:nowrap;">${fmtPrecioKb(it.precioPublico, moneda)}</td>
+  </tr>`).join('');
+};
+
+function renderConocimiento(){ renderKbLista('mdp'); renderKbLista('caba'); }
+
+window.interpretarListaKb = async function(origen){
+  const texto = (document.getElementById('kb-'+origen+'-texto').value||'').trim();
+  if(!texto){ showToast('Pegá una lista primero.', true); return; }
+  const btn = document.getElementById('btn-kb-'+origen+'-interpretar');
+  btn.disabled = true; btn.textContent = '⏳ Interpretando...';
+  try{
+    const response = await fetch(WORKER_URL, {
+      method: 'POST',
+      headers: await workerHeaders(),
+      body: JSON.stringify({
+        model: 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: { effort: 'low' },
+        messages: [{
+          role: 'user',
+          content: `Sos un experto en listas de precios de celulares. Analizá esta lista de precios AL PÚBLICO y extraé cada producto, sin importar el formato (puede venir desordenada, con emojis, abreviada, con varias líneas por item). Devolvé SOLO un JSON array válido, sin texto adicional, sin markdown, sin backticks.
+
+Cada objeto tiene exactamente estos campos (poné null en los que no aparezcan, NO inventes):
+- producto: nombre del modelo, ej "iPhone 17 Pro" (obligatorio)
+- gb: capacidad, ej "256GB", "1TB"
+- color: color si está, ej "Desert Titanium", "Negro"
+- precioPublico: número sin símbolos ni separadores de miles
+
+IMPORTANTE: el precio que figura en la lista YA ES el precio final al público. Copialo tal cual: no le apliques ningún margen, recargo, descuento ni redondeo.
+
+Si una línea repite un mismo modelo con varias capacidades o colores y sus precios, generá un objeto por cada combinación. Ignorá encabezados, saludos, avisos y todo lo que no sea un producto con precio.
+
+Lista:
+${texto}`
+        }]
+      })
+    });
+    const data = await response.json();
+    const raw = textoDeIA(data).replace(/```json|```/g,'').trim();
+    const arr = JSON.parse(raw);
+    kbParseada[origen] = (Array.isArray(arr) ? arr : []).filter(x => x && x.producto);
+    if(!kbParseada[origen].length){ showToast('No se reconoció ningún producto.', true); }
+    else{
+      renderKbPreview(origen);
+      document.getElementById('kb-'+origen+'-preview').style.display = 'block';
+      showToast(`${kbParseada[origen].length} productos interpretados ✓`);
+    }
+  }catch(e){
+    console.error(e);
+    showToast('Error al interpretar. Revisá la lista.', true);
+  }
+  btn.disabled = false; btn.textContent = '✨ Interpretar con IA';
+};
+
+function renderKbPreview(origen){
+  const moneda = document.getElementById('kb-'+origen+'-moneda').value;
+  document.getElementById('kb-'+origen+'-preview-items').innerHTML = kbParseada[origen].map((it,i)=>`<div class="stock-item" style="align-items:center;">
+    <div class="stock-info">
+      <div class="stock-nombre">${esc(it.producto||'')}</div>
+      <div class="stock-meta" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${[it.gb,it.color].filter(Boolean).map(ch=>`<span style="font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:100px;padding:1px 7px;">${esc(ch)}</span>`).join('')}</div>
+    </div>
+    <div class="stock-val"><div class="stock-usd">${fmtPrecioKb(it.precioPublico, moneda)}</div></div>
+    <button class="ei-btn del" onclick="quitarDeKbPreview('${escJs(origen)}',${i})" title="Quitar">×</button>
+  </div>`).join('');
+  if(!kbParseada[origen].length) document.getElementById('kb-'+origen+'-preview').style.display = 'none';
+}
+
+window.quitarDeKbPreview = function(origen, i){
+  kbParseada[origen].splice(i, 1);
+  renderKbPreview(origen);
+};
+
+window.cancelarListaKb = function(origen){
+  kbParseada[origen] = [];
+  document.getElementById('kb-'+origen+'-preview').style.display = 'none';
+};
+
+window.guardarListaKb = async function(origen){
+  const items = kbParseada[origen];
+  if(!items.length) return;
+  const moneda = document.getElementById('kb-'+origen+'-moneda').value;
+  const btn = document.getElementById('btn-kb-'+origen+'-guardar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  setSyncDot('syncing');
+  try{
+    await addDoc(listasCol, withUser({
+      origen,
+      fecha: today(),
+      moneda,
+      // precioPublico va tal cual vino en la lista: ya es el precio final
+      items: items.map(it=>({
+        producto: String(it.producto||'').trim(),
+        gb: it.gb!=null ? String(it.gb).trim() : '',
+        color: it.color!=null ? String(it.color).trim() : '',
+        precioPublico: (it.precioPublico!=null && !isNaN(Number(it.precioPublico))) ? Number(it.precioPublico) : null
+      })),
+      createdAt: serverTimestamp()
+    }));
+    kbParseada[origen] = [];
+    document.getElementById('kb-'+origen+'-preview').style.display = 'none';
+    document.getElementById('kb-'+origen+'-texto').value = '';
+    showToast(`Lista de ${KB_ORIGENES[origen]} guardada ✓`);
+  }catch(e){ console.error(e); showToast('Error al guardar la lista', true); setSyncDot('error'); }
+  btn.disabled = false; btn.textContent = 'Guardar lista';
+};
+
+window.borrarListaKb = async function(origen){
+  const l = kbUltimaLista(origen);
+  if(!l){ showToast('No hay ninguna lista cargada.', true); return; }
+  if(!confirm(`¿Borrar la lista de ${KB_ORIGENES[origen]} del ${kbFecha(l.fecha)} (${(l.items||[]).length} productos)?`)) return;
+  setSyncDot('syncing');
+  try{ await deleteDoc(doc(db,'listas_precios',l.id)); showToast('Lista borrada ✓'); }
+  catch(e){ console.error(e); showToast('Error al borrar', true); setSyncDot('error'); }
+};
+
+
 // ── Arranque: espera el estado de auth ──
 // ── Funciones invocadas desde atributos del HTML ─────────────────────────────
 // Los onclick/onchange/oninput corren en scope GLOBAL y no ven nada declarado
@@ -9895,13 +10500,14 @@ onAuthStateChanged(auth, async (user) => {
     currentUser = user;
     uid = user.uid;
     cfgDoc = doc(db, 'config', uid);
+    conocDoc = doc(db, 'conocimiento', uid);
     loginScreen.classList.remove('show');
     loadingEl.classList.remove('hidden');
     document.getElementById('user-email').textContent = user.email;
     await init();
     goTo('home');
   } else {
-    currentUser = null; uid = null; cfgDoc = null;
+    currentUser = null; uid = null; cfgDoc = null; conocDoc = null;
     loadingEl.classList.add('hidden');
     loginScreen.classList.add('show');
   }

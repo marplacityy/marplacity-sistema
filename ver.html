@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Documento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f5f5f4; --card:#fff; --text:#1c1917; --text2:#57534e; --text3:#a8a29e;
+    --border:#e7e5e4; --accent:#1A6B3C; --accent-h:#155230; --danger:#b91c1c;
+    --radius:14px; --radius-sm:9px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#1c1917; --card:#292524; --text:#fafaf9; --text2:#a8a29e; --text3:#78716c;
+      --border:#44403c; --accent:#34d399; --accent-h:#6ee7b7; --danger:#f87171;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    background:var(--bg); color:var(--text);
+    min-height:100vh; padding:1.25rem;
+    display:flex; align-items:flex-start; justify-content:center;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{width:100%; max-width:760px; margin-top:2rem}
+  .card{
+    background:var(--card); border:1px solid var(--border);
+    border-radius:var(--radius); padding:1.75rem; text-align:center;
+  }
+  .local{
+    font-size:.75rem; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--text3); margin-bottom:1.25rem;
+  }
+  h1{font-size:1.4rem; font-weight:700; line-height:1.25; margin-bottom:.4rem}
+  .meta{color:var(--text2); font-size:.9rem; line-height:1.6; margin-bottom:1.5rem}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+    width:100%; padding:.95rem 1.5rem;
+    background:var(--accent); color:#fff; border:none; border-radius:var(--radius-sm);
+    font-family:inherit; font-size:1rem; font-weight:600; text-decoration:none;
+    cursor:pointer; transition:background .15s;
+  }
+  @media (prefers-color-scheme: dark){ .btn{color:#052e16} }
+  .btn:hover{background:var(--accent-h)}
+  .btn-ghost{
+    background:transparent; color:var(--text2);
+    border:1px solid var(--border); margin-top:.6rem;
+  }
+  .btn-ghost:hover{background:var(--bg); color:var(--text)}
+  .visor{
+    margin-top:1.5rem; border:1px solid var(--border); border-radius:var(--radius-sm);
+    overflow:hidden; background:var(--bg); height:75vh; display:none;
+  }
+  .visor iframe{width:100%; height:100%; border:none; display:block}
+  @media (min-width:820px){ .visor.ok{display:block} }
+  .pie{
+    margin-top:1.5rem; text-align:center;
+    color:var(--text3); font-size:.78rem; line-height:1.6;
+  }
+  .spinner{
+    width:26px; height:26px; margin:1rem auto;
+    border:2.5px solid var(--border); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .err h1{color:var(--danger)}
+  [hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="card" id="cargando">
+    <div class="spinner"></div>
+    <div style="color:var(--text2);font-size:.9rem">Abriendo el documento…</div>
+  </div>
+
+  <div class="card err" id="error" hidden>
+    <h1 id="err-t">No pudimos abrir el documento</h1>
+    <p class="meta" id="err-d" style="margin-bottom:0"></p>
+  </div>
+
+  <div id="ok" hidden>
+    <div class="card">
+      <div class="local" id="d-local"></div>
+      <h1 id="d-titulo"></h1>
+      <p class="meta" id="d-meta"></p>
+      <a class="btn" id="d-bajar" download>📄 Descargar PDF</a>
+      <a class="btn btn-ghost" id="d-abrir" target="_blank" rel="noopener">Abrir en otra pestaña</a>
+    </div>
+    <div class="visor" id="d-visor"><iframe id="d-frame" title="Vista previa del documento"></iframe></div>
+    <p class="pie" id="d-pie"></p>
+  </div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// Mismo proyecto que index.html. La lectura de un doc de `docs_publicos` está
+// abierta por reglas (allow get), pero NO se puede listar la colección: sin el
+// token del link no hay forma de llegar a ningún documento.
+const app = initializeApp({
+  apiKey: "AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg",
+  authDomain: "mis-gastos-21e7b.firebaseapp.com",
+  projectId: "mis-gastos-21e7b",
+  storageBucket: "mis-gastos-21e7b.firebasestorage.app",
+  messagingSenderId: "482988396081",
+  appId: "1:482988396081:web:fc7da9caf6a51d2e00cf10"
+});
+const db = getFirestore(app);
+
+const $ = id => document.getElementById(id);
+
+function fallar(titulo, detalle){
+  $('cargando').hidden = true;
+  $('ok').hidden = true;
+  $('error').hidden = false;
+  $('err-t').textContent = titulo;
+  $('err-d').textContent = detalle;
+}
+
+function b64ToBlob(b64, tipo){
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for(let i=0; i<bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Blob([bytes], {type: tipo});
+}
+
+// Fecha ISO (aaaa-mm-dd) → texto legible, sin que el parseo la corra un día
+function fechaLinda(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso||'');
+  if(!m) return iso||'';
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio',
+                 'agosto','septiembre','octubre','noviembre','diciembre'];
+  return `${+m[3]} de ${meses[+m[2]-1]} de ${m[1]}`;
+}
+
+(async function(){
+  const token = new URLSearchParams(location.search).get('id') || '';
+  if(!/^[A-Za-z0-9_-]{16,64}$/.test(token)){
+    fallar('Link inválido', 'El enlace está incompleto o mal copiado. Pedile al local que te lo reenvíe.');
+    return;
+  }
+
+  let snap;
+  try{
+    snap = await getDoc(doc(db, 'docs_publicos', token));
+  }catch(e){
+    console.error(e);
+    fallar('No pudimos abrir el documento', 'Revisá tu conexión a internet y volvé a intentar.');
+    return;
+  }
+
+  if(!snap.exists()){
+    fallar('Este link ya no está disponible', 'El documento fue dado de baja. Pedile al local que te lo reenvíe.');
+    return;
+  }
+
+  const d = snap.data();
+  if(!d.pdf){
+    fallar('No pudimos abrir el documento', 'El archivo está incompleto. Pedile al local que te lo reenvíe.');
+    return;
+  }
+
+  let url;
+  try{
+    url = URL.createObjectURL(b64ToBlob(d.pdf, 'application/pdf'));
+  }catch(e){
+    console.error(e);
+    fallar('No pudimos abrir el documento', 'El archivo está dañado. Pedile al local que te lo reenvíe.');
+    return;
+  }
+
+  const archivo = d.archivo || 'documento.pdf';
+  document.title = d.titulo || 'Documento';
+  $('d-local').textContent  = d.local || '';
+  $('d-titulo').textContent = d.titulo || 'Documento';
+  $('d-meta').textContent   = [d.cliente, fechaLinda(d.fecha)].filter(Boolean).join(' · ');
+  $('d-bajar').href = url;
+  $('d-bajar').setAttribute('download', archivo);
+  $('d-abrir').href = url;
+  $('d-frame').src  = url;
+  $('d-visor').classList.add('ok');
+  $('d-pie').textContent = (d.local ? d.local + ' · ' : '') + 'Guardá este PDF, es tu comprobante.';
+
+  $('cargando').hidden = true;
+  $('ok').hidden = false;
+})();
+</script>
+</body>
+</html>
