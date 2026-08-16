@@ -1,5 +1,4 @@
 rules_version = '2';
-
 // Reglas de seguridad de Firestore — proyecto mis-gastos-21e7b
 //
 // Modelo: cada documento lleva `userId` (lo inyecta withUser() en index.html) y
@@ -9,7 +8,6 @@ rules_version = '2';
 //
 // Deploy:  firebase deploy --only firestore:rules
 // Test:    firebase emulators:start --only firestore
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -27,18 +25,48 @@ service cloud.firestore {
       return loggedIn() && request.resource.data.userId == request.auth.uid;
     }
 
+    // El usuario de servicio del bot de Instagram (bot@marplacity.com).
+    // Definido una sola vez: si algún día se regenera el usuario, se cambia acá
+    // y en ningún otro lado.
+    function esBot() {
+      return loggedIn() && request.auth.uid == 's8mcf3uMoBc0S3G2HMR9htqLU403';
+    }
+
     // Config del usuario: un doc por uid, la clave del doc ES el uid.
     match /config/{uid} {
       allow read, write: if loggedIn() && request.auth.uid == uid;
     }
 
-    // Base de conocimiento del bot de Instagram: mismo patrón que config,
-    // un doc por uid con los datos del local en texto libre.
+    // Base de conocimiento del bot: un doc por uid con los datos del local
+    // (horarios, direccion, medios de pago, garantia) en texto libre.
+    // El dueño escribe; el bot solo lee.
     match /conocimiento/{uid} {
       allow read, write: if loggedIn() && request.auth.uid == uid;
+      allow read:        if esBot();
     }
 
-    // Colecciones de datos: todas siguen el mismo patrón userId.
+    // Conversaciones de Instagram.
+    // El bot solo puede CREAR (no lee ni borra nada de aca).
+    // Leer, editar y borrar: solo el dueño de la conversacion.
+    match /conversaciones/{docId} {
+      allow create:               if esBot();
+      allow read, update, delete: if owns();
+    }
+
+    // Listas de precios de proveedores. El dueño las carga desde el sistema
+    // (ver esColeccionDeDatos); el bot solo las lee para cotizar.
+    match /listas_precios/{docId} {
+      allow read: if esBot();
+    }
+
+    // Stock. El bot solo lee, para saber que hay disponible en el local.
+    // OJO: estos documentos incluyen el costo. El Worker filtra y solo le pasa
+    // a la IA el precio de venta, pero el permiso es sobre el doc entero.
+    match /stock/{docId} {
+      allow read: if esBot();
+    }
+
+    // Colecciones de datos: todas siguen el mismo patron userId.
     function esColeccionDeDatos(col) {
       return col in [
         'gastos', 'ingresos', 'amorts',
@@ -50,13 +78,13 @@ service cloud.firestore {
       ];
     }
 
-    // Documentos compartidos por link de WhatsApp (facturas y órdenes en PDF).
-    // El id del doc ES un token aleatorio de 128 bits que sólo viaja en el link
+    // Documentos compartidos por link de WhatsApp (facturas y ordenes en PDF).
+    // El id del doc ES un token aleatorio de 128 bits que solo viaja en el link
     // que se le manda al cliente. Por eso:
-    //   - `get`: abierto. Quien tiene el link, lee ese doc y nada más.
-    //   - `list`: PROHIBIDO. Si acá dijera `allow read` (que es get + list),
-    //     cualquiera podría pedir la colección entera y bajarse las facturas y
-    //     órdenes de todos los clientes. El token dejaría de proteger nada.
+    //   - `get`: abierto. Quien tiene el link, lee ese doc y nada mas.
+    //   - `list`: PROHIBIDO. Si aca dijera `allow read` (que es get + list),
+    //     cualquiera podria pedir la coleccion entera y bajarse las facturas y
+    //     ordenes de todos los clientes. El token dejaria de proteger nada.
     match /docs_publicos/{token} {
       allow get:    if true;
       allow list:   if false;
@@ -73,7 +101,7 @@ service cloud.firestore {
       allow delete: if esColeccionDeDatos(col) && owns();
     }
 
-    // Todo lo demás queda cerrado.
+    // Todo lo demas queda cerrado.
     match /{document=**} {
       allow read, write: if false;
     }
