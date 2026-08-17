@@ -13,7 +13,7 @@
  *   OWNER_UID         (Text)    -> tu uid de usuario, para que las convers sean tuyas
  *   BOT_EMAIL         (Text)    -> bot@marplacity.com (usuario creado en Firebase Auth)
  *   BOT_PASSWORD      (Secret)  -> la contraseña de ese usuario
- *   IA_URL            (Text)    -> https://anthropic-proxy.fiwind702050.workers.dev
+ *   ANTHROPIC_KEY     (Secret)  -> API key de Anthropic (se llama la API directo)
  */
 
 const CORS = {
@@ -51,7 +51,7 @@ export default {
           OWNER_UID: !!env.OWNER_UID,
           BOT_EMAIL: !!env.BOT_EMAIL,
           BOT_PASSWORD: !!env.BOT_PASSWORD,
-          IA_URL: !!env.IA_URL,
+          ANTHROPIC_KEY: !!env.ANTHROPIC_KEY,
         }
       }, null, 2), { headers: { ...CORS, 'Content-Type': 'application/json' } });
     }
@@ -115,7 +115,7 @@ async function procesarMensaje(ev, env) {
 
   // La IA lee el mensaje, lo clasifica y redacta una respuesta sugerida
   let ia = { estado: null, sugerencia: null, resumen: null };
-  if (env.IA_URL && (texto || adjuntos.length)) {
+  if (env.ANTHROPIC_KEY && (texto || adjuntos.length)) {
     ia = await pensarRespuesta(texto, adjuntos, env);
   }
 
@@ -228,9 +228,15 @@ ni texto alrededor, con esta forma exacta:
     : `(el cliente mandó ${adjuntos.join(' y ')} sin texto)`;
 
   try {
-    const r = await fetch(env.IA_URL, {
+    // Cloudflare no permite que un Worker llame a otro en workers.dev (error 1042),
+    // así que se llama directo a la API de Anthropic.
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': env.ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 600,

@@ -45,7 +45,7 @@ queda a la vista de cualquiera con acceso al panel.
 | `OWNER_UID`        | Text   | UID del dueño, para atribuirle los documentos que se crean |
 | `BOT_EMAIL`        | Text   | Usuario de servicio con el que el Worker se loguea a Firebase |
 | `BOT_PASSWORD`     | Secret | Contraseña de ese usuario de servicio |
-| `IA_URL`           | Text   | URL del proxy de IA que redacta las respuestas |
+| `ANTHROPIC_KEY`    | Secret | API key de Anthropic — el Worker llama directo a `api.anthropic.com` |
 
 `FIREBASE_KEY` va como Text porque la API key web de Firebase no es un secreto:
 ya viaja pública dentro de `index.html`. Lo que protege los datos son las
