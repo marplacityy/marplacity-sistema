@@ -1,0 +1,6 @@
+# Secretos de los Workers y de entornos locales.
+# El repo es público: nada de esto puede llegar a un commit.
+.dev.vars
+.dev.vars.*
+.env
+.env.*
