@@ -16,6 +16,8 @@
  *   ANTHROPIC_KEY     (Secret)  -> API key de Anthropic (se llama la API directo)
  */
 
+import { construirSystem, MARCA_CANAL } from './prompt.js';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -191,37 +193,103 @@ async function stockDisponible(env, idToken) {
   }
 }
 
+// ── Leer documentos y colecciones de Firestore (REST) ─────────
+
+// Los valores de la REST API vienen envueltos por tipo ({stringValue: "x"}).
+// Esto los desenvuelve, incluyendo arrays y mapas anidados (los items de las listas).
+function valor(v) {
+  if (v == null) return null;
+  if ('stringValue'  in v) return v.stringValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue'  in v) return v.doubleValue;
+  if ('nullValue'    in v) return null;
+  if ('arrayValue'   in v) return (v.arrayValue.values || []).map(valor);
+  if ('mapValue'     in v) return campos(v.mapValue.fields);
+  if ('timestampValue' in v) return v.timestampValue;
+  return null;
+}
+function campos(f) {
+  const o = {};
+  for (const [k, v] of Object.entries(f || {})) o[k] = valor(v);
+  return o;
+}
+
+async function leerDoc(env, idToken, path) {
+  const proj = env.FIREBASE_PROJECT;
+  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents/${path}`;
+  try {
+    const r = await fetch(url, { headers: { 'Authorization': `Bearer ${idToken}` } });
+    if (!r.ok) { console.log('no se pudo leer', path, r.status); return null; }
+    const d = await r.json();
+    return campos(d.fields);
+  } catch (e) {
+    console.log('error leyendo', path, e.message);
+    return null;
+  }
+}
+
+// La lista vigente de un origen: la de fecha más reciente. Igual criterio que el
+// sistema, así el bot cotiza con lo mismo que ve el dueño en pantalla.
+async function ultimaLista(env, idToken, origen) {
+  const proj = env.FIREBASE_PROJECT;
+  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
+  const q = {
+    structuredQuery: {
+      from: [{ collectionId: 'listas_precios' }],
+      where: {
+        compositeFilter: {
+          op: 'AND',
+          filters: [
+            { fieldFilter: { field: { fieldPath: 'userId' }, op: 'EQUAL', value: { stringValue: env.OWNER_UID } } },
+            { fieldFilter: { field: { fieldPath: 'origen' }, op: 'EQUAL', value: { stringValue: origen } } },
+          ],
+        },
+      },
+      orderBy: [{ field: { fieldPath: 'fecha' }, direction: 'DESCENDING' }],
+      limit: 1,
+    },
+  };
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify(q),
+    });
+    if (!r.ok) { console.log('lista', origen, 'no disponible', r.status); return null; }
+    const d = await r.json();
+    const doc = (d || []).find(x => x.document);
+    return doc ? campos(doc.document.fields) : null;
+  } catch (e) {
+    console.log('error trayendo lista', origen, e.message);
+    return null;
+  }
+}
+
 // ── La IA: clasifica y redacta una respuesta ──────────────────
 async function pensarRespuesta(texto, adjuntos, env) {
-  const vacio = { estado: null, sugerencia: null, resumen: null };
+  const vacio = { estado: null, sugerencia: null, resumen: null, mensajes: [] };
 
   const idToken = await tokenDelBot(env);
-  const stock = idToken ? await stockDisponible(env, idToken) : [];
+  if (!idToken) return vacio;
 
-  const sistema = `Sos quien atiende los mensajes de Instagram de MarplaCity, un local de
-venta y reparación de celulares en Miramar, Argentina.
+  // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
+  // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
+  const [stock, conocimiento, listaMdp, listaCaba, mensajesFijos] = await Promise.all([
+    stockDisponible(env, idToken),
+    leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`),
+    ultimaLista(env, idToken, 'mdp'),
+    ultimaLista(env, idToken, 'caba'),
+    leerDoc(env, idToken, 'config/mensajes'),
+  ]);
 
-TU FORMA DE ESCRIBIR:
-- Español rioplatense, informal pero prolijo. Tuteo, nada de "usted".
-- Mensajes cortos, como se escribe por DM. Sin párrafos largos ni listas.
-- Directo y cordial. Nada de fórmulas de call center.
-- No inventes NUNCA precios, modelos ni disponibilidad: usá solo el stock de abajo.
-- Si no sabés algo, decilo y avisá que el dueño responde en un rato.
-- Nunca menciones cuánto costó un equipo. Solo el precio de venta.
+  // La lista de MDP es la del día: si es de una fecha anterior, el prompt se lo avisa
+  // al modelo para que no prometa un precio viejo como si fuera el de hoy.
+  const hoy = new Date().toISOString().split('T')[0];
+  const mdpVencida = !!(listaMdp && listaMdp.fecha !== hoy);
 
-STOCK DISPONIBLE HOY (si está vacío, decí que consultás y avisás):
-${stock.length ? JSON.stringify(stock) : 'sin datos'}
-
-Vas a recibir un mensaje de un cliente. Respondé SOLO con un JSON, sin markdown
-ni texto alrededor, con esta forma exacta:
-{"estado":"...","resumen":"...","sugerencia":"..."}
-
-- "estado": uno de permuta, reclamo, cerrado, indeciso, curioso, sin_stock, no_se.
-  Usá "no_se" si no podés responder con lo que tenés.
-  Usá "permuta" si menciona entregar su equipo como parte de pago.
-  Usá "sin_stock" si pregunta por algo que no está en el stock de arriba.
-- "resumen": qué quiere, en menos de 10 palabras.
-- "sugerencia": el mensaje que le mandarías, listo para copiar y pegar.`;
+  const sistema = construirSystem({ conocimiento, stock, listaMdp, listaCaba, mdpVencida });
+  const textoCanal = mensajesFijos?.invitacionCanal || null;
 
   const usuario = texto
     ? texto
@@ -252,12 +320,41 @@ ni texto alrededor, con esta forma exacta:
     const limpio = crudo.replace(/```json|```/g, '').trim();
     const out = JSON.parse(limpio);
 
-    console.log('IA ->', out.estado, '|', (out.sugerencia || '').slice(0, 50));
-    return { estado: out.estado || null, sugerencia: out.sugerencia || null, resumen: out.resumen || null };
+    const mensajes = expandirCanal(out.mensajes, textoCanal);
+
+    console.log('IA ->', out.categoria, '|', mensajes.length, 'mensaje(s)');
+    return {
+      estado: out.categoria || null,
+      resumen: out.resumen || null,
+      mensajes,
+      // El doc de conversaciones todavía guarda una sugerencia sola; el array completo
+      // y los campos de NEED ATTENTION entran en los puntos 2 y 3 de la tarea.
+      sugerencia: mensajes.join('\n') || null,
+    };
   } catch (e) {
     console.log('IA fallo:', e.message);
     return vacio;
   }
+}
+
+/**
+ * Cambia la marca del canal por el texto real de Firestore.
+ *
+ * El modelo nunca ve ese texto (está en primera persona del plural y le contagiaría
+ * el "nosotros" al resto de la charla): solo pone la marca donde va, y acá se
+ * reemplaza carácter por carácter. Si el texto no está cargado, la marca se cae del
+ * array en vez de mandarse literal al cliente.
+ */
+function expandirCanal(mensajes, textoCanal) {
+  if (!Array.isArray(mensajes)) return [];
+  return mensajes
+    .map(m => {
+      const s = String(m ?? '').trim();
+      if (s !== MARCA_CANAL) return s;
+      if (!textoCanal) { console.log('falta config/mensajes.invitacionCanal: se descarta la marca'); return ''; }
+      return textoCanal;
+    })
+    .filter(Boolean);
 }
 
 // ── Clasificación de respaldo (si la IA no contesta) (después la reemplaza la IA) ─────

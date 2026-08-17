@@ -37,6 +37,18 @@ service cloud.firestore {
       allow read, write: if loggedIn() && request.auth.uid == uid;
     }
 
+    // Mensajes fijos que el bot manda TEXTUALES, sin pasar por el modelo (hoy: la
+    // invitacion al canal de difusion). Estan escritos en primera persona del plural,
+    // asi que si el modelo los tuviera a la vista arrastraria ese "nosotros" al resto
+    // de la conversacion. El dueño los escribe; el bot solo los lee.
+    // OJO: la regla de config/{uid} de abajo NO alcanza para este doc, porque exige
+    // que la clave del doc sea el uid del que pide.
+    match /config/mensajes {
+      allow read:   if esBot() || owns();
+      allow create: if writesAsSelf();
+      allow update: if owns() && writesAsSelf();
+    }
+
     // Base de conocimiento del bot: un doc por uid con los datos del local
     // (horarios, direccion, medios de pago, garantia) en texto libre.
     // El dueño escribe; el bot solo lee.
