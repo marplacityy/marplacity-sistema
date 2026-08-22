@@ -12,6 +12,7 @@
  *   IG_VERIFY_TOKEN   (Secret)  -> lo inventás vos, ej: "marplacity2026"
  *   IG_APP_SECRET     (Secret)  -> "Clave secreta de la aplicación" de Meta
  *   IG_TOKEN          (Secret)  -> token de acceso de Instagram
+ *   IG_ACCOUNT_ID     (Text)    -> id de la cuenta de IG del local (la de IG_TOKEN)
  *   FIREBASE_PROJECT  (Text)    -> mis-gastos-21e7b
  *   FIREBASE_KEY      (Secret)  -> API key de Firebase
  *   OWNER_UID         (Text)    -> tu uid de usuario, para que las convers sean tuyas
@@ -133,6 +134,18 @@ async function procesarMensaje(ev, env) {
 
   const m = ev.message;
   if (m.is_echo)  { console.log('descarto: es eco de un mensaje mio'); return; }
+
+  // El webhook puede traer eventos de MAS DE UNA cuenta de Instagram, si hay varias
+  // conectadas a la misma app de Meta. IG_TOKEN es de una sola: contestar un mensaje
+  // que era para otra termina en "The requested user cannot be found" y, peor, nos
+  // guarda en `conversaciones` charlas que no son del local. Paso el 22/08/2026.
+  const paraQuien = ev.recipient?.id;
+  if (env.IG_ACCOUNT_ID && paraQuien !== env.IG_ACCOUNT_ID) {
+    console.log('descarto: era para la cuenta', paraQuien, '— la nuestra es', env.IG_ACCOUNT_ID);
+    return;
+  }
+  if (!env.IG_ACCOUNT_ID) console.log('OJO: sin IG_ACCOUNT_ID no se filtra por cuenta, ver README');
+
   console.log('procesando mensaje de', senderId);
 
   const fechaMensaje = new Date(ev.timestamp || Date.now());

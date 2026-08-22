@@ -227,6 +227,24 @@ Devuelve `{ enviados, total }`. Si salieron algunos y otros no, el status es 502
 propósito: la bandeja deja la conversación abierta en vez de darla por contestada, porque
 el cliente vio media respuesta.
 
+## Una sola cuenta de Instagram
+
+Si hay más de una cuenta de Instagram conectada a la misma app de Meta, **el webhook
+recibe los mensajes de todas**, y `IG_TOKEN` es de una sola. Sin filtro, el Worker
+intenta contestar con el token del local un mensaje que era para otra cuenta: Meta lo
+rechaza con *"The requested user cannot be found"* y, peor, la conversación igual queda
+guardada en `conversaciones` como si fuera del local.
+
+Por eso `IG_ACCOUNT_ID` tiene que estar cargada con el id de la cuenta del local — la
+misma de la que salió `IG_TOKEN`. El Worker descarta todo evento cuyo `recipient.id` no
+sea ese.
+
+Si la variable no está, el Worker procesa todo igual (para no dejar de contestar de
+golpe) pero loguea `OJO: sin IG_ACCOUNT_ID no se filtra por cuenta` en cada mensaje.
+
+El id se lee del propio log: es el `recipient.id` (o el `entry.id`) de un mensaje que sí
+haya llegado bien al local. Pasó el 22/08/2026, con dos cuentas conectadas a la app.
+
 ## Variables de entorno
 
 Se configuran en el panel de Cloudflare, en Settings → Variables. La columna
@@ -238,6 +256,7 @@ queda a la vista de cualquiera con acceso al panel.
 | `IG_VERIFY_TOKEN`  | Secret | Token que Meta usa para validar la suscripción al webhook |
 | `IG_APP_SECRET`    | Secret | Secreto de la app de Meta, con el que se verifica la firma HMAC |
 | `IG_TOKEN`         | Secret | Token de acceso a la API de Instagram |
+| `IG_ACCOUNT_ID`    | Text   | Id de la cuenta de Instagram del local — **ver abajo, no es opcional** |
 | `FIREBASE_PROJECT` | Text   | ID del proyecto de Firebase |
 | `FIREBASE_KEY`     | Text   | API key pública de Firebase |
 | `OWNER_UID`        | Text   | UID del dueño, para atribuirle los documentos que se crean |
