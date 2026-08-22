@@ -26,3 +26,12 @@ keep_vars = true
 # decide a quien le escribe, segun las ventanas de 20 h y 24 h de worker-ig.js.
 [triggers]
 crons = ["0 * * * *"]
+
+# El Worker tenia los logs prendidos en el panel y el primer deploy los apago, por lo
+# mismo que las variables: lo que no esta en este archivo, wrangler lo deja en el
+# default. Sin esto no hay historial de logs en el panel, que es justo lo unico que
+# muestra por que el bot no contesto un DM: los errores se loguean y se sigue.
+[observability]
+enabled = true
+[observability.logs]
+enabled = true
