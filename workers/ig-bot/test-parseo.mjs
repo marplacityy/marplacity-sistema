@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir } from './worker-ig.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
@@ -124,6 +125,55 @@ for (let h = 0; h < 24; h++) {
 ok(tarde === 0, 'ninguno queda de madrugada ni se atrasa', String(tarde));
 ok(pasado === 0, 'ninguno pasa las 24 h de Meta', String(pasado));
 ok(adelantoMax <= 9, 'lo mas que se adelanta son 9 h', String(adelantoMax));
+
+console.log('\n── campos del doc vs. firestore.rules ──');
+// El bot solo puede actualizar los campos que lista soloCamposDelBot() en las reglas, y
+// hasOnly() es todo o nada: si escribe uno que no esta ahi, Firestore rechaza el PATCH
+// ENTERO y se pierde la actualizacion de esa conversacion. Se ve solo en los logs del
+// Worker, asi que sin este test la desincronizacion no aparece hasta que algo se rompe.
+{
+  // Los comentarios se sacan primero: estan llenos de dos puntos ("no se puede seguir:
+  // sin fecha...") y se colarian como si fueran campos.
+  const pelar = txt => txt.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  const src = pelar(readFileSync(new URL('./worker-ig.js', import.meta.url), 'utf8'));
+  const rules = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8');
+  const entre = (txt, desde, hasta) => txt.slice(txt.indexOf(desde), txt.indexOf(hasta));
+
+  // Lo que escribe el webhook: las claves del literal `doc`, con dos puntos o
+  // abreviadas (`adjuntos,`), mas lo que se le cuelga despues con doc.X = ... (que va
+  // detras de un if, no al principio de la linea).
+  const cuerpoDoc = entre(src, '  const doc = {', '  await guardarEnFirestore(doc, env);');
+  // Y lo que escribe el cron: el objeto A_LA_BANDEJA y cada llamada a patchDoc().
+  const cuerpoCron = [...src.matchAll(/patchDoc\(env, idToken, name,([\s\S]*?)\);/g)].map(m => m[1]).join('\n')
+    + entre(src, 'const A_LA_BANDEJA', '\n\nasync function correrSeguimientos');
+
+  const escribe = new Set([
+    ...[...cuerpoDoc.matchAll(/^ {4}([a-zA-Z][a-zA-Z0-9]*)\s*[:,]/gm)].map(m => m[1]),
+    ...[...cuerpoDoc.matchAll(/doc\.([a-zA-Z][a-zA-Z0-9]*) =/g)].map(m => m[1]),
+    ...[...cuerpoCron.matchAll(/([a-zA-Z][a-zA-Z0-9]*):/g)].map(m => m[1]),
+  ]);
+
+  const permite = new Set(
+    [...entre(rules, 'function soloCamposDelBot', 'function mismoDueno').matchAll(/'([a-zA-Z][a-zA-Z0-9]*)'/g)]
+      .map(m => m[1]));
+
+  // Antes de comparar, que el parseo haya leido algo razonable: si un dia cambia la
+  // forma del archivo y estas listas salen vacias, el test tiene que fallar y no pasar
+  // en verde comparando dos conjuntos vacios.
+  ok(escribe.size >= 18, `el test leyo ${escribe.size} campos del Worker (esperaba 18+)`, [...escribe].join(','));
+  ok(permite.size >= 18, `el test leyo ${permite.size} campos de las reglas (esperaba 18+)`, [...permite].join(','));
+
+  const faltan = [...escribe].filter(c => !permite.has(c)).sort();
+  const sobran = [...permite].filter(c => !escribe.has(c)).sort();
+  ok(!faltan.length, 'todo lo que escribe el bot esta permitido en las reglas', 'falta agregar: ' + faltan.join(', '));
+  ok(!sobran.length, 'las reglas no permiten campos que ya nadie escribe', 'sobra: ' + sobran.join(', '));
+
+  // Los cuatro del cron, aparte: son los que habilito el punto 5 y los que mas facil se
+  // caen de la lista, porque no se escriben desde el mismo lugar que el resto.
+  for (const c of ['seguimientoEnviado', 'necesitaAtencion', 'motivo', 'prioridad']) {
+    ok(escribe.has(c) && permite.has(c), `${c}: lo escribe el cron y las reglas lo permiten`);
+  }
+}
 
 console.log(fallos ? `\n${fallos} FALLA(S)\n` : '\nTodo verde\n');
 process.exit(fallos ? 1 : 0);

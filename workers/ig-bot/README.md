@@ -36,7 +36,7 @@ Aparte del webhook corre un **cron cada hora** que sigue a los que quedaron en s
 | `prompt.js` | El system prompt del bot, fuente única. Lo importa `worker-ig.js` |
 | `cargar-mensajes.mjs` | Script suelto para cargar `config/mensajes` en Firestore |
 | `wrangler.toml` | Config de deploy: nombre del Worker y el cron cada hora |
-| `test-parseo.mjs` | Tests del parseo de la respuesta del modelo: `node workers/ig-bot/test-parseo.mjs` |
+| `test-parseo.mjs` | Tests sin red: parseo de la respuesta del modelo, ventana del seguimiento y campos del doc contra `firestore.rules`. `node workers/ig-bot/test-parseo.mjs` |
 
 `prompt-bot.md`, en la raíz del repo, es la versión legible del prompt para editar y
 discutir. `prompt.js` es lo que realmente se manda. Si cambiás uno, cambiá el otro.
@@ -110,7 +110,10 @@ Dos detalles del `PATCH` que importan:
   resuelta seguiría arrastrando el `motivo` viejo y no se iría nunca de la bandeja.
 
 Si agregás un campo, sumalo también a la lista de `soloCamposDelBot()` en
-`firestore.rules`: el bot puede actualizar el doc, pero solo esos campos.
+`firestore.rules`: el bot puede actualizar el doc, pero solo esos campos, y `hasOnly()`
+es todo o nada — si escribe uno que no está en la lista, Firestore rechaza el `PATCH`
+**entero** y esa conversación no se actualiza. Solo se ve en los logs del Worker, así
+que `test-parseo.mjs` compara las dos listas y falla si se desincronizan.
 
 ## Cron de seguimiento
 
