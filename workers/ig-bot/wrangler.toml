@@ -5,17 +5,22 @@
 #
 #   npx wrangler deploy            (parado en workers/ig-bot/)
 #
-# OJO con las variables: los Secret sobreviven al deploy, pero las Text cargadas a mano
-# en el panel las puede pisar wrangler. Despues del primer deploy entra a
-# https://ig-bot.fiwind702050.workers.dev/ y fijate que la lista de `vars` este toda en
-# true; si alguna volvio false, recargala en Settings -> Variables.
+# Los valores de las variables NO van aca: este repo es publico. Viven en el panel de
+# Cloudflare, y para probar en local en .dev.vars (ignorado por git).
 #
-# Los valores NO van aca: este repo es publico. Viven en el panel, y para probar en
-# local en .dev.vars (ignorado por git).
+# Por eso mismo esta keep_vars: sin ese flag, wrangler BORRA del Worker toda variable
+# que no encuentre en este archivo. Como aca no hay ninguna, un deploy se llevaba
+# puestas las cuatro Text del panel (FIREBASE_PROJECT, FIREBASE_KEY, OWNER_UID,
+# BOT_EMAIL) y el bot quedaba sin poder loguearse a Firebase: recibia los DM, no
+# contestaba y no guardaba nada. Paso el 22/08/2026. Los Secret no se tocan.
+#
+# Igual, despues de cada deploy conviene abrir https://ig-bot.fiwind702050.workers.dev/
+# y confirmar que la lista de `vars` este toda en true.
 
 name = "ig-bot"
 main = "worker-ig.js"
 compatibility_date = "2026-08-21"
+keep_vars = true
 
 # Seguimiento de los que quedaron en silencio: corre cada hora en punto (UTC) y adentro
 # decide a quien le escribe, segun las ventanas de 20 h y 24 h de worker-ig.js.

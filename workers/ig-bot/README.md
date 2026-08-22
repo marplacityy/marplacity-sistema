@@ -62,8 +62,14 @@ El orden importa, porque las tres partes están acopladas:
    Mientras tanto la query del cron falla con `FAILED_PRECONDITION`.
 3. `npx wrangler deploy` — el Worker y el cron.
 
-**Ojo con las variables**: los `Secret` sobreviven al deploy, pero las `Text` cargadas a
-mano en el panel las puede pisar `wrangler`. Después del primer deploy abrí
+**Ojo con las variables.** Por defecto `wrangler` **borra del Worker toda variable que
+no esté en `wrangler.toml`**, y los valores no pueden estar ahí porque el repo es
+público. Por eso el archivo lleva `keep_vars = true`: sin ese flag, un deploy se lleva
+puestas las cuatro `Text` del panel (`FIREBASE_PROJECT`, `FIREBASE_KEY`, `OWNER_UID`,
+`BOT_EMAIL`) y el bot queda sin poder loguearse a Firebase — recibe los DM, no contesta
+y no guarda nada. Pasó el 22/08/2026. Los `Secret` no se tocan.
+
+Aun con el flag puesto, después de cada deploy abrí
 https://ig-bot.fiwind702050.workers.dev/ y fijate que la lista de `vars` esté toda en
 `true`; si alguna volvió `false`, recargala en Settings → Variables y tocá *Deploy*.
 
