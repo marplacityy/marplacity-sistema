@@ -25,7 +25,7 @@ import { construirSystem, MARCA_CANAL } from './prompt.js';
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Firebase-Token',
 };
 
 export default {
@@ -68,7 +68,14 @@ export default {
       }, null, 2), { headers: { ...CORS, 'Content-Type': 'application/json' } });
     }
 
-    // ── 2. Mensajes entrantes (POST) ──
+    // ── 2. Respuesta aprobada desde la bandeja del sistema ──
+    // El navegador no puede mandar el DM por su cuenta: el IG_TOKEN vive acá. El
+    // sistema manda los mensajes que Juni ya editó y aprobó, con su token de Firebase.
+    if (request.method === 'POST' && url.pathname === '/responder') {
+      return responder(request, env);
+    }
+
+    // ── 3. Mensajes entrantes (POST) ──
     if (request.method === 'POST') {
       const raw = await request.text();
 
@@ -130,6 +137,10 @@ async function procesarMensaje(ev, env) {
 
   const fechaMensaje = new Date(ev.timestamp || Date.now());
 
+  // Se pide en paralelo con la IA, que es lo que tarda. Es solo para que la bandeja
+  // muestre @usuario en vez de un id de 17 dígitos.
+  const pedidoUsuario = usuarioDeIG(env, senderId);
+
   // Tipo de contenido
   const adjuntos = (m.attachments || []).map(a => a.type);   // image, audio, video, share...
   const texto = m.text || '';
@@ -178,12 +189,37 @@ async function procesarMensaje(ev, env) {
     userId: env.OWNER_UID,
   };
 
+  // Igual que el producto: si no se pudo traer, el campo no entra en la máscara y el
+  // doc conserva el que ya tenía.
+  const igUsuario = await pedidoUsuario;
+  if (igUsuario) doc.igUsuario = igUsuario;
+
   // Solo va si el modelo nombró un equipo. Si este mensaje no habla de ninguno el campo
   // no entra en la máscara del PATCH, así que el doc conserva el de la consulta
   // anterior en vez de quedarse sin nada para el seguimiento.
   if (ia.producto) doc.ultimoProducto = ia.producto;
 
   await guardarEnFirestore(doc, env);
+}
+
+/**
+ * El @usuario de Instagram del cliente.
+ *
+ * El webhook trae solo el id numérico, y un id de 17 dígitos no le dice nada a nadie
+ * mirando la bandeja. Si la consulta falla se devuelve null, no se escribe el campo y
+ * la pantalla cae al id: es un lujo, no algo por lo que valga la pena perder el mensaje.
+ */
+async function usuarioDeIG(env, igUserId) {
+  if (!env.IG_TOKEN) return null;
+  try {
+    const r = await fetch(`https://graph.instagram.com/v21.0/${igUserId}?fields=username&access_token=${env.IG_TOKEN}`);
+    if (!r.ok) { console.log('no se pudo traer el usuario', r.status); return null; }
+    const d = await r.json();
+    return d.username || null;
+  } catch (e) {
+    console.log('no se pudo traer el usuario', e.message);
+    return null;
+  }
 }
 
 // ── Mandar los DM ─────────────────────────────────────────────
@@ -234,6 +270,67 @@ async function mandarMensajes(env, igUserId, mensajes) {
   return enviados;
 }
 
+
+// ── Respuestas aprobadas desde la bandeja ─────────────────────
+
+const json = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+
+/**
+ * Manda los mensajes que el dueño aprobó desde la bandeja del sistema.
+ *
+ * El Worker no decide nada acá: el texto viene ya editado y aprobado, y lo único que
+ * aporta es el IG_TOKEN, que no puede vivir en el navegador. Tampoco toca Firestore —
+ * el doc lo actualiza el sistema, que es el que sabe quién aprobó.
+ */
+async function responder(request, env) {
+  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
+  if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
+
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'json invalido' }, 400); }
+
+  const igUserId = String(body.igUserId || '').trim();
+  const mensajes = (Array.isArray(body.mensajes) ? body.mensajes : [])
+    .map(m => String(m ?? '').trim())
+    .filter(Boolean)
+    .slice(0, MAX_MENSAJES);
+
+  if (!igUserId || !mensajes.length) return json({ error: 'falta igUserId o mensajes' }, 400);
+  if (!env.IG_TOKEN) return json({ error: 'el Worker no tiene IG_TOKEN cargado' }, 503);
+
+  const enviados = await mandarMensajes(env, igUserId, mensajes);
+
+  // Si salieron algunos y otros no, el 502 hace que el sistema deje la conversación en
+  // la bandeja: es peor darla por contestada cuando el cliente vio media respuesta.
+  return json({ enviados, total: mensajes.length }, enviados === mensajes.length ? 200 : 502);
+}
+
+/**
+ * El uid del dueño de un ID token de Firebase, o null si no vale.
+ *
+ * Se valida contra Google en vez de leerle el payload al JWT: así un token vencido, de
+ * otro proyecto o directamente inventado lo rechaza Firebase y no nuestra lectura.
+ */
+async function uidDelToken(idToken, env) {
+  if (!idToken) return null;
+  try {
+    const r = await fetch(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      },
+    );
+    if (!r.ok) { console.log('token rechazado', r.status); return null; }
+    const d = await r.json();
+    return d.users?.[0]?.localId || null;
+  } catch (e) {
+    console.log('no se pudo validar el token', e.message);
+    return null;
+  }
+}
 
 // ── Traer el stock disponible para que la IA sepa qué hay ─────
 // Solo campos de venta: nombre, gb, color, batería y PRECIO DE VENTA.

@@ -54,7 +54,7 @@ El build tarda ~15–60 s. Si el número publicado coincide con el del archivo, 
 | 2434–2435 | jsPDF + jspdf-autotable desde cdnjs |
 | 2436–9572 | Un solo `<script type="module">` con toda la lógica |
 
-Las páginas son `page-cargar`, `listado`, `reportes`, `amort`, `config`, `ingresos`, `facturas`, `stock`, `consig`, `fijos`, `rep`, `inv`, `clientes`, `home`, `caja`, `encargues`, `repuestos`.
+Las páginas son `page-cargar`, `listado`, `reportes`, `amort`, `config`, `ingresos`, `facturas`, `stock`, `consig`, `fijos`, `rep`, `inv`, `clientes`, `home`, `caja`, `encargues`, `repuestos`, `conocimiento`, `bandeja`.
 
 ## Arquitectura
 
@@ -85,7 +85,7 @@ Como consecuencia, el HTML se genera con template strings + `innerHTML`: usá `e
 
 Cada documento lleva `userId`. Toda escritura pasa por `withUser(obj)` y toda lectura por `myQ(col)` (`query(col, where('userId','==',uid))`). Consultar una colección sin `myQ` filtra mal y puede violar las reglas de seguridad.
 
-Colecciones: `gastos`, `ingresos`, `stock`, `consig`, `pagos_consig`, `gastos_fijos`, `pagos_fijos`, `reparaciones`, `inventario`, `repuestos`, `precios_repuestos`, `clientes`, `cierres`, `encargues`, `amorts`, `cola_impresion`, más el doc singular `config/{uid}`.
+Colecciones: `gastos`, `ingresos`, `stock`, `consig`, `pagos_consig`, `gastos_fijos`, `pagos_fijos`, `reparaciones`, `inventario`, `repuestos`, `precios_repuestos`, `clientes`, `cierres`, `encargues`, `amorts`, `cola_impresion`, `conversaciones` (DMs de Instagram: la escribe el Worker `ig-bot`, un doc por cliente), más el doc singular `config/{uid}`.
 
 Como la config de Firebase está en el HTML de un repo público, **las Security Rules son la única barrera real**. `firestore.rules` en la raíz es la fuente versionada; si agregás una colección hay que sumarla ahí también. Deploy: `firebase deploy --only firestore:rules`. `firebase-tools` está instalado y logueado; `firebase deploy --only firestore:rules --dry-run` compila el archivo y avisa los errores sin publicar nada.
 

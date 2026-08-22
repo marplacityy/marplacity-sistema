@@ -74,7 +74,7 @@ service cloud.firestore {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'igUserId', 'userId', 'fecha', 'ultimoMensajeCliente', 'ultimoMensaje',
           'adjuntos', 'urlsAdjuntos', 'tieneImagen', 'tieneAudio',
-          'estado', 'confianza', 'resumen', 'ultimoProducto',
+          'estado', 'confianza', 'resumen', 'ultimoProducto', 'igUsuario',
           'mensajes', 'sugerencia', 'respondido', 'revisado',
           'necesitaAtencion', 'motivo', 'prioridad', 'seguimientoEnviado'
         ]);

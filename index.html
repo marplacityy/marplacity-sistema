@@ -1135,7 +1135,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.16-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -1181,6 +1181,9 @@
       </a>
       <a onclick="goTo('repuestos')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>Repuestos
+      </a>
+      <a onclick="goTo('bandeja')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>Bandeja del bot
       </a>
       <a onclick="goTo('conocimiento')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Base de conocimiento
@@ -1233,6 +1236,9 @@
       </button>
       <button class="mobile-tab" onclick="goTo('fijos')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Fijos
+      </button>
+      <button class="mobile-tab" onclick="goTo('bandeja')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></svg>Bandeja
       </button>
       <button class="mobile-tab" onclick="goTo('conocimiento')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Bot
@@ -2443,6 +2449,15 @@
     </div>
 
     <!-- BASE DE CONOCIMIENTO (bot de Instagram) -->
+    <div id="page-bandeja" class="page">
+      <div class="page-header">
+        <h1>Bandeja del bot</h1>
+        <p>Las conversaciones de Instagram que el bot no puede cerrar solo. Lo más urgente arriba y, dentro de cada nivel, la que está esperando hace más tiempo. <b>Nada se manda sin que lo apruebes.</b></p>
+      </div>
+      <div id="bd-metrics" class="metrics"></div>
+      <div id="bd-list"></div>
+    </div>
+
     <div id="page-conocimiento" class="page">
       <div class="page-header">
         <h1>Base de conocimiento</h1>
@@ -2782,6 +2797,7 @@ const preciosRepCol = collection(db, 'precios_repuestos');
 const pagosFijosCol = collection(db, 'pagos_fijos');
 const amortsCol = collection(db, 'amorts');
 const listasCol = collection(db, 'listas_precios');
+const convsCol = collection(db, 'conversaciones');   // DMs de Instagram, un doc por cliente
 let cfgDoc = null; // se setea al loguear: doc(db,'config',uid)
 let conocDoc = null; // idem: doc(db,'conocimiento',uid)
 
@@ -2805,6 +2821,7 @@ let repuestosItems = [];
 let preciosRepItems = [];
 let listasItems = [];        // listas_precios: una lista de precios al público por doc
 let conoc = {};              // conocimiento/{uid}: datos del local para el bot de IG
+let convsItems = [];         // conversaciones que necesitan atención (la bandeja del bot)
 let icats = ['Accesorios','Repuestos','Fundas','Vidrios','Cargadores','Cables','Insumos','Otros'];
 let repTab = 'activas';
 let pagosFijosItems = [];
@@ -2921,6 +2938,14 @@ async function init() {
       listasItems = snap.docs.map(d=>({id:d.id,...d.data()}));
       listasItems.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
       if(currentPage==='conocimiento') deb('kb',renderConocimiento);
+      setSyncDot('ok');
+    }, snapErr);
+    // Bandeja del bot: SOLO lo que necesita atención. Filtrar en el servidor y no acá
+    // es lo que evita traerse todas las conversaciones del historial en cada arranque.
+    onSnapshot(query(convsCol, where('userId','==',uid), where('necesitaAtencion','==',true)), snap => {
+      const _b = applySnap('bandeja', snap);
+      if(_b) convsItems = _b;
+      if(currentPage==='bandeja') deb('bd', renderBandeja);
       setSyncDot('ok');
     }, snapErr);
     onSnapshot(conocDoc, snap => {
@@ -3107,6 +3132,7 @@ window.goTo = function(page) {
   if(page==='caja'){ const cf=document.getElementById('caja-fecha'); if(!cf.value) cf.value=today(); renderCaja(); }
   if(page==='encargues'){ const ms=document.getElementById('en-sena-medio'); if(!ms.options.length) ms.innerHTML=medios.map(m=>`<option>${esc(m)}</option>`).join(''); renderEncargues(); }
   if(page==='repuestos'){ initRepPiezasGrid(); populateRepModelosDL(); renderRepInv(); renderPreciosRef(); }
+  if(page==='bandeja') renderBandeja();
   if(page==='conocimiento'){ pintarConocimiento(); renderConocimiento(); }
   if(page==='listado'){
     if(!window._glInit){ window._glInit=true; const r=fechasPreset('hoy'); document.getElementById('fl-desde').value=r.d; document.getElementById('fl-hasta').value=r.h; }
@@ -10264,6 +10290,170 @@ window.migrarDatos = async function(){
     setSyncDot('error');
   }
   btn.disabled = false; btn.textContent = 'Migrar datos existentes';
+};
+
+// ── Bandeja del bot de Instagram ─────────────────────────
+//
+// Las conversaciones que el bot no pudo cerrar solo. El orden es el del trabajo: la
+// prioridad primero (1 = pidió una foto, 8 = el bot no supo qué contestar) y dentro de
+// cada nivel la más vieja arriba, que es la que hace más rato que está esperando.
+//
+// Nada sale de acá sin aprobar. El DM lo manda el Worker de ig-bot, no el navegador:
+// el token de Instagram no puede vivir en un HTML público.
+
+const IG_WORKER_URL = 'https://ig-bot.fiwind702050.workers.dev';
+
+// Ventana de Meta: pasadas 24 h desde el último mensaje del cliente, la API no deja
+// responder y hay que escribirle a mano desde Instagram. El mismo límite que respeta
+// el cron de seguimiento del Worker.
+const META_24H = 24*60*60*1000;
+
+// La tabla de motivos de prompt-bot.md, en castellano de pantalla.
+const MOTIVOS_BOT = {
+  pidio_foto:         'Pidió una foto',
+  cerrado:            'Dijo que lo lleva',
+  reclamo:            'Reclamo',
+  permuta:            'Hay que tasar una permuta',
+  reparacion:         'Pregunta por una reparación',
+  otro_medio_de_pago: 'Otro medio de pago — hay que calcular el recargo',
+  visto:              'Quedó en silencio',
+  no_supe_responder:  'El bot no supo qué contestar',
+};
+
+// Los timestamps llegan como Timestamp del SDK; si algún doc quedó con el string ISO
+// que escribía el Worker viejo, también se banca. Devuelve ms, o 0 si no hay nada.
+function msDe(v){
+  if(!v) return 0;
+  if(typeof v.toDate === 'function') return v.toDate().getTime();
+  const t = Date.parse(v);
+  return isNaN(t) ? 0 : t;
+}
+
+function haceCuanto(ms){
+  const min = Math.floor(ms/60000);
+  if(min < 1)  return 'recién';
+  if(min < 60) return `hace ${min} min`;
+  const hs = Math.floor(min/60);
+  if(hs < 24)  return `hace ${hs} h`;
+  const d = Math.floor(hs/24);
+  return d === 1 ? 'hace 1 día' : `hace ${d} días`;
+}
+
+// Lo que se está editando, por conversación. Sin esto, un snapshot que llegue mientras
+// escribís te borra lo tipeado: el render reemplaza el innerHTML entero.
+const bdBorradores = {};
+window.bdBorrador = function(id, txt){ bdBorradores[id] = txt; };
+
+function renderBandeja(){
+  const ahora = Date.now();
+  const filas = convsItems.slice().sort((a,b)=>
+    (a.prioridad ?? 99) - (b.prioridad ?? 99) ||
+    msDe(a.ultimoMensajeCliente) - msDe(b.ultimoMensajeCliente));
+
+  const vencidas = filas.filter(x => ahora - msDe(x.ultimoMensajeCliente) >= META_24H).length;
+  document.getElementById('bd-metrics').innerHTML = `
+    <div class="metric"><div class="m-label">Esperando respuesta</div><div class="m-val">${filas.length}</div></div>
+    <div class="metric"><div class="m-label">Fuera de las 24 h</div><div class="m-val" style="${vencidas?'color:var(--neg);':''}">${vencidas}</div><div class="m-sub">esas hay que contestarlas desde Instagram</div></div>
+  `;
+
+  document.getElementById('bd-list').innerHTML = filas.map(x=>{
+    const t = msDe(x.ultimoMensajeCliente);
+    // Sin fecha no se puede saber si la ventana venció. Se trata como vencida: es el
+    // lado seguro, porque mandar fuera de las 24 h es lo que pone en riesgo la API.
+    const vencida = !t || (ahora - t >= META_24H);
+    const borrador = bdBorradores[x.id] ?? (x.mensajes||[]).join('\n');
+    const quien = x.igUsuario ? '@'+x.igUsuario : 'IG '+(x.igUserId||'—');
+    return `<div class="card" style="margin-bottom:10px;${vencida?'border-color:#F09595;':''}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+        <div style="min-width:0;">
+          <div style="font-weight:600;font-size:15px;">💬 ${esc(quien)}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${esc(MOTIVOS_BOT[x.motivo] || x.motivo || 'Sin motivo')} · último mensaje ${t?haceCuanto(ahora-t):'sin fecha'}${x.ultimoProducto?' · '+esc(x.ultimoProducto):''}</div>
+          ${x.resumen?`<div style="font-size:13px;color:var(--text2);margin-top:6px;">${esc(x.resumen)}</div>`:''}
+          ${x.ultimoMensaje?`<div style="font-size:12px;color:var(--text3);margin-top:4px;font-style:italic;">«${esc(x.ultimoMensaje)}»</div>`:''}
+        </div>
+        <span class="est-badge ${vencida?'est-abandono':'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>
+      </div>
+      ${vencida?`<div class="proveedor-alerta alerta-urgente">⏰ <b>Pasaron las 24 h</b> — Instagram ya no deja que el bot conteste. Escribile vos desde la app y después marcala como contestada.</div>`:''}
+      <div class="field" style="margin:10px 0 8px;">
+        <label>${vencida?'Respuesta que había preparado el bot (no se puede mandar desde acá)':'Respuesta — editala si hace falta, una línea por mensaje'}</label>
+        <textarea id="bd-txt-${x.id}" style="height:90px;" ${vencida?'disabled':''} oninput="bdBorrador('${escJs(x.id)}', this.value)">${esc(borrador)}</textarea>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${vencida?'':`<button class="btn-save" id="bd-btn-${x.id}" style="width:auto;padding:10px 18px;" onclick="aprobarBandeja('${escJs(x.id)}')">✓ Aprobar y mandar</button>`}
+        <button class="btn-pagar-outline" onclick="resolverBandeja('${escJs(x.id)}')">Ya le contesté yo</button>
+      </div>
+    </div>`;
+  }).join('') || '<div class="empty">No hay nada esperando: el bot viene contestando todo solo. 🎉</div>';
+}
+
+window.aprobarBandeja = async function(id){
+  const x = convsItems.find(c=>c.id===id); if(!x) return;
+  if(!x.igUserId){ showToast('Esta conversación no tiene guardado el usuario de Instagram.', true); return; }
+
+  const t = msDe(x.ultimoMensajeCliente);
+  if(!t || Date.now()-t >= META_24H){ showToast('Pasaron las 24 h: hay que contestarle desde Instagram.', true); return; }
+
+  // Una línea = un mensaje, igual que el array que devuelve el modelo.
+  const mensajes = (bdBorradores[id] ?? (x.mensajes||[]).join('\n')).split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!mensajes.length){ showToast('Escribí la respuesta antes de mandar.', true); return; }
+
+  const btn = document.getElementById('bd-btn-'+id);
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ Mandando...'; }
+  setSyncDot('syncing');
+  try{
+    const r = await fetch(IG_WORKER_URL+'/responder', {
+      method: 'POST',
+      headers: await workerHeaders(),
+      body: JSON.stringify({ igUserId: x.igUserId, mensajes }),
+    });
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error || `el Worker respondió ${r.status}`);
+
+    // Recién con el DM afuera se saca de la bandeja. Si el envío falla, la conversación
+    // se queda acá y se puede reintentar.
+    await updateDoc(doc(db,'conversaciones',id), {
+      mensajes,
+      sugerencia: mensajes.join('\n'),
+      respondido: true,
+      necesitaAtencion: false,
+      motivo: null,
+      prioridad: 99,
+      seguimientoEnviado: true,   // ya le escribimos: que el cron no la vuelva a agarrar
+      revisado: true,
+      aprobadoPor: (currentUser && currentUser.email) || uid,
+      aprobadoEn: serverTimestamp(),
+    });
+    delete bdBorradores[id];
+    showToast(`Mandado — ${mensajes.length} mensaje${mensajes.length===1?'':'s'}`);
+  }catch(e){
+    console.error('bandeja:', e);
+    showToast('No se pudo mandar: '+e.message, true);
+    setSyncDot('error');
+    if(btn){ btn.disabled = false; btn.textContent = '✓ Aprobar y mandar'; }
+  }
+};
+
+// Para lo que ya contestaste vos desde Instagram — y para todo lo que pasó las 24 h,
+// que es la única salida que tiene.
+window.resolverBandeja = async function(id){
+  if(!confirm('¿Sacarla de la bandeja sin mandar nada?\n\nUsalo cuando ya le contestaste vos desde Instagram.')) return;
+  setSyncDot('syncing');
+  try{
+    await updateDoc(doc(db,'conversaciones',id), {
+      necesitaAtencion: false,
+      motivo: null,
+      prioridad: 99,
+      seguimientoEnviado: true,
+      revisado: true,
+      aprobadoPor: (currentUser && currentUser.email) || uid,
+      aprobadoEn: serverTimestamp(),
+    });
+    delete bdBorradores[id];
+    showToast('Listo, sacada de la bandeja');
+  }catch(e){
+    showToast('No se pudo actualizar: '+e.message, true);
+    setSyncDot('error');
+  }
 };
 
 // ── Base de conocimiento (bot de Instagram) ──────────────

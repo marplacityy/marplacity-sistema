@@ -82,6 +82,7 @@ misma persona repetida en cinco filas.
 | campo | tipo | qué es |
 |---|---|---|
 | `igUserId` | string | id de Instagram del cliente (y el id del doc) |
+| `igUsuario` | string | el @usuario, para que la bandeja no muestre un id de 17 dígitos |
 | `ultimoMensaje` | string | el texto del último DM que entró |
 | `ultimoMensajeCliente` | timestamp | cuándo entró. Es el campo que filtra el cron |
 | `fecha` | string ISO | el mismo instante, como lo venían guardando los docs |
@@ -96,6 +97,7 @@ misma persona repetida en cinco filas.
 | `motivo` | string | por qué (ver la tabla de prioridades en `prompt-bot.md`) |
 | `prioridad` | int | 1 a 8, o 99 si no necesita atención |
 | `seguimientoEnviado` | bool | lo marca el cron cuando manda el seguimiento |
+| `aprobadoPor`, `aprobadoEn` | string, timestamp | quién cerró la conversación desde la bandeja y cuándo. **Los escribe el sistema, no el bot** |
 | `revisado` | bool | |
 | `adjuntos`, `urlsAdjuntos`, `tieneImagen`, `tieneAudio` | | qué mandó el cliente |
 | `userId` | string | el dueño, para las reglas de Firestore |
@@ -152,9 +154,9 @@ Salga o no salga el mensaje, el doc queda con `seguimientoEnviado: true`: si el 
 falla, la conversación sube a la bandeja, pero el bot no reintenta el mismo mensaje cada
 hora.
 
-**Para cuando se haga la bandeja**: al aprobar una respuesta desde el sistema hay que
-poner también `seguimientoEnviado: true`. Si no, una conversación que Juni ya contestó
-vuelve a caer en la query del cron y se marca `visto` de nuevo.
+La bandeja del sistema pone `seguimientoEnviado: true` al aprobar una respuesta, por
+esto mismo: si no, una conversación que Juni ya contestó vuelve a caer en la query del
+cron y se marca `visto` de nuevo.
 
 ### El índice del cron
 
@@ -195,6 +197,26 @@ MC_EMAIL='tu@mail.com' MC_PASSWORD='tu-clave' node workers/ig-bot/cargar-mensaje
 
 Las credenciales son las tuyas del sistema y se pasan por variable de entorno a
 propósito: no van en el repo. Escribe el dueño; el bot sobre ese doc solo lee.
+
+## `POST /responder` — las respuestas de la bandeja
+
+La bandeja del sistema no puede mandar el DM por su cuenta: el `IG_TOKEN` vive en el
+Worker y no puede bajar a un HTML público. Así que manda acá los mensajes que Juni ya
+editó y aprobó:
+
+```
+POST https://ig-bot.fiwind702050.workers.dev/responder
+X-Firebase-Token: <ID token del usuario>
+{ "igUserId": "178414...", "mensajes": ["che, te espero", "estamos hasta las 18"] }
+```
+
+El token se valida contra Firebase (`accounts:lookup`) y tiene que ser el del `OWNER_UID`;
+cualquier otro se va con un 401. El Worker no decide nada más ni toca Firestore: el texto
+viene resuelto y el doc lo actualiza el sistema, que es el que sabe quién aprobó.
+
+Devuelve `{ enviados, total }`. Si salieron algunos y otros no, el status es 502 a
+propósito: la bandeja deja la conversación abierta en vez de darla por contestada, porque
+el cliente vio media respuesta.
 
 ## Variables de entorno
 
