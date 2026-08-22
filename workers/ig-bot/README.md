@@ -9,14 +9,21 @@ de MarplaCity.
 2. Verifica la firma HMAC del pedido, para asegurarse de que viene de Meta y no
    de cualquiera que conozca la URL.
 3. Consulta el stock y las listas de precios en Firestore.
-4. Le pide a la IA que clasifique el mensaje y redacte una respuesta sugerida.
-5. Guarda todo (mensaje, clasificación y respuesta sugerida) en la colección
-   `conversaciones`.
+4. Le pide a la IA que clasifique el mensaje y redacte la respuesta. El modelo
+   devuelve **un solo JSON** con la categoría, los campos de NEED ATTENTION y un
+   array `mensajes`.
+5. Manda cada elemento de `mensajes` como un DM aparte, en orden y con una pausa
+   corta entre uno y otro.
+6. Guarda todo (mensaje, clasificación, respuesta y campos de NEED ATTENTION) en la
+   colección `conversaciones`.
 
-**Está en fase 1: lee y sugiere, no responde.** El Worker nunca le manda un
-mensaje al cliente por su cuenta; deja la sugerencia guardada para que la
-apruebes vos. Por eso `IG_TOKEN` todavía no se usa en el código: está cargado y
-verificado, esperando la fase que sí responde.
+**Nada de lo que devuelve el modelo se toma por bueno.** Si el JSON no parsea, si un
+campo no es de los válidos, si el modelo dudó (`confianza: "baja"`) o si algún DM no
+llegó a salir, el mensaje **no se descarta**: la conversación se guarda igual y sube a
+la bandeja con `necesitaAtencion: true` para que la conteste Juni a mano.
+
+**Sin `IG_TOKEN` cargado el Worker no le escribe a nadie**: clasifica, guarda y llena la
+bandeja, nada más. Es la forma de tenerlo corriendo en modo "lee y sugiere".
 
 ## Archivos
 
@@ -25,6 +32,7 @@ verificado, esperando la fase que sí responde.
 | `worker-ig.js` | El Worker: webhook, firma HMAC, lectura de Firestore, llamada a la IA |
 | `prompt.js` | El system prompt del bot, fuente única. Lo importa `worker-ig.js` |
 | `cargar-mensajes.mjs` | Script suelto para cargar `config/mensajes` en Firestore |
+| `test-parseo.mjs` | Tests del parseo de la respuesta del modelo: `node workers/ig-bot/test-parseo.mjs` |
 
 `prompt-bot.md`, en la raíz del repo, es la versión legible del prompt para editar y
 discutir. `prompt.js` es lo que realmente se manda. Si cambiás uno, cambiá el otro.

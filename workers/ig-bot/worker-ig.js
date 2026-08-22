@@ -1,8 +1,12 @@
 /**
  * MarplaCity — Worker de Instagram DM
  * ------------------------------------
- * FASE 1: recibe los mensajes, los guarda en Firestore y los clasifica.
- * NO responde todavía (modo "lee y sugiere").
+ * Recibe el DM, lo clasifica con la IA, CONTESTA por Instagram y guarda todo en la
+ * colección `conversaciones`. Lo que no puede resolver lo marca para que lo atienda
+ * Juni a mano (necesitaAtencion + motivo + prioridad).
+ *
+ * Sin IG_TOKEN cargado no manda nada: clasifica y llena la bandeja, nada más. Es la
+ * forma de tenerlo andando sin que le escriba a nadie.
  *
  * Variables a cargar en Cloudflare (Settings -> Variables):
  *   IG_VERIFY_TOKEN   (Secret)  -> lo inventás vos, ej: "marplacity2026"
@@ -25,7 +29,7 @@ const CORS = {
 };
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
@@ -86,8 +90,15 @@ export default {
         }
       }
       console.log('tareas encoladas:', tareas.length);
-      const res = await Promise.allSettled(tareas);
-      res.forEach(r => { if (r.status === 'rejected') console.log('tarea fallo:', String(r.reason)); });
+
+      // Meta espera el 200 rapidísimo y reintenta si tarda. Desde que el bot contesta,
+      // procesar un mensaje lleva segundos (la IA, y la pausa entre DM), así que el
+      // 200 sale ya y el trabajo sigue por atrás con waitUntil.
+      ctx.waitUntil(
+        Promise.allSettled(tareas).then(res => {
+          res.forEach(r => { if (r.status === 'rejected') console.log('tarea fallo:', String(r.reason)); });
+        }),
+      );
 
       return new Response('EVENT_RECEIVED', { status: 200 });
     }
@@ -115,29 +126,93 @@ async function procesarMensaje(ev, env) {
   const adjuntos = (m.attachments || []).map(a => a.type);   // image, audio, video, share...
   const texto = m.text || '';
 
-  // La IA lee el mensaje, lo clasifica y redacta una respuesta sugerida
-  let ia = { estado: null, sugerencia: null, resumen: null };
+  // La IA lee el mensaje, lo clasifica y redacta la respuesta
+  let ia = { ...SIN_RESPUESTA };
   if (env.ANTHROPIC_KEY && (texto || adjuntos.length)) {
     ia = await pensarRespuesta(texto, adjuntos, env);
+  } else {
+    console.log(env.ANTHROPIC_KEY ? 'mensaje sin texto ni adjuntos' : 'sin ANTHROPIC_KEY: no se llama a la IA');
   }
+
+  // Cada elemento del array sale como un DM aparte, en orden.
+  const enviados = await mandarMensajes(env, senderId, ia.mensajes);
+
+  // Lo que no llegó a salir queda para Juni: sin IG_TOKEN (modo lee y sugiere) no sale
+  // ninguno, y si un envío falla se corta ahí. En los dos casos la conversación sube a
+  // la bandeja, pero conservando el motivo que puso el modelo si tenía uno: pisar un
+  // `pidio_foto` de prioridad 1 con `no_supe_responder` lo mandaría al fondo de la cola.
+  const quedoSinMandar = enviados < ia.mensajes.length;
 
   const doc = {
     igUserId: senderId,
-    sugerencia: ia.sugerencia || null,
-    resumen: ia.resumen || null,
-    respondido: false,
+    mensajes: ia.mensajes,
+    sugerencia: ia.mensajes.join('\n') || null,   // texto plano, para la bandeja
+    resumen: ia.resumen,
+    respondido: enviados > 0,
     ultimoMensaje: texto,
     adjuntos,
     tieneImagen: adjuntos.includes('image'),
     tieneAudio: adjuntos.includes('audio'),
     urlsAdjuntos: (m.attachments || []).map(a => a.payload?.url).filter(Boolean),
     fecha: new Date(ev.timestamp || Date.now()).toISOString(),
-    estado: ia.estado || clasificarBasico(texto, adjuntos),
+    estado: ia.categoria || clasificarBasico(texto, adjuntos),
+    confianza: ia.confianza,
+    necesitaAtencion: ia.necesitaAtencion || quedoSinMandar,
+    motivo: quedoSinMandar ? (ia.motivo || 'no_supe_responder') : ia.motivo,
+    prioridad: quedoSinMandar ? Math.min(ia.prioridad, 8) : ia.prioridad,
     revisado: false,
     userId: env.OWNER_UID,
   };
 
   await guardarEnFirestore(doc, env);
+}
+
+// ── Mandar los DM ─────────────────────────────────────────────
+
+// Pausa entre mensaje y mensaje: si salen los tres en el mismo instante se lee como
+// un volcado de bot, y además Instagram a veces los entrega desordenados.
+const PAUSA_ENTRE_DM = 1200;
+const dormir = ms => new Promise(r => setTimeout(r, ms));
+
+async function mandarDM(env, igUserId, texto) {
+  try {
+    const r = await fetch(
+      `https://graph.instagram.com/v21.0/me/messages?access_token=${env.IG_TOKEN}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient: { id: igUserId }, message: { text: texto } }),
+      },
+    );
+    if (!r.ok) { console.log('envio fallo', igUserId, r.status, (await r.text()).slice(0, 200)); return false; }
+    return true;
+  } catch (e) {
+    console.log('envio fallo', igUserId, e.message);
+    return false;
+  }
+}
+
+/**
+ * Manda los mensajes en orden y devuelve cuántos salieron.
+ *
+ * Si uno falla corta ahí: mandar el tercero cuando el segundo no llegó deja una
+ * conversación sin sentido del lado del cliente.
+ *
+ * Sin IG_TOKEN no manda nada y devuelve 0 — es el modo "lee y sugiere": el bot
+ * clasifica y llena la bandeja, pero no le escribe a nadie.
+ */
+async function mandarMensajes(env, igUserId, mensajes) {
+  if (!mensajes.length) return 0;
+  if (!env.IG_TOKEN) { console.log('sin IG_TOKEN: no se manda nada (modo lee y sugiere)'); return 0; }
+
+  let enviados = 0;
+  for (const texto of mensajes) {
+    if (enviados > 0) await dormir(PAUSA_ENTRE_DM);
+    if (!await mandarDM(env, igUserId, texto)) break;
+    enviados++;
+  }
+  console.log('enviados', enviados, 'de', mensajes.length);
+  return enviados;
 }
 
 
@@ -267,11 +342,23 @@ async function ultimaLista(env, idToken, origen) {
 }
 
 // ── La IA: clasifica y redacta una respuesta ──────────────────
-async function pensarRespuesta(texto, adjuntos, env) {
-  const vacio = { estado: null, sugerencia: null, resumen: null, mensajes: [] };
 
+// Lo que devolvemos cuando la IA no contestó o contestó algo que no se pudo parsear.
+// El mensaje del cliente NO se descarta: la conversación se guarda igual y sube a la
+// bandeja con prioridad 8 para que la conteste Juni a mano.
+const SIN_RESPUESTA = {
+  categoria: null,
+  confianza: 'baja',
+  necesitaAtencion: true,
+  motivo: 'no_supe_responder',
+  prioridad: 8,
+  resumen: null,
+  mensajes: [],
+};
+
+async function pensarRespuesta(texto, adjuntos, env) {
   const idToken = await tokenDelBot(env);
-  if (!idToken) return vacio;
+  if (!idToken) return { ...SIN_RESPUESTA };
 
   // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
   // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
@@ -313,28 +400,78 @@ async function pensarRespuesta(texto, adjuntos, env) {
       }),
     });
 
-    if (!r.ok) { console.log('IA error', r.status, (await r.text()).slice(0, 200)); return vacio; }
+    if (!r.ok) { console.log('IA error', r.status, (await r.text()).slice(0, 200)); return { ...SIN_RESPUESTA }; }
 
     const d = await r.json();
     const crudo = (d.content?.map(x => x.text || '').join('') || d.text || '').trim();
-    const limpio = crudo.replace(/```json|```/g, '').trim();
-    const out = JSON.parse(limpio);
+    const out = JSON.parse(limpiarJson(crudo));
+    const r2 = normalizar(out, textoCanal);
 
-    const mensajes = expandirCanal(out.mensajes, textoCanal);
-
-    console.log('IA ->', out.categoria, '|', mensajes.length, 'mensaje(s)');
-    return {
-      estado: out.categoria || null,
-      resumen: out.resumen || null,
-      mensajes,
-      // El doc de conversaciones todavía guarda una sugerencia sola; el array completo
-      // y los campos de NEED ATTENTION entran en los puntos 2 y 3 de la tarea.
-      sugerencia: mensajes.join('\n') || null,
-    };
+    console.log('IA ->', r2.categoria, '| prioridad', r2.prioridad, '|', r2.mensajes.length, 'mensaje(s)');
+    return r2;
   } catch (e) {
+    // Puede ser un JSON cortado, un texto suelto o un campo que no vino. Da igual:
+    // el mensaje sube a la bandeja en vez de perderse.
     console.log('IA fallo:', e.message);
-    return vacio;
+    return { ...SIN_RESPUESTA };
   }
+}
+
+/**
+ * Deja el texto crudo listo para JSON.parse().
+ *
+ * El prompt pide JSON pelado, pero igual conviene sacar los backticks por las dudas y
+ * quedarse con lo que hay entre la primera llave y la última: a veces se cuela una
+ * línea de texto antes o después.
+ */
+export function limpiarJson(crudo) {
+  const sinFences = crudo.replace(/```(?:json)?/gi, '').trim();
+  const a = sinFences.indexOf('{');
+  const b = sinFences.lastIndexOf('}');
+  return (a !== -1 && b > a) ? sinFences.slice(a, b + 1) : sinFences;
+}
+
+const MOTIVOS = ['pidio_foto', 'cerrado', 'reclamo', 'permuta', 'reparacion', 'otro_medio_de_pago', 'visto', 'no_supe_responder'];
+const CATEGORIAS = ['reclamo', 'permuta', 'reparacion', 'cerrado', 'indeciso', 'curioso'];
+const MAX_MENSAJES = 4;
+
+/**
+ * Valida y acomoda lo que devolvió el modelo. Nada de lo que viene se toma por bueno:
+ * si un campo falta o no es de los válidos, la conversación se marca para revisar en
+ * vez de guardarse con datos que después rompen la bandeja o la query del cron.
+ */
+export function normalizar(out, textoCanal) {
+  const mensajes = expandirCanal(out.mensajes, textoCanal).slice(0, MAX_MENSAJES);
+
+  const categoria = CATEGORIAS.includes(out.categoria) ? out.categoria : null;
+  const confianza = out.confianza === 'baja' ? 'baja' : 'alta';
+
+  // Sube a la bandeja si el modelo lo pide, si dudó de la categoría, si la categoría
+  // no es una de las válidas, o si no dejó nada para contestar.
+  let necesitaAtencion = out.necesita_atencion === true
+    || confianza === 'baja'
+    || !categoria
+    || !mensajes.length;
+
+  let motivo = MOTIVOS.includes(out.motivo) ? out.motivo : null;
+  if (necesitaAtencion && !motivo) motivo = 'no_supe_responder';
+
+  // El prompt fija 1..8 para lo que hay que mirar y 99 para lo que no.
+  let prioridad = Number(out.prioridad);
+  if (!Number.isInteger(prioridad) || prioridad < 1 || prioridad > 8) {
+    prioridad = necesitaAtencion ? 8 : 99;
+  }
+  if (!necesitaAtencion) { motivo = null; prioridad = 99; }
+
+  return {
+    categoria,
+    confianza,
+    necesitaAtencion,
+    motivo,
+    prioridad,
+    resumen: typeof out.resumen === 'string' ? out.resumen.trim() || null : null,
+    mensajes,
+  };
 }
 
 /**
@@ -345,7 +482,7 @@ async function pensarRespuesta(texto, adjuntos, env) {
  * reemplaza carácter por carácter. Si el texto no está cargado, la marca se cae del
  * array en vez de mandarse literal al cliente.
  */
-function expandirCanal(mensajes, textoCanal) {
+export function expandirCanal(mensajes, textoCanal) {
   if (!Array.isArray(mensajes)) return [];
   return mensajes
     .map(m => {
@@ -418,7 +555,9 @@ async function guardarEnFirestore(doc, env) {
     if (v === null || v === undefined) continue;
     if (typeof v === 'string')       fields[k] = { stringValue: v };
     else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
-    else if (typeof v === 'number')  fields[k] = { doubleValue: v };
+    // prioridad va como entero: el cron patchea integerValue y la bandeja ordena por
+    // este campo, así que conviene que todos los docs lo guarden del mismo tipo.
+    else if (typeof v === 'number')  fields[k] = Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
     else if (Array.isArray(v))       fields[k] = { arrayValue: { values: v.map(x => ({ stringValue: String(x) })) } };
   }
 
