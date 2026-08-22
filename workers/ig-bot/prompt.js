@@ -259,6 +259,30 @@ function bloqueStock(stock = []) {
   return `## EQUIPOS EN EL LOCAL\n\n${JSON.stringify(stock)}`;
 }
 
+/**
+ * Los ajustes de tono que escribe el dueño desde el sistema (conocimiento.tono).
+ *
+ * Va aparte de la base de conocimiento —que son datos, no estilo— y despues, para que
+ * pise a la seccion CÓMO ESCRIBÍS de arriba donde se contradigan. Es el campo que se
+ * toca todos los dias mientras se afina el bot; el resto del prompt no.
+ *
+ * Se limita a como escribe. No puede cambiar los precios, ni cuando marcar NEED
+ * ATTENTION, ni el formato de salida: eso lo dice explicito, porque el dueño escribe
+ * ahi en lenguaje suelto y sin el aviso el modelo podria tomarselo como permiso.
+ */
+function bloqueTono(tono) {
+  if (!tono || !String(tono).trim()) return '';
+  return `## CÓMO ESCRIBÍS — AJUSTES DEL DUEÑO
+
+Esto lo escribió el dueño del local y va POR ENCIMA de la sección CÓMO ESCRIBÍS de más
+arriba: donde se contradigan, hacé lo que dice acá.
+
+Solo cambia la forma de escribir. NO cambia los precios, ni cuándo marcar NEED
+ATTENTION, ni el formato de salida: todo eso sigue igual pase lo que pase.
+
+${String(tono).trim()}`;
+}
+
 function bloqueLista(titulo, lista, vencida = false) {
   if (!lista || !Array.isArray(lista.items) || !lista.items.length) {
     return `## LISTA ${titulo}\n\nSin datos. No prometas nada de esta lista.`;
@@ -279,8 +303,9 @@ export function construirSystem({ conocimiento, stock, listaMdp, listaCaba, mdpV
   return [
     SYSTEM_PROMPT,
     bloqueConocimiento(conocimiento),
+    bloqueTono(conocimiento && conocimiento.tono),
     bloqueStock(stock),
     bloqueLista('MAR DEL PLATA', listaMdp, mdpVencida),
     bloqueLista('CABA', listaCaba),
-  ].join('\n\n');
+  ].filter(Boolean).join('\n\n');
 }

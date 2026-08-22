@@ -140,6 +140,14 @@ console.log('\n── construirSystem con los docs vacios ──');
   ok(sistema && sistema.includes('NO SABÉS'), 'lo que no esta cargado se declara como no sabido');
   ok(sistema && sistema.includes('Sin datos'), 'las listas vacias no prometen precios');
 
+  // El tono que escribe el dueño desde el sistema
+  const conTono = construirSystem({ ...vacio, conocimiento: { tono: 'tuteo, no vos. mensajes mas largos.' } });
+  ok(conTono.includes('AJUSTES DEL DUEÑO'), 'el tono cargado entra al prompt');
+  ok(conTono.includes('tuteo, no vos'), 'entra el texto tal cual');
+  ok(conTono.indexOf('AJUSTES DEL DUEÑO') > conTono.indexOf('## CÓMO ESCRIBÍS'), 'va DESPUES de las reglas generales, para pisarlas');
+  ok(!construirSystem({ ...vacio, conocimiento: { tono: '   ' } }).includes('AJUSTES DEL DUEÑO'), 'vacio no agrega el bloque');
+  ok(!sistema.includes('AJUSTES DEL DUEÑO'), 'sin tono cargado tampoco');
+
   let sinNada = null;
   try { sinNada = construirSystem(); } catch (e) { sinNada = null; }
   ok(!!sinNada, 'tambien se banca que no le pasen nada');

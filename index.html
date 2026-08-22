@@ -1135,7 +1135,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-C</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-D</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2473,6 +2473,13 @@
 
       <!-- TAB: Datos del local -->
       <div id="kb-sec-datos">
+        <div class="card">
+          <div class="card-title">Cómo habla el bot</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Escribí con tus palabras cómo querés que se exprese: si tutea o vosea, si usa emojis, si los mensajes son cortos o largos, qué muletillas usás vos. <b>Esto pisa las reglas de estilo que el bot trae de fábrica</b>, así que es el campo para ir afinando hasta que suene como vos. No cambia los precios ni cuándo te pasa una consulta a la bandeja.</p>
+          <div class="field"><textarea id="kb-tono" placeholder="Ej: hablale de vos, nada de usted. Mensajes cortos, de un renglón. Sin emojis. Si no entendés algo, preguntá en vez de suponer. Cuando cierran la compra, decile que lo esperás por el local." style="height:130px;"></textarea></div>
+          <button class="btn-save" id="btn-kb-guardar-tono" onclick="guardarConocimiento()">Guardar</button>
+        </div>
+
         <div class="card">
           <div class="card-title">Datos del local</div>
           <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Escribilo como se lo contarías a un cliente: el bot usa este texto tal cual para responder. Dejá vacío lo que no aplique.</p>
@@ -10601,7 +10608,7 @@ window.resolverBandeja = async function(id){
 // por lista cargada. OJO: el precio de esas listas YA ES el precio final al
 // público — no se le aplica margen en ningún punto del flujo.
 
-const KB_CAMPOS = ['horarios','direccion','mediosPago','garantia','politicaSena','comoLlegar','notasExtra'];
+const KB_CAMPOS = ['tono','horarios','direccion','mediosPago','garantia','politicaSena','comoLlegar','notasExtra'];
 const KB_ORIGENES = { mdp: 'Mar del Plata', caba: 'CABA' };
 
 let kbParseada = { mdp: [], caba: [] };
@@ -10630,17 +10637,20 @@ function pintarConocimiento(){
   });
 }
 
+// Guarda TODO el conocimiento, lo llame el botón del tono o el de los datos: los dos
+// escriben el mismo doc y los campos se leen de la misma lista.
 window.guardarConocimiento = async function(){
-  const btn = document.getElementById('btn-kb-guardar-datos');
-  btn.disabled = true; btn.textContent = 'Guardando...';
+  const btns = ['btn-kb-guardar-tono','btn-kb-guardar-datos']
+    .map(id=>document.getElementById(id)).filter(Boolean);
+  btns.forEach(b=>{ b.disabled = true; b.textContent = 'Guardando...'; });
   setSyncDot('syncing');
   try{
     const data = {};
-    KB_CAMPOS.forEach(k=>{ data[k] = (document.getElementById('kb-'+k).value||'').trim(); });
+    KB_CAMPOS.forEach(k=>{ const el = document.getElementById('kb-'+k); if(el) data[k] = (el.value||'').trim(); });
     await setDoc(conocDoc, withUser({...data, updatedAt: serverTimestamp()}), {merge:true});
-    showToast('Datos del local guardados ✓');
+    showToast('Guardado ✓ — el bot lo usa desde el próximo mensaje');
   }catch(e){ console.error(e); showToast('Error al guardar', true); setSyncDot('error'); }
-  btn.disabled = false; btn.textContent = 'Guardar';
+  btns.forEach(b=>{ b.disabled = false; b.textContent = 'Guardar'; });
 };
 
 // ── Listas de precios ──
