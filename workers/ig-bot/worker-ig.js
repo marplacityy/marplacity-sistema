@@ -571,14 +571,54 @@ async function tokenDelBot(env) {
 // cliente. El tag HUMAN_AGENT estira eso a 7 días, pero es exclusivo para humanos:
 // usarlo desde un bot es de las formas más rápidas de perder el acceso a la API.
 //
-// Por eso el seguimiento automático sale a las 20 h de silencio, y lo que ya pasó las
-// 24 h no lo toca el bot: se marca `visto` para que lo mande Juni a mano desde la
-// bandeja. Estas dos ventanas no se cambian.
+// Por eso el seguimiento automático sale a las 20 h de silencio —adelantándose si esas
+// 20 h caen de madrugada, ver `momentoDeSeguir()`— y lo que ya pasó las 24 h no lo toca
+// el bot: se marca `visto` para que lo mande Juni a mano desde la bandeja. Ninguna de
+// las dos ventanas se cambia.
 
 const H = 60 * 60 * 1000;
 const VENTANA_SEGUIMIENTO = 20 * H;   // a las 20 h calladas, el bot escribe
 const VENTANA_META        = 24 * H;   // límite duro de Meta: pasado esto, ni lo intenta
 const MAX_POR_CORRIDA     = 50;
+
+// Nadie quiere un "seguís interesado?" a las 3 de la mañana. Si las 20 h caen de
+// madrugada, el mensaje se ADELANTA a las 23:00 del día anterior. Adelantar es lo único
+// que se puede hacer sin romper nada: mandarlo más tarde para esquivar la noche se
+// comería las 24 h de Meta, y pasada esa ventana el bot no puede escribir.
+const AR          = -3 * H;   // Argentina es UTC-3 fijo, sin horario de verano desde 2009
+const FIN_NOCHE   = 8;        // de 00:00 a 08:00 no se manda nada
+const HORA_ADELANTO = 23;     // se manda a las 23:00 del día anterior
+
+// Lo más que se puede adelantar: de las 23:00 a las 07:59 hay 9 h. O sea que en el peor
+// caso el mensaje sale a las 11 h de silencio en vez de a las 20 h, y por ahí tiene que
+// arrancar a mirar la query.
+const ADELANTO_MAX     = (24 - HORA_ADELANTO + FIN_NOCHE) * H;
+const VENTANA_MINIMA   = VENTANA_SEGUIMIENTO - ADELANTO_MAX;
+
+// La hora del reloj argentino para un instante dado.
+const horaAR = ms => new Date(ms + AR).getUTCHours();
+
+/**
+ * Cuándo mandarle el seguimiento a alguien cuyo último mensaje entró en `t`.
+ *
+ * Normalmente a las 20 h de silencio. Si ese momento cae entre las 00:00 y las 08:00 de
+ * Argentina, se adelanta a las 23:00 del día anterior, que es el último horario decente
+ * antes de la noche.
+ *
+ * Siempre devuelve un instante ANTERIOR o igual a las 20 h de silencio, nunca posterior:
+ * por eso el límite de 24 h de Meta no corre riesgo por más que se mueva la hora.
+ */
+export function momentoDeSeguir(t) {
+  const base = t + VENTANA_SEGUIMIENTO;
+  if (horaAR(base) >= FIN_NOCHE) return base;
+
+  // Los campos UTC de esta fecha son la hora de Argentina; se retrocede un día, se fija
+  // la hora y se vuelve a UTC real. setUTCDate(0) se encarga solo del cambio de mes.
+  const d = new Date(base + AR);
+  d.setUTCDate(d.getUTCDate() - 1);
+  d.setUTCHours(HORA_ADELANTO, 0, 0, 0);
+  return d.getTime() - AR;
+}
 
 // Lo que se le pone al doc cuando el bot no puede seguir la conversación y la tiene que
 // mirar Juni. `visto` y 7 salen de la tabla de prioridades de prompt-bot.md.
@@ -602,13 +642,18 @@ async function correrSeguimientos(env) {
 
     // Se pasó la ventana de Meta: el bot no le escribe, va derecho a la bandeja.
     // `seguimientoEnviado` se marca igual, para no volver a mirarlo cada hora.
-    const edad = ahora - Date.parse(doc.ultimoMensajeCliente);
-    if (edad >= VENTANA_META) {
+    const t = Date.parse(doc.ultimoMensajeCliente);
+    if (ahora - t >= VENTANA_META) {
       await patchDoc(env, idToken, name, { ...A_LA_BANDEJA, seguimientoEnviado: true });
       continue;
     }
 
-    // Entre las 20 y las 24 h: un solo mensaje, corto y sin apurar a nadie.
+    // Todavía no le toca. La query trae desde las 11 h de silencio porque el horario se
+    // puede adelantar, así que acá caen varios que hay que dejar para una corrida
+    // siguiente. No se los toca: siguen apareciendo cada hora hasta que les toque.
+    if (ahora < momentoDeSeguir(t)) continue;
+
+    // Un solo mensaje, corto y sin apurar a nadie.
     const texto = doc.ultimoProducto
       ? `che seguís interesado en el ${doc.ultimoProducto}?`
       : 'che seguís interesado?';
@@ -626,11 +671,15 @@ async function correrSeguimientos(env) {
 }
 
 /**
- * Las conversaciones que están para seguir: indecisas, sin seguimiento mandado, calladas
- * hace más de 20 h y que no estén ya esperando a Juni.
+ * Las conversaciones candidatas: indecisas, sin seguimiento mandado, calladas hace más
+ * de 11 h y que no estén ya esperando a Juni.
  *
- * Ese último filtro no es de más. Si la conversación ya está en la bandeja —pidió una
- * foto, por ejemplo— el cliente está esperando algo puntual, y un "seguís interesado?"
+ * Son candidatas, no un "para mandar ya": el horario exacto de cada una lo decide
+ * `momentoDeSeguir()`, que puede adelantarlo hasta 9 h para esquivar la madrugada. Por
+ * eso el corte de la query es el más temprano posible y el resto se filtra en el loop.
+ *
+ * El filtro por `necesitaAtencion` no es de más. Si la conversación ya está en la
+ * bandeja —pidió una foto, por ejemplo— el cliente está esperando algo puntual, y un "seguís interesado?"
  * automático encima queda pésimo. Además evita que el cron le pise el motivo y la
  * prioridad con `visto`/7 y le entierre un caso urgente al fondo de la cola.
  *
@@ -656,12 +705,16 @@ async function paraSeguir(env, idToken, ahora) {
               fieldFilter: {
                 field: { fieldPath: 'ultimoMensajeCliente' },
                 op: 'LESS_THAN',
-                value: { timestampValue: new Date(ahora - VENTANA_SEGUIMIENTO).toISOString() },
+                value: { timestampValue: new Date(ahora - VENTANA_MINIMA).toISOString() },
               },
             },
           ],
         },
       },
+      // Los más callados primero: son los que están más cerca de las 24 h de Meta. Si
+      // alguna vez hay más de 50, los que se caen del límite son los más nuevos, que
+      // todavía tienen horas de margen.
+      orderBy: [{ field: { fieldPath: 'ultimoMensajeCliente' }, direction: 'ASCENDING' }],
       limit: MAX_POR_CORRIDA,
     },
   };

@@ -1,4 +1,4 @@
-import { limpiarJson, normalizar, expandirCanal, aFields } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir } from './worker-ig.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
 let fallos = 0;
@@ -84,6 +84,46 @@ ok(f.cuando.timestampValue === '2026-08-21T15:00:00.000Z', 'Date como timestampV
 // null se manda: el PATCH pisa campo por campo, si se salteara quedaria vivo el valor viejo
 ok('vacio' in f && f.vacio.nullValue === null, 'null explicito se manda como nullValue');
 ok(!('nada' in f), 'undefined no se manda (deja el campo como esta)');
+
+console.log('\n── momentoDeSeguir ──');
+const H = 60 * 60 * 1000;
+// hora de reloj argentino -> instante. AR es UTC-3 fijo.
+const ar = iso => Date.parse(iso + '-03:00');
+// el t que hace que las 20 h de silencio caigan justo en esa hora argentina
+const desde = iso => ar(iso) - 20 * H;
+const enAR = ms => new Date(ms - 3 * H).toISOString().slice(0, 16).replace('T', ' ');
+
+// De dia se manda cuando toca, sin mover nada
+ok(momentoDeSeguir(desde('2026-08-21T15:00')) === ar('2026-08-21T15:00'), 'las 15 quedan a las 15');
+ok(momentoDeSeguir(desde('2026-08-21T08:00')) === ar('2026-08-21T08:00'), 'las 08 en punto ya es de dia');
+ok(momentoDeSeguir(desde('2026-08-21T23:30')) === ar('2026-08-21T23:30'), 'las 23:30 no se tocan');
+
+// De madrugada se adelanta a las 23 del dia anterior
+ok(momentoDeSeguir(desde('2026-08-21T03:00')) === ar('2026-08-20T23:00'), 'las 03 -> 23 del dia anterior', enAR(momentoDeSeguir(desde('2026-08-21T03:00'))));
+ok(momentoDeSeguir(desde('2026-08-21T00:00')) === ar('2026-08-20T23:00'), 'las 00:00 en punto ya es de noche');
+ok(momentoDeSeguir(desde('2026-08-21T07:59')) === ar('2026-08-20T23:00'), 'las 07:59 todavia es de noche');
+
+// Bordes de calendario: setUTCDate(0) tiene que resolver mes y año
+ok(momentoDeSeguir(desde('2026-09-01T02:00')) === ar('2026-08-31T23:00'), 'cambio de mes');
+ok(momentoDeSeguir(desde('2026-01-01T02:00')) === ar('2025-12-31T23:00'), 'cambio de año');
+ok(momentoDeSeguir(desde('2028-03-01T02:00')) === ar('2028-02-29T23:00'), 'año bisiesto');
+
+// Las dos invariantes que sostienen todo: nunca mas tarde de las 20 h, nunca cerca de
+// las 24 h de Meta. Se prueban sobre las 24 horas del dia, minuto 37 para no caer
+// siempre en punto.
+let tarde = 0, pasado = 0, adelantoMax = 0;
+for (let h = 0; h < 24; h++) {
+  const t = desde(`2026-08-21T${String(h).padStart(2, '0')}:37`);
+  const m = momentoDeSeguir(t);
+  if (m > t + 20 * H) tarde++;
+  if (m - t >= 24 * H) pasado++;
+  adelantoMax = Math.max(adelantoMax, (t + 20 * H - m) / H);
+  const hora = new Date(m - 3 * H).getUTCHours();
+  if (hora >= 0 && hora < 8) tarde++;   // no puede quedar ninguno en la madrugada
+}
+ok(tarde === 0, 'ninguno queda de madrugada ni se atrasa', String(tarde));
+ok(pasado === 0, 'ninguno pasa las 24 h de Meta', String(pasado));
+ok(adelantoMax <= 9, 'lo mas que se adelanta son 9 h', String(adelantoMax));
 
 console.log(fallos ? `\n${fallos} FALLA(S)\n` : '\nTodo verde\n');
 process.exit(fallos ? 1 : 0);

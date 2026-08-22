@@ -116,22 +116,34 @@ Corre **cada hora en punto** (`[triggers] crons` en `wrangler.toml`) y busca las
 conversaciones que quedaron calladas. Es el `scheduled` del `export default`, en el mismo
 `worker-ig.js` que atiende el webhook.
 
-Las dos ventanas son lo único que importa acá, y no se tocan:
+El mensaje sale a las **20 h de silencio**, salvo que ese momento caiga entre las 00:00
+y las 08:00 de Argentina: ahí se **adelanta** a las 23:00 del día anterior. Nadie quiere
+un *"seguís interesado?"* a las 3 de la mañana.
+
+Adelantar es lo único que se puede hacer. Correrlo para adelante, hasta la mañana
+siguiente, se comería el límite de 24 h de Meta, y pasada esa ventana el bot no puede
+escribir: solo se responde con el tag `HUMAN_AGENT`, que es exclusivo para humanos y
+usarlo desde un bot es de las formas más rápidas de perder el acceso a la API.
 
 | silencio | qué pasa |
 |---|---|
-| menos de 20 h | nada, todavía es pronto |
-| entre 20 y 24 h | el bot manda **un** mensaje corto: *"che seguís interesado en el {ultimoProducto}?"* |
+| las 20 h caen entre las 08:00 y las 23:59 AR | sale ahí, un mensaje corto: *"che seguís interesado en el {ultimoProducto}?"* |
+| las 20 h caen entre las 00:00 y las 07:59 AR | sale a las 23:00 del día anterior — entre 11 y 19 h de silencio, nunca más de 20 |
 | más de 24 h | el bot **no escribe**: la conversación va a la bandeja con motivo `visto` y prioridad 7 |
 
-El corte de 24 h es un límite duro de Meta: pasada esa ventana solo se puede responder
-con el tag `HUMAN_AGENT`, que es exclusivo para humanos. Usarlo desde un bot es de las
-formas más rápidas de perder el acceso a la API. Por eso lo que se pasa lo manda Juni a
-mano desde la bandeja.
+Como el horario solo se adelanta, nunca se atrasa, el límite de Meta no corre riesgo por
+más que se mueva: `momentoDeSeguir()` siempre devuelve un instante anterior o igual a las
+20 h de silencio, y eso está cubierto por tests (`test-parseo.mjs`), bordes de mes, de
+año y de año bisiesto incluidos. Argentina es UTC-3 fijo desde 2009; si algún día volviera
+el horario de verano, `AR` en `worker-ig.js` es la única constante a tocar.
 
 La query pide `estado == 'indeciso'`, `seguimientoEnviado == false`,
-`necesitaAtencion == false` y `ultimoMensajeCliente` de hace más de 20 h, hasta 50 por
-corrida. El filtro por `necesitaAtencion` no es de más: si la conversación ya está en la
+`necesitaAtencion == false` y `ultimoMensajeCliente` de hace más de **11 h** —el
+adelanto más grande posible—, ordenadas de la más callada a la menos callada y hasta 50
+por corrida. O sea que trae candidatas, no cosas para mandar ya: a cuáles les toca de
+verdad lo decide `momentoDeSeguir()` dentro del loop, y las demás se dejan para una
+corrida siguiente. El orden importa por el límite de 50: las que se caen son siempre las
+más nuevas, que todavía tienen horas de margen antes de las 24 h. El filtro por `necesitaAtencion` no es de más: si la conversación ya está en la
 bandeja el cliente está esperando algo puntual —una foto, por ejemplo— y un "seguís
 interesado?" automático encima queda pésimo; de paso evita que el cron le pise el motivo
 con `visto`/7 y le entierre un caso urgente al fondo de la cola.
