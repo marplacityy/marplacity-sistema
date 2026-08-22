@@ -236,6 +236,33 @@ async function usuarioDeIG(env, igUserId) {
   }
 }
 
+// ── El interruptor ────────────────────────────────────────────
+
+/**
+ * ¿El bot puede mandar mensajes por su cuenta?
+ *
+ * Apagado NO significa sordo: el Worker sigue leyendo, clasificando y guardando todo en
+ * `conversaciones`. Lo unico que deja de pasar es que salga un DM solo. Como los
+ * mensajes quedan sin mandar, la conversacion sube igual a la bandeja y se contesta a
+ * mano desde el sistema — asi no se pierde ningun cliente mientras el bot esta callado.
+ *
+ * Esto NO afecta a /responder: ahi el que manda es el dueño apretando "aprobar", no el
+ * bot. Un interruptor que tambien bloqueara eso dejaria a la bandeja sin salida.
+ *
+ * Si el doc no existe o no se puede leer, el bot queda ENCENDIDO. Es el estado inicial
+ * de cualquier instalacion, y `leerDoc` devuelve null en los dos casos, asi que no se
+ * pueden distinguir. El respaldo duro sigue siendo sacar IG_TOKEN del panel.
+ */
+async function botEncendido(env) {
+  const idToken = await tokenDelBot(env);
+  if (!idToken) return true;   // sin token no va a poder mandar nada igual
+
+  const cfg = await leerDoc(env, idToken, 'config/bot');
+  const encendido = !cfg || cfg.activo !== false;
+  if (!encendido) console.log('bot APAGADO desde el sistema: no se manda nada');
+  return encendido;
+}
+
 // ── Mandar los DM ─────────────────────────────────────────────
 
 // Pausa entre mensaje y mensaje: si salen los tres en el mismo instante se lee como
@@ -273,6 +300,10 @@ async function mandarDM(env, igUserId, texto) {
 async function mandarMensajes(env, igUserId, mensajes) {
   if (!mensajes.length) return 0;
   if (!env.IG_TOKEN) { console.log('sin IG_TOKEN: no se manda nada (modo lee y sugiere)'); return 0; }
+
+  // El interruptor se mira aca y no antes: asi vale para el webhook y para el cron, y
+  // no hay forma de agregar un camino de envio que se lo saltee sin darse cuenta.
+  if (!await botEncendido(env)) return 0;
 
   let enviados = 0;
   for (const texto of mensajes) {
@@ -740,6 +771,10 @@ const A_LA_BANDEJA = { necesitaAtencion: true, motivo: 'visto', prioridad: 7 };
 async function correrSeguimientos(env) {
   const idToken = await tokenDelBot(env);
   if (!idToken) { console.log('cron: sin token, no corre'); return; }
+
+  // Apagado, el cron no toca nada: ni manda seguimientos ni marca `visto`. Las
+  // conversaciones quedan como estan y se retoman cuando se vuelve a encender.
+  if (!await botEncendido(env)) { console.log('cron: bot apagado, no corre'); return; }
 
   const ahora = Date.now();
   const candidatos = await paraSeguir(env, idToken, ahora);

@@ -1135,7 +1135,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-B</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2454,6 +2454,7 @@
         <h1>Bandeja del bot</h1>
         <p>Las conversaciones de Instagram que el bot no puede cerrar solo. Lo más urgente arriba y, dentro de cada nivel, la que está esperando hace más tiempo. <b>Nada se manda sin que lo apruebes.</b></p>
       </div>
+      <div id="bd-switch"></div>
       <div id="bd-metrics" class="metrics"></div>
       <div id="bd-list"></div>
     </div>
@@ -2798,6 +2799,7 @@ const pagosFijosCol = collection(db, 'pagos_fijos');
 const amortsCol = collection(db, 'amorts');
 const listasCol = collection(db, 'listas_precios');
 const convsCol = collection(db, 'conversaciones');   // DMs de Instagram, un doc por cliente
+const botDoc = doc(db, 'config', 'bot');             // el interruptor del bot de IG
 let cfgDoc = null; // se setea al loguear: doc(db,'config',uid)
 let conocDoc = null; // idem: doc(db,'conocimiento',uid)
 
@@ -2822,6 +2824,7 @@ let preciosRepItems = [];
 let listasItems = [];        // listas_precios: una lista de precios al público por doc
 let conoc = {};              // conocimiento/{uid}: datos del local para el bot de IG
 let convsItems = [];         // conversaciones que necesitan atención (la bandeja del bot)
+let botActivo = true;        // config/bot: si está en false el bot no manda nada solo
 let icats = ['Accesorios','Repuestos','Fundas','Vidrios','Cargadores','Cables','Insumos','Otros'];
 let repTab = 'activas';
 let pagosFijosItems = [];
@@ -2945,6 +2948,12 @@ async function init() {
     onSnapshot(query(convsCol, where('userId','==',uid), where('necesitaAtencion','==',true)), snap => {
       const _b = applySnap('bandeja', snap);
       if(_b) convsItems = _b;
+      if(currentPage==='bandeja') deb('bd', renderBandeja);
+      setSyncDot('ok');
+    }, snapErr);
+    // El interruptor del bot. Sin doc = encendido, que es el estado inicial.
+    onSnapshot(botDoc, snap => {
+      botActivo = snap.exists() ? snap.data().activo !== false : true;
       if(currentPage==='bandeja') deb('bd', renderBandeja);
       setSyncDot('ok');
     }, snapErr);
@@ -10344,7 +10353,44 @@ function haceCuanto(ms){
 const bdBorradores = {};
 window.bdBorrador = function(id, txt){ bdBorradores[id] = txt; };
 
+// El interruptor. Apagado, el bot deja de mandar mensajes solo —respuestas y
+// seguimientos del cron— pero sigue leyendo, clasificando y guardando: todo lo que
+// entra cae acá, en la bandeja, para que lo contestes vos. No se pierde ningún cliente.
+//
+// Lo que NO apaga es el botón "Aprobar y mandar": ahí el que manda sos vos, no el bot.
+function renderSwitchBot(){
+  const on = botActivo;
+  document.getElementById('bd-switch').innerHTML = `
+    <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;${on?'':'border-color:#F09595;background:#FDECEC;'}">
+      <div style="min-width:0;">
+        <div style="font-weight:600;font-size:15px;">${on?'🟢 El bot está contestando solo':'🔴 El bot está apagado'}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:3px;">${on
+          ? 'Responde los DM y manda los seguimientos. Lo que no puede resolver cae acá abajo.'
+          : 'No manda ningún mensaje por su cuenta, pero sigue anotando todo lo que entra en esta bandeja para que lo contestes vos. Tus respuestas aprobadas desde acá salen igual.'}</div>
+      </div>
+      <button class="${on?'btn-pagar-outline':'btn-save'}" style="${on?'color:var(--neg);':'width:auto;padding:10px 18px;'}white-space:nowrap;" onclick="toggleBot()">${on?'⏸ Apagar el bot':'▶ Encender el bot'}</button>
+    </div>`;
+}
+
+window.toggleBot = async function(){
+  const apagando = botActivo;
+  if(apagando && !confirm('¿Apagar el bot?\n\nDeja de contestar los DM y de mandar seguimientos. Sigue guardando todo en la bandeja para que contestes vos.')) return;
+  setSyncDot('syncing');
+  try{
+    await setDoc(botDoc, withUser({
+      activo: !apagando,
+      cambiadoPor: (currentUser && currentUser.email) || uid,
+      cambiadoEn: serverTimestamp(),
+    }), {merge:true});
+    showToast(apagando ? 'Bot apagado — sigue anotando en la bandeja' : 'Bot encendido');
+  }catch(e){
+    showToast('No se pudo cambiar: '+e.message, true);
+    setSyncDot('error');
+  }
+};
+
 function renderBandeja(){
+  renderSwitchBot();
   const ahora = Date.now();
   const filas = convsItems.slice().sort((a,b)=>
     (a.prioridad ?? 99) - (b.prioridad ?? 99) ||

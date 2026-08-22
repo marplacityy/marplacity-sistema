@@ -49,6 +49,17 @@ service cloud.firestore {
       allow update: if owns() && writesAsSelf();
     }
 
+    // El interruptor del bot. Un solo doc, con un solo campo que importa: `activo`.
+    // Vive en Firestore y no en una variable de Cloudflare a proposito: apagarlo tiene
+    // que ser un click desde el sistema, sin deploys, en el momento en que el bot esta
+    // diciendo algo que no corresponde.
+    // El dueño lo escribe; el bot solo lo lee, en cada mensaje y en cada corrida del cron.
+    match /config/bot {
+      allow read:   if esBot() || owns();
+      allow create: if writesAsSelf();
+      allow update: if owns() && writesAsSelf();
+    }
+
     // Base de conocimiento del bot: un doc por uid con los datos del local
     // (horarios, direccion, medios de pago, garantia) en texto libre.
     // El dueño escribe; el bot solo lee.
