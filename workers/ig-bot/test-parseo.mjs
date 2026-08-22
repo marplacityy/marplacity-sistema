@@ -1,4 +1,4 @@
-import { limpiarJson, normalizar, expandirCanal } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields } from './worker-ig.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
 let fallos = 0;
@@ -62,6 +62,28 @@ ok(vacio.necesitaAtencion === true && vacio.motivo === 'no_supe_responder' && va
 
 const prioStr = normalizar({ categoria: 'cerrado', necesita_atencion: true, motivo: 'cerrado', prioridad: '2', mensajes: ['x'] }, CANAL);
 ok(prioStr.prioridad === 2, 'prioridad como string se convierte', String(prioStr.prioridad));
+
+console.log('\n── normalizar: producto ──');
+const conProd = normalizar({ categoria: 'indeciso', necesita_atencion: false, producto: '  iPhone 15  ', mensajes: ['x'] }, CANAL);
+ok(conProd.producto === 'iPhone 15', 'lo recorta de los costados', conProd.producto);
+ok(normalizar({ categoria: 'curioso', necesita_atencion: false, mensajes: ['x'] }, CANAL).producto === null, 'sin producto queda null');
+ok(normalizar({ categoria: 'curioso', necesita_atencion: false, producto: 47, mensajes: ['x'] }, CANAL).producto === null, 'un no-string queda null');
+ok(normalizar({ categoria: 'curioso', necesita_atencion: false, producto: 'a'.repeat(200), mensajes: ['x'] }, CANAL).producto.length === 60, 'corta a 60');
+
+console.log('\n── aFields ──');
+const f = aFields({
+  texto: 'hola', flag: true, prioridad: 8, plata: 1.5, lista: ['a', 'b'],
+  cuando: new Date('2026-08-21T15:00:00.000Z'), vacio: null, nada: undefined,
+});
+ok(f.texto.stringValue === 'hola', 'string');
+ok(f.flag.booleanValue === true, 'bool');
+ok(f.prioridad.integerValue === '8', 'entero como integerValue', JSON.stringify(f.prioridad));
+ok(f.plata.doubleValue === 1.5, 'decimal como doubleValue');
+ok(f.lista.arrayValue.values.length === 2, 'array');
+ok(f.cuando.timestampValue === '2026-08-21T15:00:00.000Z', 'Date como timestampValue', JSON.stringify(f.cuando));
+// null se manda: el PATCH pisa campo por campo, si se salteara quedaria vivo el valor viejo
+ok('vacio' in f && f.vacio.nullValue === null, 'null explicito se manda como nullValue');
+ok(!('nada' in f), 'undefined no se manda (deja el campo como esta)');
 
 console.log(fallos ? `\n${fallos} FALLA(S)\n` : '\nTodo verde\n');
 process.exit(fallos ? 1 : 0);

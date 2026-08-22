@@ -215,6 +215,7 @@ Devolvé SOLO un JSON, sin backticks, sin texto antes ni después:
   "motivo": "pidio_foto",
   "prioridad": 1,
   "resumen": "pregunta por iphone 14, le pase 15 a 500 usd, pidio foto",
+  "producto": "iphone 15",
   "mensajes": ["hola tengo 15 en precio", "500 usd", "ahora te mando la foto"]
 }
 ```
@@ -222,6 +223,11 @@ Devolvé SOLO un JSON, sin backticks, sin texto antes ni después:
 - `mensajes` es un array. Cada elemento es UN mensaje corto de Instagram. Nunca un
   párrafo largo partido en dos.
 - Máximo 4 mensajes.
+- `producto` es el equipo del que están hablando, escrito como lo diría un cliente:
+  "iphone 15", "iphone 13 pro max 256". Si termina hablando de otro modelo que el que
+  preguntó al principio, poné el último. Si el mensaje no es sobre un equipo puntual,
+  va en null. Sirve para el seguimiento: si el cliente queda en silencio, se le escribe
+  por ese equipo.
 - Si `necesita_atencion` es false, `motivo` va en null y `prioridad` en 99.
 - `confianza` en "baja" si dudaste entre dos categorías. Las de confianza baja también
   suben a la bandeja.

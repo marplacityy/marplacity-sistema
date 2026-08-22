@@ -54,6 +54,45 @@ Estos archivos son la copia versionada, para tener historial de los cambios. Si 
 el Worker desde el panel, traé el cambio también acá; si editás acá, no tiene efecto
 hasta que lo despliegues.
 
+## El doc de `conversaciones`
+
+**Un doc por cliente, no por mensaje**: el id del doc es el id de Instagram del cliente.
+El Worker guarda con un `PATCH` + `updateMask`, así que crea el doc con el primer DM y
+después pisa solo los campos de la máscara. Un doc por mensaje no servía: el cron
+mandaría un seguimiento por cada DM que escribió el cliente y la bandeja mostraría a la
+misma persona repetida en cinco filas.
+
+| campo | tipo | qué es |
+|---|---|---|
+| `igUserId` | string | id de Instagram del cliente (y el id del doc) |
+| `ultimoMensaje` | string | el texto del último DM que entró |
+| `ultimoMensajeCliente` | timestamp | cuándo entró. Es el campo que filtra el cron |
+| `fecha` | string ISO | el mismo instante, como lo venían guardando los docs |
+| `estado` | string | la categoría del prompt (`indeciso`, `cerrado`, `curioso`…) |
+| `confianza` | string | `alta` / `baja`. Las `baja` suben a la bandeja |
+| `resumen` | string | una línea de qué se habló, para la bandeja |
+| `ultimoProducto` | string | el equipo que consultó, para el seguimiento |
+| `mensajes` | array | lo que el bot contestó, un elemento por DM |
+| `sugerencia` | string | lo mismo en texto plano |
+| `respondido` | bool | si salió al menos un DM |
+| `necesitaAtencion` | bool | si tiene que mirarlo Juni |
+| `motivo` | string | por qué (ver la tabla de prioridades en `prompt-bot.md`) |
+| `prioridad` | int | 1 a 8, o 99 si no necesita atención |
+| `seguimientoEnviado` | bool | lo marca el cron cuando manda el seguimiento |
+| `revisado` | bool | |
+| `adjuntos`, `urlsAdjuntos`, `tieneImagen`, `tieneAudio` | | qué mandó el cliente |
+| `userId` | string | el dueño, para las reglas de Firestore |
+
+Dos detalles del `PATCH` que importan:
+
+- **`ultimoProducto` solo se manda si el modelo nombró un equipo.** Si el DM no habla de
+  ninguno, el campo no entra en la máscara y el doc conserva el de la consulta anterior.
+- **Un `null` se manda como `null`, no se saltea.** Si se salteara, una conversación ya
+  resuelta seguiría arrastrando el `motivo` viejo y no se iría nunca de la bandeja.
+
+Si agregás un campo, sumalo también a la lista de `soloCamposDelBot()` en
+`firestore.rules`: el bot puede actualizar el doc, pero solo esos campos.
+
 ## Mensajes fijos (`config/mensajes`)
 
 La invitación al canal de difusión se manda **textual**, sin pasar por el modelo: está

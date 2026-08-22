@@ -122,6 +122,8 @@ async function procesarMensaje(ev, env) {
   if (m.is_echo)  { console.log('descarto: es eco de un mensaje mio'); return; }
   console.log('procesando mensaje de', senderId);
 
+  const fechaMensaje = new Date(ev.timestamp || Date.now());
+
   // Tipo de contenido
   const adjuntos = (m.attachments || []).map(a => a.type);   // image, audio, video, share...
   const texto = m.text || '';
@@ -154,7 +156,13 @@ async function procesarMensaje(ev, env) {
     tieneImagen: adjuntos.includes('image'),
     tieneAudio: adjuntos.includes('audio'),
     urlsAdjuntos: (m.attachments || []).map(a => a.payload?.url).filter(Boolean),
-    fecha: new Date(ev.timestamp || Date.now()).toISOString(),
+    fecha: fechaMensaje.toISOString(),
+    // El mismo instante que `fecha`, pero como timestamp de verdad: es el campo por el
+    // que el cron filtra por rango, y un string ISO no sirve para eso. `fecha` se
+    // mantiene porque es lo que ya venían guardando los docs.
+    ultimoMensajeCliente: fechaMensaje,
+    // El cliente escribió: si vuelve a quedar en silencio, merece un seguimiento nuevo.
+    seguimientoEnviado: false,
     estado: ia.categoria || clasificarBasico(texto, adjuntos),
     confianza: ia.confianza,
     necesitaAtencion: ia.necesitaAtencion || quedoSinMandar,
@@ -163,6 +171,11 @@ async function procesarMensaje(ev, env) {
     revisado: false,
     userId: env.OWNER_UID,
   };
+
+  // Solo va si el modelo nombró un equipo. Si este mensaje no habla de ninguno el campo
+  // no entra en la máscara del PATCH, así que el doc conserva el de la consulta
+  // anterior en vez de quedarse sin nada para el seguimiento.
+  if (ia.producto) doc.ultimoProducto = ia.producto;
 
   await guardarEnFirestore(doc, env);
 }
@@ -353,6 +366,7 @@ const SIN_RESPUESTA = {
   motivo: 'no_supe_responder',
   prioridad: 8,
   resumen: null,
+  producto: null,
   mensajes: [],
 };
 
@@ -470,6 +484,9 @@ export function normalizar(out, textoCanal) {
     motivo,
     prioridad,
     resumen: typeof out.resumen === 'string' ? out.resumen.trim() || null : null,
+    // El equipo del que se habló. Lo usa el cron: el seguimiento se escribe por ese
+    // modelo. Se corta por las dudas, que va a parar a un doc y a la bandeja.
+    producto: typeof out.producto === 'string' ? out.producto.trim().slice(0, 60) || null : null,
     mensajes,
   };
 }
@@ -543,26 +560,52 @@ async function tokenDelBot(env) {
 }
 
 // ── Guardar en Firestore (REST API) ───────────────────────────
-async function guardarEnFirestore(doc, env) {
-  const proj = env.FIREBASE_PROJECT;
-  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents/conversaciones?key=${env.FIREBASE_KEY}`;
 
-  const idToken = await tokenDelBot(env);
-  if (!idToken) { console.log('sin token: no se guarda'); return; }
-
+/**
+ * Traduce el doc a la representación de campos de la REST API de Firestore.
+ *
+ * Un `null` explícito se manda como nullValue en vez de saltearse: el PATCH pisa campo
+ * por campo, así que saltearlo dejaría vivo el valor anterior — una conversación que ya
+ * se resolvió seguiría arrastrando el `motivo` viejo y no se iría nunca de la bandeja.
+ * Para dejar un campo como está hay que no ponerlo en el doc (ver `ultimoProducto`).
+ */
+export function aFields(doc) {
   const fields = {};
   for (const [k, v] of Object.entries(doc)) {
-    if (v === null || v === undefined) continue;
-    if (typeof v === 'string')       fields[k] = { stringValue: v };
+    if (v === undefined) continue;
+    if (v === null)                  fields[k] = { nullValue: null };
+    else if (v instanceof Date)      fields[k] = { timestampValue: v.toISOString() };
+    else if (typeof v === 'string')  fields[k] = { stringValue: v };
     else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
     // prioridad va como entero: el cron patchea integerValue y la bandeja ordena por
     // este campo, así que conviene que todos los docs lo guarden del mismo tipo.
     else if (typeof v === 'number')  fields[k] = Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
     else if (Array.isArray(v))       fields[k] = { arrayValue: { values: v.map(x => ({ stringValue: String(x) })) } };
   }
+  return fields;
+}
+
+/**
+ * Un doc por conversación, con el id de Instagram del cliente como id del doc.
+ *
+ * Es un PATCH con updateMask: crea el doc la primera vez y después pisa solo los campos
+ * de la máscara, sin tocar lo que le haya agregado la bandeja (quién aprobó y cuándo).
+ *
+ * Un doc por mensaje no servía: el cron mandaría un seguimiento por cada DM que escribió
+ * el cliente, y la bandeja mostraría a la misma persona repetida en cinco filas.
+ */
+async function guardarEnFirestore(doc, env) {
+  const proj = env.FIREBASE_PROJECT;
+
+  const idToken = await tokenDelBot(env);
+  if (!idToken) { console.log('sin token: no se guarda'); return; }
+
+  const fields = aFields(doc);
+  const mascara = Object.keys(fields).map(k => `updateMask.fieldPaths=${k}`).join('&');
+  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents/conversaciones/${encodeURIComponent(doc.igUserId)}?key=${env.FIREBASE_KEY}&${mascara}`;
 
   const r = await fetch(url, {
-    method: 'POST',
+    method: 'PATCH',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${idToken}`,
