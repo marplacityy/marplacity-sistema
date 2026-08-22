@@ -47,6 +47,15 @@
         { "fieldPath": "userId", "order": "ASCENDING" },
         { "fieldPath": "fecha", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "conversaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "seguimientoEnviado", "order": "ASCENDING" },
+        { "fieldPath": "ultimoMensajeCliente", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

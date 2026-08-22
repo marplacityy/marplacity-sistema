@@ -93,6 +93,26 @@ Dos detalles del `PATCH` que importan:
 Si agregás un campo, sumalo también a la lista de `soloCamposDelBot()` en
 `firestore.rules`: el bot puede actualizar el doc, pero solo esos campos.
 
+### El índice del cron
+
+La query del seguimiento —`estado` + `seguimientoEnviado` + un rango sobre
+`ultimoMensajeCliente`— no la resuelve Firestore sola: necesita un índice compuesto. Está
+versionado en `firestore.indexes.json`, en la raíz del repo, para no depender de crearlo
+a mano desde la consola:
+
+```bash
+firebase deploy --only firestore:indexes
+```
+
+El orden de los campos no es decorativo: primero los dos de igualdad, último el del
+rango. Si la query cambia —se le agrega un filtro, se ordena al revés, se filtra también
+por `userId`— el índice deja de servirle y hay que actualizarlo acá también. Cuando falta,
+el error de Firestore trae un link para crear el que hace falta; copiá los campos de ahí
+al archivo en vez de crearlo desde la consola, o el repo queda desincronizado.
+
+Tarda un rato en construirse. Si el cron corre mientras tanto, la query falla con
+`FAILED_PRECONDITION` hasta que el índice queda listo.
+
 ## Mensajes fijos (`config/mensajes`)
 
 La invitación al canal de difusión se manda **textual**, sin pasar por el modelo: está
