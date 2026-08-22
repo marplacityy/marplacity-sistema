@@ -224,7 +224,12 @@ Devolvé SOLO un JSON, sin backticks, sin texto antes ni después:
 // estático de arriba queda byte a byte igual entre llamadas, que es lo que necesita
 // el caché de prompt de la API.
 
-function bloqueConocimiento(c = {}) {
+function bloqueConocimiento(c) {
+  // OJO: `c = {}` como default NO alcanza. leerDoc() devuelve null cuando el doc no
+  // existe, y un default de parametro solo se aplica con undefined: con null entra tal
+  // cual y el primer c.direccion tira TypeError. El bot se caia en CADA DM mientras el
+  // dueño no hubiera cargado la base de conocimiento, que es justo el estado inicial.
+  c = c || {};
   const l = [];
   l.push('## BASE DE CONOCIMIENTO');
   l.push('');

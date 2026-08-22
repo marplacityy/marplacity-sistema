@@ -361,7 +361,7 @@ async function stockDisponible(env, idToken) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
       body: JSON.stringify(q),
     });
-    if (!r.ok) { console.log('stock no disponible', r.status); return []; }
+    if (!r.ok) { console.log('stock no disponible', r.status, (await r.text()).slice(0, 300)); return []; }
 
     const d = await r.json();
     return (d || [])
@@ -447,7 +447,9 @@ async function ultimaLista(env, idToken, origen) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
       body: JSON.stringify(q),
     });
-    if (!r.ok) { console.log('lista', origen, 'no disponible', r.status); return null; }
+    // Firestore manda el link para crear el indice que falta adentro del cuerpo, asi
+    // que sin el texto un 400 no se distingue de una query mal armada.
+    if (!r.ok) { console.log('lista', origen, 'no disponible', r.status, (await r.text()).slice(0, 300)); return null; }
     const d = await r.json();
     const doc = (d || []).find(x => x.document);
     return doc ? campos(doc.document.fields) : null;

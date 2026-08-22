@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir } from './worker-ig.js';
+import { construirSystem } from './prompt.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
 let fallos = 0;
@@ -125,6 +126,24 @@ for (let h = 0; h < 24; h++) {
 ok(tarde === 0, 'ninguno queda de madrugada ni se atrasa', String(tarde));
 ok(pasado === 0, 'ninguno pasa las 24 h de Meta', String(pasado));
 ok(adelantoMax <= 9, 'lo mas que se adelanta son 9 h', String(adelantoMax));
+
+console.log('\n── construirSystem con los docs vacios ──');
+// Firestore devuelve null —no undefined— cuando el doc no existe, y un default de
+// parametro no atrapa null. Con la base de conocimiento sin cargar, que es el estado
+// inicial de cualquier instalacion, el bot se caia en cada DM.
+{
+  const vacio = { conocimiento: null, stock: [], listaMdp: null, listaCaba: null };
+  let sistema = null, exploto = null;
+  try { sistema = construirSystem(vacio); } catch (e) { exploto = e.message; }
+  ok(!exploto, 'con conocimiento en null no rompe', exploto);
+  ok(sistema && sistema.includes('Avellaneda 1239'), 'cae a la direccion por defecto');
+  ok(sistema && sistema.includes('NO SABÉS'), 'lo que no esta cargado se declara como no sabido');
+  ok(sistema && sistema.includes('Sin datos'), 'las listas vacias no prometen precios');
+
+  let sinNada = null;
+  try { sinNada = construirSystem(); } catch (e) { sinNada = null; }
+  ok(!!sinNada, 'tambien se banca que no le pasen nada');
+}
 
 console.log('\n── campos del doc vs. firestore.rules ──');
 // El bot solo puede actualizar los campos que lista soloCamposDelBot() en las reglas, y
