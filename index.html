@@ -2824,7 +2824,7 @@ let preciosRepItems = [];
 let listasItems = [];        // listas_precios: una lista de precios al público por doc
 let conoc = {};              // conocimiento/{uid}: datos del local para el bot de IG
 let convsItems = [];         // conversaciones que necesitan atención (la bandeja del bot)
-let botActivo = true;        // config/bot: si está en false el bot no manda nada solo
+let botCfg = {activo:true, modo:'todos', cuentasPrueba:[]};   // config/bot: el interruptor
 let icats = ['Accesorios','Repuestos','Fundas','Vidrios','Cargadores','Cables','Insumos','Otros'];
 let repTab = 'activas';
 let pagosFijosItems = [];
@@ -2953,7 +2953,12 @@ async function init() {
     }, snapErr);
     // El interruptor del bot. Sin doc = encendido, que es el estado inicial.
     onSnapshot(botDoc, snap => {
-      botActivo = snap.exists() ? snap.data().activo !== false : true;
+      const d = snap.exists() ? snap.data() : {};
+      botCfg = {
+        activo: d.activo !== false,
+        modo: d.modo === 'prueba' ? 'prueba' : 'todos',
+        cuentasPrueba: Array.isArray(d.cuentasPrueba) ? d.cuentasPrueba.map(String) : [],
+      };
       if(currentPage==='bandeja') deb('bd', renderBandeja);
       setSyncDot('ok');
     }, snapErr);
@@ -10353,41 +10358,92 @@ function haceCuanto(ms){
 const bdBorradores = {};
 window.bdBorrador = function(id, txt){ bdBorradores[id] = txt; };
 
-// El interruptor. Apagado, el bot deja de mandar mensajes solo —respuestas y
-// seguimientos del cron— pero sigue leyendo, clasificando y guardando: todo lo que
-// entra cae acá, en la bandeja, para que lo contestes vos. No se pierde ningún cliente.
+// El interruptor, con tres posiciones:
 //
-// Lo que NO apaga es el botón "Aprobar y mandar": ahí el que manda sos vos, no el bot.
+//   apagado  no manda nada solo
+//   prueba   solo le contesta a las cuentas que autorizaste — para afinarlo tranquilo
+//   todos    le contesta a cualquiera
+//
+// En las tres sigue leyendo, clasificando y guardando: lo que no contesta cae acá, en
+// la bandeja, para que lo contestes vos. Nunca se pierde un cliente.
+//
+// Lo que NUNCA se apaga es el botón "Aprobar y mandar": ahí el que manda sos vos.
+const MODOS_BOT = {
+  apagado: { emoji:'🔴', titulo:'El bot está apagado',
+             detalle:'No manda ningún mensaje por su cuenta. Sigue anotando todo acá abajo para que lo contestes vos.' },
+  prueba:  { emoji:'🟡', titulo:'El bot está en modo prueba',
+             detalle:'Solo le contesta a las cuentas autorizadas. Al resto lo anota acá abajo sin responderle, y el seguimiento automático queda frenado.' },
+  todos:   { emoji:'🟢', titulo:'El bot le contesta a todos',
+             detalle:'Responde los DM y manda los seguimientos. Lo que no puede resolver cae acá abajo.' },
+};
+
+const modoBotActual = () => !botCfg.activo ? 'apagado' : botCfg.modo === 'prueba' ? 'prueba' : 'todos';
+
 function renderSwitchBot(){
-  const on = botActivo;
+  const modo = modoBotActual();
+  const m = MODOS_BOT[modo];
+  const borde = modo==='todos' ? '' : modo==='prueba' ? 'border-color:#FAC775;background:#FEF9E7;' : 'border-color:#F09595;background:#FDECEC;';
+
+  const btn = (id, txt) => `<button class="${modo===id?'btn-save':'btn-pagar-outline'}" style="${modo===id?'width:auto;padding:9px 16px;':''}white-space:nowrap;" ${modo===id?'disabled':`onclick="setModoBot('${id}')"`}>${txt}</button>`;
+
+  // Las cuentas se agregan desde una conversación de la bandeja, que es donde sabemos
+  // el id de Instagram: no es algo que se pueda tipear de memoria.
+  const cuentas = botCfg.cuentasPrueba.length
+    ? botCfg.cuentasPrueba.map(id=>{
+        const c = convsItems.find(x=>String(x.igUserId)===id);
+        return `<span class="consig-tipo tipo-propio" style="margin:2px 4px 2px 0;">${esc(c && c.igUsuario ? '@'+c.igUsuario : 'IG '+id)} <a onclick="quitarCuentaPrueba('${escJs(id)}')" style="cursor:pointer;font-weight:700;">✕</a></span>`;
+      }).join('')
+    : '<span style="font-size:12px;color:var(--neg);">Ninguna cuenta autorizada todavía — el bot no le va a contestar a nadie. Agregá la tuya con el botón de una conversación de abajo.</span>';
+
   document.getElementById('bd-switch').innerHTML = `
-    <div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;${on?'':'border-color:#F09595;background:#FDECEC;'}">
-      <div style="min-width:0;">
-        <div style="font-weight:600;font-size:15px;">${on?'🟢 El bot está contestando solo':'🔴 El bot está apagado'}</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:3px;">${on
-          ? 'Responde los DM y manda los seguimientos. Lo que no puede resolver cae acá abajo.'
-          : 'No manda ningún mensaje por su cuenta, pero sigue anotando todo lo que entra en esta bandeja para que lo contestes vos. Tus respuestas aprobadas desde acá salen igual.'}</div>
+    <div class="card" style="margin-bottom:12px;${borde}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;">
+        <div style="min-width:0;">
+          <div style="font-weight:600;font-size:15px;">${m.emoji} ${m.titulo}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:3px;">${m.detalle}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${btn('apagado','⏸ Apagado')}${btn('prueba','🧪 Prueba')}${btn('todos','▶ Todos')}
+        </div>
       </div>
-      <button class="${on?'btn-pagar-outline':'btn-save'}" style="${on?'color:var(--neg);':'width:auto;padding:10px 18px;'}white-space:nowrap;" onclick="toggleBot()">${on?'⏸ Apagar el bot':'▶ Encender el bot'}</button>
+      ${modo==='prueba'?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+        <div style="font-size:12px;color:var(--text3);margin-bottom:5px;">Le contesta solo a:</div>${cuentas}
+      </div>`:''}
     </div>`;
 }
 
-window.toggleBot = async function(){
-  const apagando = botActivo;
-  if(apagando && !confirm('¿Apagar el bot?\n\nDeja de contestar los DM y de mandar seguimientos. Sigue guardando todo en la bandeja para que contestes vos.')) return;
+window.setModoBot = async function(modo){
+  if(modo==='todos' && !confirm('¿Poner el bot a contestarle a TODOS?\n\nDesde ahora responde solo cualquier DM que entre y vuelve a mandar los seguimientos automáticos.')) return;
+  await guardarCfgBot({ activo: modo!=='apagado', modo: modo==='prueba' ? 'prueba' : 'todos' },
+                      modo==='apagado' ? 'Bot apagado — sigue anotando en la bandeja'
+                    : modo==='prueba'  ? 'Modo prueba: solo contesta a las cuentas autorizadas'
+                                       : 'El bot le contesta a todos');
+};
+
+window.agregarCuentaPrueba = async function(igUserId){
+  const ya = botCfg.cuentasPrueba;
+  if(ya.includes(String(igUserId))){ showToast('Esa cuenta ya estaba autorizada'); return; }
+  await guardarCfgBot({ cuentasPrueba: [...ya, String(igUserId)] }, 'Cuenta autorizada para las pruebas');
+};
+
+window.quitarCuentaPrueba = async function(igUserId){
+  await guardarCfgBot({ cuentasPrueba: botCfg.cuentasPrueba.filter(x=>x!==String(igUserId)) }, 'Cuenta sacada de las pruebas');
+};
+
+async function guardarCfgBot(campos, aviso){
   setSyncDot('syncing');
   try{
     await setDoc(botDoc, withUser({
-      activo: !apagando,
+      ...campos,
       cambiadoPor: (currentUser && currentUser.email) || uid,
       cambiadoEn: serverTimestamp(),
     }), {merge:true});
-    showToast(apagando ? 'Bot apagado — sigue anotando en la bandeja' : 'Bot encendido');
+    showToast(aviso);
   }catch(e){
     showToast('No se pudo cambiar: '+e.message, true);
     setSyncDot('error');
   }
-};
+}
 
 function renderBandeja(){
   renderSwitchBot();
@@ -10398,7 +10454,7 @@ function renderBandeja(){
 
   const vencidas = filas.filter(x => ahora - msDe(x.ultimoMensajeCliente) >= META_24H).length;
   document.getElementById('bd-metrics').innerHTML = `
-    <div class="metric"><div class="m-label">Esperando respuesta</div><div class="m-val">${filas.length}</div></div>
+    <div class="metric"><div class="m-label">Esperando respuesta</div><div class="m-val">${filas.length}</div>${filas.length?`<div class="m-sub" style="margin-top:6px;"><button class="btn-pagar-outline" onclick="vaciarBandeja()">✓ Ya contesté todo — vaciar</button></div>`:''}</div>
     <div class="metric"><div class="m-label">Fuera de las 24 h</div><div class="m-val" style="${vencidas?'color:var(--neg);':''}">${vencidas}</div><div class="m-sub">esas hay que contestarlas desde Instagram</div></div>
   `;
 
@@ -10427,10 +10483,47 @@ function renderBandeja(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${vencida?'':`<button class="btn-save" id="bd-btn-${x.id}" style="width:auto;padding:10px 18px;" onclick="aprobarBandeja('${escJs(x.id)}')">✓ Aprobar y mandar</button>`}
         <button class="btn-pagar-outline" onclick="resolverBandeja('${escJs(x.id)}')">Ya le contesté yo</button>
+        ${modoBotActual()==='prueba' && x.igUserId && !botCfg.cuentasPrueba.includes(String(x.igUserId))
+          ? `<button class="btn-pagar-outline" onclick="agregarCuentaPrueba('${escJs(x.igUserId)}')">🧪 Probar con esta cuenta</button>` : ''}
       </div>
     </div>`;
   }).join('') || '<div class="empty">No hay nada esperando: el bot viene contestando todo solo. 🎉</div>';
 }
+
+// Vaciar la bandeja de una. NO borra los documentos: los marca como contestados, igual
+// que el botón de cada fila. Borrarlos perdería el historial de la conversación, el
+// usuario de Instagram y el producto que consultó — y el bot los necesita para la
+// próxima vez que esa persona escriba.
+window.vaciarBandeja = async function(){
+  const filas = convsItems.slice();
+  if(!filas.length) return;
+  if(!confirm(`¿Marcar como contestadas las ${filas.length} conversaciones de la bandeja?\n\nNo se borra nada: las charlas quedan guardadas, solo dejan de pedirte atención. Usalo cuando ya las respondiste vos.`)) return;
+
+  setSyncDot('syncing');
+  try{
+    // En lotes de 400, como el resto de las operaciones masivas del sistema.
+    for(let i=0; i<filas.length; i+=400){
+      const batch = writeBatch(db);
+      for(const x of filas.slice(i, i+400)){
+        batch.update(doc(db,'conversaciones',x.id), {
+          necesitaAtencion: false,
+          motivo: null,
+          prioridad: 99,
+          seguimientoEnviado: true,
+          revisado: true,
+          aprobadoPor: (currentUser && currentUser.email) || uid,
+          aprobadoEn: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+    filas.forEach(x=>{ delete bdBorradores[x.id]; });
+    showToast(`Bandeja vaciada — ${filas.length} conversación${filas.length===1?'':'es'}`);
+  }catch(e){
+    showToast('No se pudo vaciar: '+e.message, true);
+    setSyncDot('error');
+  }
+};
 
 window.aprobarBandeja = async function(id){
   const x = convsItems.find(c=>c.id===id); if(!x) return;

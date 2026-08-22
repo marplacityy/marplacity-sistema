@@ -145,6 +145,40 @@ console.log('\n── construirSystem con los docs vacios ──');
   ok(!!sinNada, 'tambien se banca que no le pasen nada');
 }
 
+console.log('\n── un solo camino de envio automatico ──');
+// Ya paso una vez: el interruptor se chequeaba adentro de mandarMensajes() y el cron se
+// lo salteaba, porque llamaba a mandarDM() directo. Andaba de casualidad. Los dos
+// caminos automaticos tienen que pasar SIEMPRE por mandarAutomatico(), que es donde
+// viven el apagado y el modo prueba.
+{
+  const src = readFileSync(new URL('./worker-ig.js', import.meta.url), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+  // El cierre se busca DESPUES del arranque de la funcion, no desde el principio del
+  // archivo, que es lo que devolvia pedazos vacios.
+  const cuerpo = (desde) => {
+    const i = src.indexOf(desde);
+    if (i === -1) return '';
+    const j = src.indexOf('\n}\n', i);
+    return j === -1 ? '' : src.slice(i, j);
+  };
+
+  const webhook = cuerpo('async function procesarMensaje');
+  const cron = cuerpo('async function correrSeguimientos');
+  ok(webhook.length > 200 && cron.length > 200, 'el test encontro las dos funciones');
+
+  for (const [nombre, txt] of [['el webhook', webhook], ['el cron', cron]]) {
+    ok(/mandarAutomatico\(/.test(txt), `${nombre} manda por mandarAutomatico()`);
+    ok(!/[^A-Za-z]mandarDM\(/.test(txt), `${nombre} no llama a mandarDM() por atras`);
+    ok(!/[^A-Za-z]mandarMensajes\(/.test(txt), `${nombre} no llama a mandarMensajes() por atras`);
+  }
+
+  // Y el que manda el dueño desde la bandeja NO pasa por ahi: el interruptor no puede
+  // dejar a la bandeja sin salida.
+  const resp = cuerpo('async function responder(');
+  ok(/mandarMensajes\(/.test(resp) && !/mandarAutomatico\(/.test(resp),
+     '/responder manda directo: el interruptor no lo bloquea');
+}
+
 console.log('\n── campos del doc vs. firestore.rules ──');
 // El bot solo puede actualizar los campos que lista soloCamposDelBot() en las reglas, y
 // hasOnly() es todo o nada: si escribe uno que no esta ahi, Firestore rechaza el PATCH

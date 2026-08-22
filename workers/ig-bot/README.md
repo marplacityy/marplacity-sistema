@@ -229,23 +229,40 @@ el cliente vio media respuesta.
 
 ## El interruptor (`config/bot`)
 
-Arriba de la bandeja, en el sistema, hay un botón que apaga el bot. El estado vive en
-Firestore, en `config/bot` campo `activo`, y no en una variable de Cloudflare: apagarlo
-tiene que ser un click, sin deploys, en el momento en que el bot está diciendo algo que
-no corresponde.
+Arriba de la bandeja, en el sistema, hay un control con tres posiciones. El estado vive
+en Firestore, en `config/bot`, y no en una variable de Cloudflare: cambiarlo tiene que
+ser un click, sin deploys, en el momento en que el bot está diciendo algo que no
+corresponde.
 
-**Apagado no es sordo.** El Worker sigue recibiendo, clasificando y guardando todo en
-`conversaciones`. Lo único que deja de pasar es que salga un DM solo: ni respuestas ni
-seguimientos del cron. Como los mensajes quedan sin mandar, cada conversación sube a la
-bandeja y se contesta a mano desde el sistema — así no se pierde ningún cliente mientras
-el bot está callado.
+| posición | `config/bot` | qué hace |
+|---|---|---|
+| ⏸ Apagado | `activo: false` | no manda nada solo |
+| 🧪 Prueba | `modo: 'prueba'` + `cuentasPrueba: [ids]` | solo le contesta a esas cuentas; el cron no corre |
+| ▶ Todos | `modo: 'todos'` | le contesta a cualquiera |
+
+**Modo prueba** es para afinar el prompt y la base de conocimiento sin que el bot le
+hable a un cliente real. Las cuentas se autorizan desde la propia bandeja, con el botón
+*"Probar con esta cuenta"* de una conversación: el id de Instagram no es algo que se
+pueda tipear de memoria. Mientras está en prueba el cron de seguimiento **no corre**, para
+que no se dispare nada de fondo mientras estás tocando.
+
+**Ninguna de las tres es sorda.** El Worker sigue recibiendo, clasificando y guardando
+todo en `conversaciones`. Lo único que cambia es a quién le sale un DM solo. Como los
+mensajes que no se mandan quedan sin mandar, cada conversación sube a la bandeja y se
+contesta a mano desde el sistema — así no se pierde ningún cliente.
 
 Lo que **no** apaga es el botón *Aprobar y mandar* de la bandeja: ahí el que manda es el
 dueño, no el bot. Un interruptor que también bloqueara eso dejaría a la bandeja sin
 salida, que es justo lo que hace falta cuando el bot está apagado.
 
-Si el doc no existe o no se puede leer, el bot queda **encendido**: es el estado inicial
-de cualquier instalación. El respaldo duro, si hiciera falta cortar de raíz sin depender
+Todo envío automático pasa por `mandarAutomatico()` en `worker-ig.js`, que es donde
+viven el apagado y el filtro de cuentas — los dos caminos, el del webhook y el del cron,
+llaman ahí y a ningún otro lado. Hay un test que lo verifica leyendo el código, porque
+ya se coló una vez: el chequeo estaba adentro de `mandarMensajes()` y el cron se lo
+salteaba llamando a `mandarDM()` directo.
+
+Si el doc no existe o no se puede leer, el bot queda **encendido y para todos**: es el
+estado inicial de cualquier instalación. El respaldo duro, si hiciera falta cortar de raíz sin depender
 de Firestore, sigue siendo sacar `IG_TOKEN` del panel de Cloudflare.
 
 ## Una sola cuenta de Instagram

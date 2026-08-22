@@ -168,7 +168,7 @@ async function procesarMensaje(ev, env) {
   }
 
   // Cada elemento del array sale como un DM aparte, en orden.
-  const enviados = await mandarMensajes(env, senderId, ia.mensajes);
+  const enviados = await mandarAutomatico(env, senderId, ia.mensajes);
 
   // Lo que no llegó a salir queda para Juni: sin IG_TOKEN (modo lee y sugiere) no sale
   // ninguno, y si un envío falla se corta ahí. En los dos casos la conversación sube a
@@ -239,28 +239,29 @@ async function usuarioDeIG(env, igUserId) {
 // ── El interruptor ────────────────────────────────────────────
 
 /**
- * ¿El bot puede mandar mensajes por su cuenta?
+ * Como esta configurado el bot, desde el sistema (doc `config/bot`).
  *
- * Apagado NO significa sordo: el Worker sigue leyendo, clasificando y guardando todo en
- * `conversaciones`. Lo unico que deja de pasar es que salga un DM solo. Como los
- * mensajes quedan sin mandar, la conversacion sube igual a la bandeja y se contesta a
- * mano desde el sistema — asi no se pierde ningun cliente mientras el bot esta callado.
+ *   activo: false        -> no manda NADA solo
+ *   modo: 'prueba'       -> solo le contesta a las cuentas de cuentasPrueba
+ *   modo: 'todos'        -> le contesta a cualquiera
  *
- * Esto NO afecta a /responder: ahi el que manda es el dueño apretando "aprobar", no el
- * bot. Un interruptor que tambien bloqueara eso dejaria a la bandeja sin salida.
- *
- * Si el doc no existe o no se puede leer, el bot queda ENCENDIDO. Es el estado inicial
- * de cualquier instalacion, y `leerDoc` devuelve null en los dos casos, asi que no se
- * pueden distinguir. El respaldo duro sigue siendo sacar IG_TOKEN del panel.
+ * Si el doc no existe o no se puede leer, queda encendido y para todos: es el estado
+ * inicial de cualquier instalacion, y `leerDoc` devuelve null en los dos casos, asi que
+ * no se pueden distinguir. El respaldo duro sigue siendo sacar IG_TOKEN del panel.
  */
-async function botEncendido(env) {
+async function configDelBot(env) {
+  const porDefecto = { activo: true, modo: 'todos', cuentasPrueba: [] };
+
   const idToken = await tokenDelBot(env);
-  if (!idToken) return true;   // sin token no va a poder mandar nada igual
+  if (!idToken) return porDefecto;   // sin token no va a poder mandar nada igual
 
   const cfg = await leerDoc(env, idToken, 'config/bot');
-  const encendido = !cfg || cfg.activo !== false;
-  if (!encendido) console.log('bot APAGADO desde el sistema: no se manda nada');
-  return encendido;
+  if (!cfg) return porDefecto;
+  return {
+    activo: cfg.activo !== false,
+    modo: cfg.modo === 'prueba' ? 'prueba' : 'todos',
+    cuentasPrueba: Array.isArray(cfg.cuentasPrueba) ? cfg.cuentasPrueba.map(String) : [],
+  };
 }
 
 // ── Mandar los DM ─────────────────────────────────────────────
@@ -300,10 +301,6 @@ async function mandarDM(env, igUserId, texto) {
 async function mandarMensajes(env, igUserId, mensajes) {
   if (!mensajes.length) return 0;
   if (!env.IG_TOKEN) { console.log('sin IG_TOKEN: no se manda nada (modo lee y sugiere)'); return 0; }
-
-  // El interruptor se mira aca y no antes: asi vale para el webhook y para el cron, y
-  // no hay forma de agregar un camino de envio que se lo saltee sin darse cuenta.
-  if (!await botEncendido(env)) return 0;
 
   let enviados = 0;
   for (const texto of mensajes) {
@@ -375,6 +372,30 @@ async function uidDelToken(idToken, env) {
     console.log('no se pudo validar el token', e.message);
     return null;
   }
+}
+
+/**
+ * TODO mensaje que el bot manda por su cuenta pasa por aca. Los dos caminos automaticos
+ * —la respuesta del webhook y el seguimiento del cron— llaman a esta funcion y a
+ * ninguna otra; `mandarMensajes()` queda para lo que manda el dueño desde la bandeja,
+ * que el interruptor no toca a proposito.
+ *
+ * (Antes el chequeo vivia adentro de mandarMensajes y el cron se lo salteaba, porque
+ * llamaba a mandarDM directo. Andaba de casualidad, por un corte aparte en el cron.)
+ */
+async function mandarAutomatico(env, igUserId, mensajes) {
+  const cfg = await configDelBot(env);
+
+  if (!cfg.activo) { console.log('bot APAGADO desde el sistema: no se manda nada'); return 0; }
+
+  // En prueba el bot solo le habla a las cuentas autorizadas. Al resto lo sigue
+  // clasificando y guardando: caen en la bandeja como cualquier mensaje sin contestar.
+  if (cfg.modo === 'prueba' && !cfg.cuentasPrueba.includes(String(igUserId))) {
+    console.log('modo prueba: no se le contesta a', igUserId, '— autorizadas:', cfg.cuentasPrueba.join(', ') || '(ninguna)');
+    return 0;
+  }
+
+  return mandarMensajes(env, igUserId, mensajes);
 }
 
 // ── Traer el stock disponible para que la IA sepa qué hay ─────
@@ -772,9 +793,14 @@ async function correrSeguimientos(env) {
   const idToken = await tokenDelBot(env);
   if (!idToken) { console.log('cron: sin token, no corre'); return; }
 
-  // Apagado, el cron no toca nada: ni manda seguimientos ni marca `visto`. Las
-  // conversaciones quedan como estan y se retoman cuando se vuelve a encender.
-  if (!await botEncendido(env)) { console.log('cron: bot apagado, no corre'); return; }
+  // Apagado o en prueba, el cron no toca nada: ni manda seguimientos ni marca `visto`.
+  // Las conversaciones quedan como estan y se retoman cuando se pone en 'todos'.
+  // Mientras estas afinando el bot no querés que se dispare nada de fondo.
+  const cfg = await configDelBot(env);
+  if (!cfg.activo || cfg.modo === 'prueba') {
+    console.log('cron: bot', cfg.activo ? 'en modo prueba' : 'apagado', '— no corre');
+    return;
+  }
 
   const ahora = Date.now();
   const candidatos = await paraSeguir(env, idToken, ahora);
@@ -808,7 +834,7 @@ async function correrSeguimientos(env) {
 
     // Sin IG_TOKEN el Worker no le escribe a nadie (modo lee y sugiere): el seguimiento
     // no sale y la conversación queda para que la mande Juni.
-    const salio = env.IG_TOKEN ? await mandarDM(env, doc.igUserId, texto) : false;
+    const salio = await mandarAutomatico(env, doc.igUserId, [texto]) > 0;
 
     // Si el envío no salió, la conversación no se pierde: sube a la bandeja. Y se marca
     // igual como seguida, para no reintentar el mismo mensaje cada hora.
