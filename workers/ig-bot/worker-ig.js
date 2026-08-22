@@ -59,6 +59,7 @@ export default {
           IG_VERIFY_TOKEN: !!env.IG_VERIFY_TOKEN,
           IG_APP_SECRET: !!env.IG_APP_SECRET,
           IG_TOKEN: !!env.IG_TOKEN,
+          IG_ACCOUNT_ID: !!env.IG_ACCOUNT_ID,
           FIREBASE_PROJECT: !!env.FIREBASE_PROJECT,
           FIREBASE_KEY: !!env.FIREBASE_KEY,
           OWNER_UID: !!env.OWNER_UID,
