@@ -1,0 +1,23 @@
+# Config de despliegue del Worker ig-bot.
+#
+# Desde que el prompt vive en prompt.js el Worker son varios archivos, asi que ya no
+# alcanza con pegar uno solo en el panel de Cloudflare: se despliega con
+#
+#   npx wrangler deploy            (parado en workers/ig-bot/)
+#
+# OJO con las variables: los Secret sobreviven al deploy, pero las Text cargadas a mano
+# en el panel las puede pisar wrangler. Despues del primer deploy entra a
+# https://ig-bot.fiwind702050.workers.dev/ y fijate que la lista de `vars` este toda en
+# true; si alguna volvio false, recargala en Settings -> Variables.
+#
+# Los valores NO van aca: este repo es publico. Viven en el panel, y para probar en
+# local en .dev.vars (ignorado por git).
+
+name = "ig-bot"
+main = "worker-ig.js"
+compatibility_date = "2026-08-21"
+
+# Seguimiento de los que quedaron en silencio: corre cada hora en punto (UTC) y adentro
+# decide a quien le escribe, segun las ventanas de 20 h y 24 h de worker-ig.js.
+[triggers]
+crons = ["0 * * * *"]

@@ -25,6 +25,9 @@ la bandeja con `necesitaAtencion: true` para que la conteste Juni a mano.
 **Sin `IG_TOKEN` cargado el Worker no le escribe a nadie**: clasifica, guarda y llena la
 bandeja, nada más. Es la forma de tenerlo corriendo en modo "lee y sugiere".
 
+Aparte del webhook corre un **cron cada hora** que sigue a los que quedaron en silencio
+(ver más abajo).
+
 ## Archivos
 
 | Archivo | Qué es |
@@ -32,6 +35,7 @@ bandeja, nada más. Es la forma de tenerlo corriendo en modo "lee y sugiere".
 | `worker-ig.js` | El Worker: webhook, firma HMAC, lectura de Firestore, llamada a la IA |
 | `prompt.js` | El system prompt del bot, fuente única. Lo importa `worker-ig.js` |
 | `cargar-mensajes.mjs` | Script suelto para cargar `config/mensajes` en Firestore |
+| `wrangler.toml` | Config de deploy: nombre del Worker y el cron cada hora |
 | `test-parseo.mjs` | Tests del parseo de la respuesta del modelo: `node workers/ig-bot/test-parseo.mjs` |
 
 `prompt-bot.md`, en la raíz del repo, es la versión legible del prompt para editar y
@@ -42,13 +46,26 @@ discutir. `prompt.js` es lo que realmente se manda. Si cambiás uno, cambiá el 
 No hay deploy automático desde este repo. URL de producción:
 https://ig-bot.fiwind702050.workers.dev/
 
-**Desde que el prompt vive en `prompt.js`, el Worker son dos archivos**, así que ya no
-alcanza con pegar uno solo en el panel. Dos opciones:
+**El Worker ya no se despliega desde el panel.** Son varios archivos y además tiene un
+cron, que se declara en `wrangler.toml` y no se puede cargar pegando código:
 
-- En el panel de Cloudflare, *Edit code*, agregar `prompt.js` como archivo nuevo junto
-  a `worker-ig.js` y pegar cada uno en el suyo.
-- O pasar a `wrangler deploy`, que sube el directorio entero y es lo que va a hacer
-  falta igual para el cron de seguimiento (necesita `wrangler.toml`).
+```bash
+cd workers/ig-bot && npx wrangler deploy
+```
+
+El orden importa, porque las tres partes están acopladas:
+
+1. `firebase deploy --only firestore:rules` — sin esto el Worker guarda el primer DM de
+   cada cliente y falla con permission-denied en todos los siguientes (el `PATCH` sobre
+   un doc que ya existe es un *update*, y el bot recién ahora lo tiene permitido).
+2. `firebase deploy --only firestore:indexes` — y esperar a que termine de construirse.
+   Mientras tanto la query del cron falla con `FAILED_PRECONDITION`.
+3. `npx wrangler deploy` — el Worker y el cron.
+
+**Ojo con las variables**: los `Secret` sobreviven al deploy, pero las `Text` cargadas a
+mano en el panel las puede pisar `wrangler`. Después del primer deploy abrí
+https://ig-bot.fiwind702050.workers.dev/ y fijate que la lista de `vars` esté toda en
+`true`; si alguna volvió `false`, recargala en Settings → Variables y tocá *Deploy*.
 
 Estos archivos son la copia versionada, para tener historial de los cambios. Si editás
 el Worker desde el panel, traé el cambio también acá; si editás acá, no tiene efecto
@@ -93,18 +110,52 @@ Dos detalles del `PATCH` que importan:
 Si agregás un campo, sumalo también a la lista de `soloCamposDelBot()` en
 `firestore.rules`: el bot puede actualizar el doc, pero solo esos campos.
 
+## Cron de seguimiento
+
+Corre **cada hora en punto** (`[triggers] crons` en `wrangler.toml`) y busca las
+conversaciones que quedaron calladas. Es el `scheduled` del `export default`, en el mismo
+`worker-ig.js` que atiende el webhook.
+
+Las dos ventanas son lo único que importa acá, y no se tocan:
+
+| silencio | qué pasa |
+|---|---|
+| menos de 20 h | nada, todavía es pronto |
+| entre 20 y 24 h | el bot manda **un** mensaje corto: *"che seguís interesado en el {ultimoProducto}?"* |
+| más de 24 h | el bot **no escribe**: la conversación va a la bandeja con motivo `visto` y prioridad 7 |
+
+El corte de 24 h es un límite duro de Meta: pasada esa ventana solo se puede responder
+con el tag `HUMAN_AGENT`, que es exclusivo para humanos. Usarlo desde un bot es de las
+formas más rápidas de perder el acceso a la API. Por eso lo que se pasa lo manda Juni a
+mano desde la bandeja.
+
+La query pide `estado == 'indeciso'`, `seguimientoEnviado == false`,
+`necesitaAtencion == false` y `ultimoMensajeCliente` de hace más de 20 h, hasta 50 por
+corrida. El filtro por `necesitaAtencion` no es de más: si la conversación ya está en la
+bandeja el cliente está esperando algo puntual —una foto, por ejemplo— y un "seguís
+interesado?" automático encima queda pésimo; de paso evita que el cron le pise el motivo
+con `visto`/7 y le entierre un caso urgente al fondo de la cola.
+
+Salga o no salga el mensaje, el doc queda con `seguimientoEnviado: true`: si el envío
+falla, la conversación sube a la bandeja, pero el bot no reintenta el mismo mensaje cada
+hora.
+
+**Para cuando se haga la bandeja**: al aprobar una respuesta desde el sistema hay que
+poner también `seguimientoEnviado: true`. Si no, una conversación que Juni ya contestó
+vuelve a caer en la query del cron y se marca `visto` de nuevo.
+
 ### El índice del cron
 
-La query del seguimiento —`estado` + `seguimientoEnviado` + un rango sobre
-`ultimoMensajeCliente`— no la resuelve Firestore sola: necesita un índice compuesto. Está
-versionado en `firestore.indexes.json`, en la raíz del repo, para no depender de crearlo
-a mano desde la consola:
+La query de arriba no la resuelve Firestore sola: necesita un índice compuesto con los
+cuatro campos —`estado`, `seguimientoEnviado`, `necesitaAtencion` y `ultimoMensajeCliente`—
+en ese orden. Está versionado en `firestore.indexes.json`, en la raíz del repo, para no
+depender de crearlo a mano desde la consola:
 
 ```bash
 firebase deploy --only firestore:indexes
 ```
 
-El orden de los campos no es decorativo: primero los dos de igualdad, último el del
+El orden de los campos no es decorativo: primero los tres de igualdad, último el del
 rango. Si la query cambia —se le agrega un filtro, se ordena al revés, se filtra también
 por `userId`— el índice deja de servirle y hay que actualizarlo acá también. Cuando falta,
 el error de Firestore trae un link para crear el que hace falta; copiá los campos de ahí

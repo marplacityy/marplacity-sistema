@@ -54,6 +54,7 @@
       "fields": [
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "seguimientoEnviado", "order": "ASCENDING" },
+        { "fieldPath": "necesitaAtencion", "order": "ASCENDING" },
         { "fieldPath": "ultimoMensajeCliente", "order": "ASCENDING" }
       ]
     }

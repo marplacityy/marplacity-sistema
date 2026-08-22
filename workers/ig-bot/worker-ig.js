@@ -29,6 +29,12 @@ const CORS = {
 };
 
 export default {
+  // Cron Trigger: el seguimiento de los que quedaron en silencio. La frecuencia sale de
+  // [triggers] crons en wrangler.toml (cada hora en punto).
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(correrSeguimientos(env));
+  },
+
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
@@ -557,6 +563,153 @@ async function tokenDelBot(env) {
   // los tokens duran 1h; renovamos a los 50 min por las dudas
   tokenCache = { idToken: d.idToken, vence: ahora + 50 * 60 * 1000 };
   return d.idToken;
+}
+
+// ── Cron de seguimiento ───────────────────────────────────────
+//
+// Meta deja responder libre solo dentro de las 24 h desde el último mensaje del
+// cliente. El tag HUMAN_AGENT estira eso a 7 días, pero es exclusivo para humanos:
+// usarlo desde un bot es de las formas más rápidas de perder el acceso a la API.
+//
+// Por eso el seguimiento automático sale a las 20 h de silencio, y lo que ya pasó las
+// 24 h no lo toca el bot: se marca `visto` para que lo mande Juni a mano desde la
+// bandeja. Estas dos ventanas no se cambian.
+
+const H = 60 * 60 * 1000;
+const VENTANA_SEGUIMIENTO = 20 * H;   // a las 20 h calladas, el bot escribe
+const VENTANA_META        = 24 * H;   // límite duro de Meta: pasado esto, ni lo intenta
+const MAX_POR_CORRIDA     = 50;
+
+// Lo que se le pone al doc cuando el bot no puede seguir la conversación y la tiene que
+// mirar Juni. `visto` y 7 salen de la tabla de prioridades de prompt-bot.md.
+const A_LA_BANDEJA = { necesitaAtencion: true, motivo: 'visto', prioridad: 7 };
+
+async function correrSeguimientos(env) {
+  const idToken = await tokenDelBot(env);
+  if (!idToken) { console.log('cron: sin token, no corre'); return; }
+
+  const ahora = Date.now();
+  const candidatos = await paraSeguir(env, idToken, ahora);
+  console.log('cron: candidatos', candidatos.length);
+
+  for (const { name, doc } of candidatos) {
+    // Un doc al que le falte alguno de los dos no se puede seguir: sin fecha no se sabe
+    // en qué ventana cae y sin igUserId no hay a quién escribirle.
+    if (!doc.ultimoMensajeCliente || !doc.igUserId) {
+      console.log('cron: doc incompleto, lo salteo', name);
+      continue;
+    }
+
+    // Se pasó la ventana de Meta: el bot no le escribe, va derecho a la bandeja.
+    // `seguimientoEnviado` se marca igual, para no volver a mirarlo cada hora.
+    const edad = ahora - Date.parse(doc.ultimoMensajeCliente);
+    if (edad >= VENTANA_META) {
+      await patchDoc(env, idToken, name, { ...A_LA_BANDEJA, seguimientoEnviado: true });
+      continue;
+    }
+
+    // Entre las 20 y las 24 h: un solo mensaje, corto y sin apurar a nadie.
+    const texto = doc.ultimoProducto
+      ? `che seguís interesado en el ${doc.ultimoProducto}?`
+      : 'che seguís interesado?';
+
+    // Sin IG_TOKEN el Worker no le escribe a nadie (modo lee y sugiere): el seguimiento
+    // no sale y la conversación queda para que la mande Juni.
+    const salio = env.IG_TOKEN ? await mandarDM(env, doc.igUserId, texto) : false;
+
+    // Si el envío no salió, la conversación no se pierde: sube a la bandeja. Y se marca
+    // igual como seguida, para no reintentar el mismo mensaje cada hora.
+    await patchDoc(env, idToken, name, salio
+      ? { seguimientoEnviado: true }
+      : { ...A_LA_BANDEJA, seguimientoEnviado: true });
+  }
+}
+
+/**
+ * Las conversaciones que están para seguir: indecisas, sin seguimiento mandado, calladas
+ * hace más de 20 h y que no estén ya esperando a Juni.
+ *
+ * Ese último filtro no es de más. Si la conversación ya está en la bandeja —pidió una
+ * foto, por ejemplo— el cliente está esperando algo puntual, y un "seguís interesado?"
+ * automático encima queda pésimo. Además evita que el cron le pise el motivo y la
+ * prioridad con `visto`/7 y le entierre un caso urgente al fondo de la cola.
+ *
+ * Los cuatro campos son los del índice compuesto de `firestore.indexes.json`: los tres
+ * de igualdad primero y el del rango al final. Si cambia esta query, cambia el índice.
+ */
+async function paraSeguir(env, idToken, ahora) {
+  const proj = env.FIREBASE_PROJECT;
+  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
+
+  const igual = (campo, value) => ({ fieldFilter: { field: { fieldPath: campo }, op: 'EQUAL', value } });
+  const q = {
+    structuredQuery: {
+      from: [{ collectionId: 'conversaciones' }],
+      where: {
+        compositeFilter: {
+          op: 'AND',
+          filters: [
+            igual('estado', { stringValue: 'indeciso' }),
+            igual('seguimientoEnviado', { booleanValue: false }),
+            igual('necesitaAtencion', { booleanValue: false }),
+            {
+              fieldFilter: {
+                field: { fieldPath: 'ultimoMensajeCliente' },
+                op: 'LESS_THAN',
+                value: { timestampValue: new Date(ahora - VENTANA_SEGUIMIENTO).toISOString() },
+              },
+            },
+          ],
+        },
+      },
+      limit: MAX_POR_CORRIDA,
+    },
+  };
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify(q),
+    });
+    // Si falta el índice, Firestore contesta 400 con el link para crearlo adentro del
+    // mensaje: por eso se loguea el texto y no solo el status.
+    if (!r.ok) { console.log('cron: la query fallo', r.status, (await r.text()).slice(0, 300)); return []; }
+
+    const d = await r.json();
+    return (Array.isArray(d) ? d : [])
+      .filter(x => x.document)
+      .map(x => ({ name: x.document.name, doc: campos(x.document.fields) }));
+  } catch (e) {
+    console.log('cron: la query fallo', e.message);
+    return [];
+  }
+}
+
+/**
+ * Pisa unos pocos campos de un doc que ya existe. `name` es la ruta completa que
+ * devuelve la query (`projects/.../documents/conversaciones/xxx`).
+ *
+ * Los campos que toca el cron son de los que habilita `soloCamposDelBot()` en
+ * `firestore.rules`; si se agrega otro hay que sumarlo también allá o el update se
+ * rechaza entero.
+ */
+async function patchDoc(env, idToken, name, doc) {
+  const fields = aFields(doc);
+  const mascara = Object.keys(fields).map(k => `updateMask.fieldPaths=${k}`).join('&');
+
+  try {
+    const r = await fetch(`https://firestore.googleapis.com/v1/${name}?${mascara}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify({ fields }),
+    });
+    if (!r.ok) console.log('cron: no se pudo actualizar', name, r.status, (await r.text()).slice(0, 200));
+    return r.ok;
+  } catch (e) {
+    console.log('cron: no se pudo actualizar', name, e.message);
+    return false;
+  }
 }
 
 // ── Guardar en Firestore (REST API) ───────────────────────────
