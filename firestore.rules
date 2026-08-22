@@ -57,12 +57,40 @@ service cloud.firestore {
       allow read:        if esBot();
     }
 
-    // Conversaciones de Instagram.
-    // El bot solo puede CREAR (no lee ni borra nada de aca).
-    // Leer, editar y borrar: solo el dueño de la conversacion.
+    // Conversaciones de Instagram: un doc por cliente, con su id de Instagram como id
+    // del doc. El bot lo crea con el primer DM y lo pisa con cada mensaje siguiente;
+    // el cron de seguimiento necesita LEER (para correr la query de los que quedaron
+    // en silencio) y ACTUALIZAR (para marcar seguimientoEnviado y los campos de la
+    // bandeja). Antes solo podia crear.
+    //
+    // Lo que NO tiene, a proposito, es delete: si algun dia se filtra el token del
+    // Worker, lo peor que puede pasar es que ensucie la bandeja, no que se lleve
+    // puesto el historial de conversaciones.
     match /conversaciones/{docId} {
-      allow create:               if esBot();
-      allow read, update, delete: if owns();
+      // Los campos que el bot escribe de verdad. Lo que le agrega la bandeja desde el
+      // sistema (quien aprobo la respuesta y cuando) queda afuera: el bot no lo toca,
+      // y si intenta tocarlo el update se rechaza entero.
+      function soloCamposDelBot() {
+        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'igUserId', 'userId', 'fecha', 'ultimoMensajeCliente', 'ultimoMensaje',
+          'adjuntos', 'urlsAdjuntos', 'tieneImagen', 'tieneAudio',
+          'estado', 'confianza', 'resumen', 'ultimoProducto',
+          'mensajes', 'sugerencia', 'respondido', 'revisado',
+          'necesitaAtencion', 'motivo', 'prioridad', 'seguimientoEnviado'
+        ]);
+      }
+
+      // El doc no se puede pasar a otro usuario. Sin esto, cambiarle el userId lo
+      // sacaria de la vista del dueño (owns() dejaria de dar true): un delete
+      // disfrazado de update, justo lo que la falta de delete quiere evitar.
+      function mismoDueno() {
+        return request.resource.data.userId == resource.data.userId;
+      }
+
+      allow read:           if esBot() || owns();
+      allow create:         if esBot();
+      allow update:         if esBot() && soloCamposDelBot() && mismoDueno();
+      allow update, delete: if owns();
     }
 
     // Listas de precios de proveedores. El dueño las carga desde el sistema
