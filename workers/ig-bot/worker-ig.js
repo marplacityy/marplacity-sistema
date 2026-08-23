@@ -659,10 +659,22 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 600,
+        model: 'claude-sonnet-5',
+        // Sonnet 5 piensa por defecto y ese pensamiento se descuenta de max_tokens, asi
+        // que hay que dejar aire: si se corta a la mitad, el JSON queda truncado y
+        // volvemos al problema que estamos arreglando. Solo se paga lo que genera.
+        max_tokens: 4000,
         system: sistema,
         messages: turnosParaLaIA(historial, usuario),
+        output_config: {
+          // La API devuelve JSON valido si o si. Sonnet 4.6 no soportaba esto: por eso
+          // el cambio de modelo (mismo precio de lista, y mas nuevo).
+          format: { type: 'json_schema', schema: ESQUEMA_RESPUESTA },
+          // Contestar un DM no necesita que piense de mas: encarece cada mensaje y hace
+          // esperar al cliente. Si se lo nota flojo en las situaciones dificiles, esto
+          // es lo primero a subir.
+          effort: 'medium',
+        },
       }),
     });
 
@@ -677,6 +689,14 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     }
 
     const d = await r.json();
+
+    // Con el esquema puesto, lo unico que puede volver mal formado es una respuesta
+    // cortada por max_tokens o un rechazo del modelo. Las dos se ven en stop_reason y
+    // no en el texto, asi que sin esto se diagnostican a ciegas.
+    if (d.stop_reason === 'max_tokens' || d.stop_reason === 'refusal') {
+      console.log('IA stop_reason:', d.stop_reason, JSON.stringify(d.stop_details || {}));
+    }
+
     const crudo = (d.content?.map(x => x.text || '').join('') || d.text || '').trim();
     const out = JSON.parse(limpiarJson(crudo));
     const r2 = normalizar(out, textoCanal);
@@ -719,6 +739,33 @@ export function limpiarJson(crudo) {
   const b = sinFences.lastIndexOf('}');
   return (a !== -1 && b > a) ? sinFences.slice(a, b + 1) : sinFences;
 }
+
+/**
+ * El esquema de la respuesta, para structured outputs.
+ *
+ * Con esto la API GARANTIZA que lo que vuelve es JSON valido con esta forma. Antes se le
+ * pedia por prompt y a veces contestaba en prosa: la respuesta se tiraba entera y el
+ * cliente quedaba sin contestar aunque el modelo supiera perfectamente que decirle
+ * ("las Air 13..." — tenia los precios y se perdio).
+ *
+ * `normalizar()` sigue validando igual: el esquema garantiza la FORMA, no que la
+ * categoria o el motivo esten dentro de lo que el negocio espera.
+ */
+const ESQUEMA_RESPUESTA = {
+  type: 'object',
+  properties: {
+    categoria:         { type: 'string' },
+    confianza:         { type: 'string' },
+    necesita_atencion: { type: 'boolean' },
+    motivo:            { type: ['string', 'null'] },
+    prioridad:         { type: 'integer' },
+    resumen:           { type: 'string' },
+    producto:          { type: ['string', 'null'] },
+    mensajes:          { type: 'array', items: { type: 'string' } },
+  },
+  required: ['categoria', 'confianza', 'necesita_atencion', 'motivo', 'prioridad', 'resumen', 'producto', 'mensajes'],
+  additionalProperties: false,
+};
 
 const MOTIVOS = ['pidio_foto', 'cerrado', 'reclamo', 'permuta', 'reparacion', 'otro_medio_de_pago', 'visto', 'no_supe_responder'];
 const CATEGORIAS = ['reclamo', 'permuta', 'reparacion', 'cerrado', 'indeciso', 'curioso'];

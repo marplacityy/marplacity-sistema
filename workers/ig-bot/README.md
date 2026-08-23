@@ -237,6 +237,33 @@ Devuelve `{ enviados, total }`. Si salieron algunos y otros no, el status es 502
 propósito: la bandeja deja la conversación abierta en vez de darla por contestada, porque
 el cliente vio media respuesta.
 
+## El modelo y el JSON
+
+Corre con **`claude-sonnet-5`** y **structured outputs**: se le pasa el esquema de la
+respuesta en `output_config.format` y la API garantiza que lo que vuelve es JSON válido.
+
+Eso no es un lujo. Antes se le pedía el JSON por prompt y a veces contestaba en prosa
+—`IA fallo: Unexpected token 'l', "las Air 13"...`— y esa respuesta se tiraba entera: el
+cliente quedaba sin contestar aunque el modelo supiera perfectamente qué decirle. Pasó
+dos veces el 22/08/2026. `claude-sonnet-4-6`, el modelo anterior, no soporta structured
+outputs; ese fue el motivo del cambio (mismo precio de lista, y más nuevo).
+
+`normalizar()` sigue validando igual: el esquema garantiza la **forma**, no que la
+categoría o el motivo estén dentro de lo que el negocio espera.
+
+Dos parámetros que conviene entender antes de tocarlos:
+
+- **`max_tokens: 4000`.** Sonnet 5 piensa por defecto y ese pensamiento se descuenta de
+  `max_tokens`. Si se corta a la mitad, el JSON queda truncado y volvemos al problema que
+  esto arregla. Solo se paga lo que genera, así que el aire no cuesta nada.
+- **`effort: 'medium'`.** Contestar un DM no necesita que piense de más: encarece cada
+  mensaje y hace esperar al cliente. Si se lo nota flojo en las situaciones difíciles
+  (regateo, permutas, cerrar una venta), esto es lo primero a subir.
+
+Si aun así algo vuelve mal formado, solo puede ser una respuesta cortada o un rechazo del
+modelo, y las dos se ven en `stop_reason` — que se loguea, porque no se notan mirando el
+texto.
+
 ## El interruptor (`config/bot`)
 
 Arriba de la bandeja, en el sistema, hay un control con tres posiciones. El estado vive
