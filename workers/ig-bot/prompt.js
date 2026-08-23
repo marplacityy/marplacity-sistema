@@ -458,16 +458,28 @@ function bloqueConocimiento(c) {
  * Van en su propio bloque y no mezclados con los equipos: son dos preguntas distintas y
  * el modelo tiene que poder contestar una sin revolver la otra.
  */
+/**
+ * El recordatorio de las mayúsculas va PEGADO a los datos, no solo en las reglas de
+ * estilo de más arriba.
+ *
+ * Los nombres se cargan al sistema como los tipea el dueño —casi siempre todo en
+ * minúscula— y el modelo copia el dato tal cual lo ve: es lo que tiene delante en el
+ * momento exacto de escribir el nombre. Pasó el 23/08/2026: con la regla de estilo ya
+ * desplegada y todos los ejemplos del prompt corregidos, seguía contestando "apple watch
+ * ultra 2 49mm a 800 usd", que es como está cargado en la lista.
+ */
+const NOMBRES_BIEN = 'Los nombres están cargados como los tipeó el dueño. Cuando se los pases a un cliente, escribilos BIEN: AirPods, iPhone 15 Pro Max, Apple Watch Ultra 2, MacBook Air, USB-C, ANC. Nunca copies la minúscula de acá.';
+
 function bloqueAccesorios(accesorios = []) {
   if (!accesorios || !accesorios.length) {
     return '## ACCESORIOS EN EL LOCAL\n\nSin datos. No prometas ningún accesorio.';
   }
-  return `## ACCESORIOS EN EL LOCAL\n\n${JSON.stringify(accesorios)}`;
+  return `## ACCESORIOS EN EL LOCAL\n\n${NOMBRES_BIEN}\n\n${JSON.stringify(accesorios)}`;
 }
 
 function bloqueStock(stock = []) {
   if (!stock.length) return '## EQUIPOS EN EL LOCAL\n\nSin datos. No prometas disponibilidad de nada.';
-  return `## EQUIPOS EN EL LOCAL\n\n${JSON.stringify(stock)}`;
+  return `## EQUIPOS EN EL LOCAL\n\n${NOMBRES_BIEN}\n\n${JSON.stringify(stock)}`;
 }
 
 /**
@@ -542,7 +554,7 @@ function bloqueLista(titulo, lista, vencida = false) {
   const aviso = vencida
     ? `\nOJO: esta lista es del ${lista.fecha} y no es la de hoy. Los precios pueden haber cambiado: si preguntan por algo de acá, pasá el precio pero marcá NEED ATTENTION con motivo no_supe_responder.\n`
     : '';
-  return `## LISTA ${titulo} (${lista.fecha}, precios al público en ${moneda})\n${aviso}\n${JSON.stringify(lista.items)}`;
+  return `## LISTA ${titulo} (${lista.fecha}, precios al público en ${moneda})\n${aviso}\n${NOMBRES_BIEN}\n\n${JSON.stringify(lista.items)}`;
 }
 
 /**
