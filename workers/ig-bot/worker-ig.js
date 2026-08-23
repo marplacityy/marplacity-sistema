@@ -159,10 +159,16 @@ async function procesarMensaje(ev, env) {
   const adjuntos = (m.attachments || []).map(a => a.type);   // image, audio, video, share...
   const texto = m.text || '';
 
-  // La IA lee el mensaje, lo clasifica y redacta la respuesta
+  // El doc de la conversación se lee UNA vez y sirve para las dos cosas: darle contexto
+  // al modelo y saber sobre qué historial hay que agregar las líneas nuevas.
+  const idToken = await tokenDelBot(env);
+  const previo = idToken ? await leerDoc(env, idToken, `conversaciones/${senderId}`) : null;
+  const historial = Array.isArray(previo && previo.historial) ? previo.historial : [];
+
+  // La IA lee el mensaje EN CONTEXTO de la charla, lo clasifica y redacta la respuesta
   let ia = { ...SIN_RESPUESTA };
   if (env.ANTHROPIC_KEY && (texto || adjuntos.length)) {
-    ia = await pensarRespuesta(texto, adjuntos, env);
+    ia = await pensarRespuesta(texto, adjuntos, env, historial);
   } else {
     console.log(env.ANTHROPIC_KEY ? 'mensaje sin texto ni adjuntos' : 'sin ANTHROPIC_KEY: no se llama a la IA');
   }
@@ -212,11 +218,10 @@ async function procesarMensaje(ev, env) {
   // contestó el bot. Solo se anota lo que REALMENTE salió: si el envío se cortó a la
   // mitad, el historial tiene que reflejar lo que el cliente vio, no lo que se pensaba
   // mandar. Si el bot está apagado o en prueba, no sale nada y solo queda el del cliente.
-  const idToken = await tokenDelBot(env);
   if (idToken) {
     const nuevas = [linea('cliente', texto || (adjuntos[0] ? `[${adjuntos[0]}]` : ''), fechaMensaje)];
     ia.mensajes.slice(0, enviados).forEach(t => nuevas.push(linea('bot', t, new Date())));
-    doc.historial = await historialCon(env, idToken, senderId, nuevas);
+    doc.historial = [...historial, ...nuevas].slice(-MAX_HISTORIAL);
   }
 
   // Solo va si el modelo nombró un equipo. Si este mensaje no habla de ninguno el campo
@@ -253,23 +258,54 @@ async function usuarioDeIG(env, igUserId) {
 // venia hablando, y sin tope el doc crece para siempre (Firestore corta en 1 MB).
 const MAX_HISTORIAL = 60;
 
-/**
- * Agrega lineas al historial de la charla y devuelve el array completo, recortado.
- *
- * Hay que leer el doc antes de escribirlo, porque la REST API no tiene un "append"
- * simple. Eso abre una ventana chica: si entran dos DM en el mismo instante, los dos
- * leen el mismo historial y el segundo pisa al primero, y se pierde una linea. Es
- * aceptable —el historial es contexto, no el registro contable— y a cambio evita
- * meter transacciones en el camino caliente del webhook.
- */
-async function historialCon(env, idToken, igUserId, nuevas) {
-  const previo = await leerDoc(env, idToken, `conversaciones/${igUserId}`);
-  const viejo = Array.isArray(previo && previo.historial) ? previo.historial : [];
-  return [...viejo, ...nuevas].slice(-MAX_HISTORIAL);
-}
+// El doc se lee una vez por mensaje (en procesarMensaje) y de ahi salen el contexto para
+// el modelo y la base sobre la que se agregan las lineas nuevas. Eso abre una ventana
+// chica: si entran dos DM en el mismo instante, los dos leen el mismo historial y el
+// segundo pisa al primero, y se pierde una linea. Es aceptable —el historial es
+// contexto, no el registro contable— y a cambio no hay que meter transacciones en el
+// camino caliente del webhook.
 
 // Una linea del historial. `de` es 'cliente' o 'bot'.
 const linea = (de, texto, fecha) => ({ de, texto: String(texto || '').slice(0, 1000), fecha });
+
+// Cuantos turnos del historial se le pasan al modelo. No hace falta la charla entera:
+// alcanza con lo que se venia hablando, y cada turno se paga en cada mensaje.
+const MAX_CONTEXTO = 20;
+
+/**
+ * El historial guardado, traducido a los turnos que espera la Messages API.
+ *
+ * Sin esto el modelo veia UN mensaje suelto y clasificaba a ciegas: "que medios de pago
+ * tienen?" le parecia un curioso, cuando dos minutos antes esa persona habia preguntado
+ * por un cargador y le habian pasado el precio.
+ *
+ * Dos reglas de la API que hay que respetar y el historial no garantiza:
+ *  - los turnos se alternan, asi que dos seguidos del mismo lado se juntan en uno;
+ *  - el primero tiene que ser del cliente, asi que si la charla arranca con algo del bot
+ *    (porque el recorte a MAX_CONTEXTO cayo ahi) esas lineas se descartan.
+ */
+export function turnosParaLaIA(historial, ahora) {
+  const previos = (Array.isArray(historial) ? historial : []).slice(-MAX_CONTEXTO);
+  const turnos = [];
+
+  for (const h of previos) {
+    const texto = h && typeof h.texto === 'string' ? h.texto.trim() : '';
+    if (!texto) continue;
+    const role = h.de === 'bot' ? 'assistant' : 'user';
+    const ultimo = turnos[turnos.length - 1];
+    if (ultimo && ultimo.role === role) ultimo.content += '\n' + texto;
+    else turnos.push({ role, content: texto });
+  }
+
+  while (turnos.length && turnos[0].role === 'assistant') turnos.shift();
+
+  // El mensaje de ahora siempre cierra, del lado del cliente.
+  const ultimo = turnos[turnos.length - 1];
+  if (ultimo && ultimo.role === 'user') ultimo.content += '\n' + ahora;
+  else turnos.push({ role: 'user', content: ahora });
+
+  return turnos;
+}
 
 // ── El interruptor ────────────────────────────────────────────
 
@@ -587,7 +623,7 @@ const SIN_RESPUESTA = {
   mensajes: [],
 };
 
-async function pensarRespuesta(texto, adjuntos, env) {
+async function pensarRespuesta(texto, adjuntos, env, historial) {
   const idToken = await tokenDelBot(env);
   if (!idToken) return { ...SIN_RESPUESTA };
 
@@ -626,7 +662,7 @@ async function pensarRespuesta(texto, adjuntos, env) {
         model: 'claude-sonnet-4-6',
         max_tokens: 600,
         system: sistema,
-        messages: [{ role: 'user', content: usuario }],
+        messages: turnosParaLaIA(historial, usuario),
       }),
     });
 

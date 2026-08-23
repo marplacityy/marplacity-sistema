@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA } from './worker-ig.js';
 import { construirSystem } from './prompt.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
@@ -158,6 +158,36 @@ console.log('\n── construirSystem con los docs vacios ──');
   let sinNada = null;
   try { sinNada = construirSystem(); } catch (e) { sinNada = null; }
   ok(!!sinNada, 'tambien se banca que no le pasen nada');
+}
+
+console.log('\n── turnosParaLaIA ──');
+// El modelo veia UN mensaje suelto y clasificaba a ciegas: "que medios de pago tienen?"
+// le parecio un curioso, cuando dos minutos antes esa persona habia preguntado por un
+// cargador y le habian pasado el precio. Paso el 22/08/2026.
+{
+  const t = turnosParaLaIA;
+  const sinNada = t([], 'hola');
+  ok(sinNada.length === 1 && sinNada[0].role === 'user' && sinNada[0].content === 'hola', 'sin historial, solo el mensaje de ahora');
+
+  // La API pide turnos alternados: dos seguidos del mismo lado se juntan
+  const juntados = t([{de:'cliente',texto:'hola'},{de:'bot',texto:'si'},{de:'bot',texto:'400 usd'}], 'y permuta?');
+  ok(juntados.length === 3, 'tres turnos', String(juntados.length));
+  ok(juntados[1].content === 'si\n400 usd', 'dos del bot seguidos se juntan');
+  ok(juntados.every((x,i)=> i===0 || x.role !== juntados[i-1].role), 'siempre alternados');
+
+  // Y tiene que arrancar del lado del cliente
+  const arrancaBot = t([{de:'bot',texto:'te espero'},{de:'cliente',texto:'dale'}], 'a que hora?');
+  ok(arrancaBot[0].role === 'user', 'lo del bot al principio se descarta', arrancaBot[0].role);
+  ok(!arrancaBot.some(x=>x.content.includes('te espero')), 'y no queda colgado en otro turno');
+
+  ok(t([{de:'bot',texto:'solo yo'}], 'hola')[0].content === 'hola', 'historial todo del bot: queda solo el mensaje de ahora');
+  ok(t([{de:'cliente',texto:'  '},{de:'cliente',texto:null}], 'hola').length === 1, 'las lineas vacias no arman turnos');
+  ok(t(null, 'hola').length === 1, 'un historial que no es array no rompe');
+
+  // El ultimo turno siempre es del cliente y termina con lo que acaba de escribir
+  const largo = t(Array.from({length:80}, (_,i)=>({de: i%2 ? 'bot':'cliente', texto:'m'+i})), 'ahora');
+  ok(largo.length <= 21, 'se recorta a los ultimos turnos', String(largo.length));
+  ok(largo[largo.length-1].role === 'user' && largo[largo.length-1].content.endsWith('ahora'), 'cierra con el mensaje de ahora');
 }
 
 console.log('\n── motivoDeLaFalla ──');
