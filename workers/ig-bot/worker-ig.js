@@ -290,6 +290,24 @@ async function usuarioDeIG(env, igUserId) {
 const ECOS_A_MIRAR = 10;
 
 /**
+ * Cuánto se espera antes de mirar el historial.
+ *
+ * El eco de un DM del bot puede llegar ANTES de que `procesarMensaje()` termine de
+ * escribir la charla: manda los mensajes, y recién después de mandarlos todos guarda. Si
+ * el eco mira el historial en esa ventana, su línea todavía no está, el mensaje parece
+ * escrito a mano y la charla queda con el texto repetido —una vez como del bot y otra
+ * como tuya.
+ *
+ * Pasó en la primera prueba, el 23/08/2026: de los dos DM que mandó el bot, el eco del
+ * primero entró a mitad de camino y se anotó como si lo hubieras escrito vos.
+ *
+ * Esperar unos segundos lo resuelve y no tiene contra: el webhook ya contestó 200 y esto
+ * corre en `waitUntil`, así que no hay nadie esperando. Un mensaje escrito a mano tampoco
+ * pierde nada por anotarse seis segundos más tarde.
+ */
+const ESPERA_ECO = 6000;
+
+/**
  * ¿Este eco es un mensaje que ya mandamos nosotros?
  *
  * El bot se escucha a sí mismo: los DM que manda por la API vuelven como eco, y ya
@@ -339,6 +357,9 @@ async function anotarEco(ev, env) {
     return;
   }
   if (!cliente || !texto) { console.log('eco: sin destinatario o sin texto, lo salteo'); return; }
+
+  // Antes de mirar nada: que el webhook termine de escribir lo suyo (ver ESPERA_ECO).
+  await dormir(ESPERA_ECO);
 
   const idToken = await tokenDelBot(env);
   if (!idToken) { console.log('eco: sin token, no se anota'); return; }
