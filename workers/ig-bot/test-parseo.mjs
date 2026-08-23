@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento } from './worker-ig.js';
 import { construirSystem } from './prompt.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
@@ -256,6 +256,19 @@ console.log('\n── nombreLindo: el nombre del producto ──');
   ok(n('iPhone 15 Pro Max') === 'iPhone 15 Pro Max', 'lo que ya estaba bien queda igual');
   ok(n('parlante jbl') === 'parlante jbl', 'lo que no conoce lo deja como esta');
   ok(n('') === '' && n(null) === '' && n(undefined) === '', 'vacio, null y undefined no rompen');
+}
+
+console.log('\n── textoSeguimiento ──');
+// Lo manda el cron solo, sin que nadie lo lea antes. "che seguis interesado" tenia el
+// "che" adelante y, peor, le ponia genero al cliente: de la persona solo sabemos el
+// usuario de Instagram.
+{
+  const t = textoSeguimiento;
+  ok(t('macbook pro 14 m5 pro') === 'te sigue interesando el MacBook Pro 14 M5 Pro?', 'singular', t('macbook pro 14 m5 pro'));
+  ok(t('airpods 4') === 'te siguen interesando los AirPods 4?', 'plural', t('airpods 4'));
+  ok(t(null) === 'te sigue interesando el producto?', 'sin producto', t(null));
+  ok(!/\bche\b/i.test(t('iphone 15')), 'sin che adelante');
+  ok(!/interesad[oa]/i.test(t('iphone 15')), 'sin genero: nunca "interesado" ni "interesada"');
 }
 
 console.log('\n── esEcoPropio: el bot se escucha a si mismo ──');

@@ -481,6 +481,28 @@ const NOMBRES_PROPIOS = [
   [/\bs(\d{2})\b/gi, 'S$1'],
 ];
 
+/**
+ * El mensaje del seguimiento: "te sigue interesando el iPhone 15?".
+ *
+ * El texto de antes era "che seguís interesado en el X?" y tenía dos problemas. El "che"
+ * adelante, y sobre todo **interesado**, que le pone género a alguien de quien lo único
+ * que sabemos es el usuario de Instagram. "te sigue interesando" no lleva género: la
+ * misma frase sirve para cualquiera.
+ *
+ * Lo único que hay que resolver es el artículo. Los productos en plural —AirPods,
+ * auriculares, fundas— piden "los" y el verbo en plural, o sale "el AirPods 4". Se
+ * decide por la primera palabra del nombre, que es la del producto: si termina en s, es
+ * plural. "AirPods 4" sí, "MacBook Pro 14" no.
+ */
+export function textoSeguimiento(producto) {
+  const nombre = nombreLindo(producto);
+  if (!nombre) return 'te sigue interesando el producto?';
+
+  return /s$/i.test(nombre.split(/\s+/)[0])
+    ? `te siguen interesando los ${nombre}?`
+    : `te sigue interesando el ${nombre}?`;
+}
+
 export function nombreLindo(producto) {
   let txt = String(producto || '').trim();
   if (!txt) return txt;
@@ -1275,7 +1297,7 @@ const VENTANA_SEGUIMIENTO = 20 * H;   // a las 20 h calladas, el bot escribe
 const VENTANA_META        = 24 * H;   // límite duro de Meta: pasado esto, ni lo intenta
 const MAX_POR_CORRIDA     = 50;
 
-// Nadie quiere un "seguís interesado?" a las 3 de la mañana. Si las 20 h caen de
+// Nadie quiere un "te sigue interesando?" a las 3 de la mañana. Si las 20 h caen de
 // madrugada, el mensaje se ADELANTA a las 23:00 del día anterior. Adelantar es lo único
 // que se puede hacer sin romper nada: mandarlo más tarde para esquivar la noche se
 // comería las 24 h de Meta, y pasada esa ventana el bot no puede escribir.
@@ -1344,7 +1366,7 @@ async function correrSeguimientos(env) {
     }
 
     // Pausado a mano: ese chat lo lleva Juni. Ni seguimiento ni `visto` — se deja como
-    // esta y se retoma cuando lo vuelva a prender. Un "seguis interesado?" automatico
+    // esta y se retoma cuando lo vuelva a prender. Un "te sigue interesando?" automatico
     // arriba de una charla que esta atendiendo una persona es lo peor de los dos mundos.
     if (doc.botPausado === true) { console.log('cron: chat pausado, lo salteo', name); continue; }
 
@@ -1362,12 +1384,9 @@ async function correrSeguimientos(env) {
     if (ahora < momentoDeSeguir(t)) continue;
 
     // Un solo mensaje, corto y sin apurar a nadie.
-    // Pasa por nombreLindo() aunque ya se guarde arreglado: los docs de antes de que
-    // esto existiera tienen el nombre en minúscula y el mensaje sale igual.
-    const producto = nombreLindo(doc.ultimoProducto);
-    const texto = producto
-      ? `che seguís interesado en el ${producto}?`
-      : 'che seguís interesado?';
+    // Adentro pasa por nombreLindo() aunque el nombre ya se guarde arreglado: los docs
+    // de antes de que eso existiera tienen la minúscula guardada.
+    const texto = textoSeguimiento(doc.ultimoProducto);
 
     // Sin IG_TOKEN el Worker no le escribe a nadie (modo lee y sugiere): el seguimiento
     // no sale y la conversación queda para que la mande Juni.
@@ -1392,7 +1411,7 @@ async function correrSeguimientos(env) {
  * eso el corte de la query es el más temprano posible y el resto se filtra en el loop.
  *
  * El filtro por `necesitaAtencion` no es de más. Si la conversación ya está en la
- * bandeja —pidió una foto, por ejemplo— el cliente está esperando algo puntual, y un "seguís interesado?"
+ * bandeja —pidió una foto, por ejemplo— el cliente está esperando algo puntual, y un "te sigue interesando?"
  * automático encima queda pésimo. Además evita que el cron le pise el motivo y la
  * prioridad con `visto`/7 y le entierre un caso urgente al fondo de la cola.
  *

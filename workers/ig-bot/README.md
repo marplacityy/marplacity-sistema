@@ -146,7 +146,7 @@ conversaciones que quedaron calladas. Es el `scheduled` del `export default`, en
 
 El mensaje sale a las **20 h de silencio**, salvo que ese momento caiga entre las 00:00
 y las 08:00 de Argentina: ahí se **adelanta** a las 23:00 del día anterior. Nadie quiere
-un *"seguís interesado?"* a las 3 de la mañana.
+un *"te sigue interesando?"* a las 3 de la mañana.
 
 Adelantar es lo único que se puede hacer. Correrlo para adelante, hasta la mañana
 siguiente, se comería el límite de 24 h de Meta, y pasada esa ventana el bot no puede
@@ -155,7 +155,7 @@ usarlo desde un bot es de las formas más rápidas de perder el acceso a la API.
 
 | silencio | qué pasa |
 |---|---|
-| las 20 h caen entre las 08:00 y las 23:59 AR | sale ahí, un mensaje corto: *"che seguís interesado en el {ultimoProducto}?"* |
+| las 20 h caen entre las 08:00 y las 23:59 AR | sale ahí, un mensaje corto: *"te sigue interesando el {ultimoProducto}?"* |
 | las 20 h caen entre las 00:00 y las 07:59 AR | sale a las 23:00 del día anterior — entre 11 y 19 h de silencio, nunca más de 20 |
 | más de 24 h | el bot **no escribe**: la conversación va a la bandeja con motivo `visto` y prioridad 7 |
 
@@ -337,7 +337,7 @@ Pausado **no es apagado**:
 - **la clasificación vieja no se pisa**. Sin la IA solo quedaría `clasificarBasico()`, y
   una charla que venía como `cerrado` no se merece volver a `curioso` porque el último
   mensaje fue "dale";
-- el cron de seguimiento lo saltea entero: ni le manda un "¿seguís interesado?" ni lo
+- el cron de seguimiento lo saltea entero: ni le manda un "te sigue interesando?" ni lo
   marca `visto`. Un mensaje automático arriba de una charla que está atendiendo una
   persona es lo peor de los dos mundos.
 
