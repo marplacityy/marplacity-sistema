@@ -1142,7 +1142,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-D</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-E</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2458,11 +2458,12 @@
     <!-- BASE DE CONOCIMIENTO (bot de Instagram) -->
     <div id="page-bandeja" class="page">
       <div class="page-header">
-        <h1>Bandeja del bot</h1>
-        <p>Las conversaciones de Instagram que el bot no puede cerrar solo. Lo más urgente arriba y, dentro de cada nivel, la que está esperando hace más tiempo. <b>Nada se manda sin que lo apruebes.</b></p>
+        <h1>Conversaciones de Instagram</h1>
+        <p>Todo lo que pasa por el bot, agrupado por lo que hay que hacer con cada uno. Tocá una fila para leer la charla y contestar. <b>Nada se manda sin que lo apruebes.</b> Se muestran los últimos 60 días.</p>
       </div>
       <div id="bd-switch"></div>
-      <div id="bd-metrics" class="metrics"></div>
+      <div class="tab-btns" id="bd-tabs"></div>
+      <div id="bd-acciones"></div>
       <div id="bd-list"></div>
     </div>
 
@@ -2965,9 +2966,11 @@ async function init() {
       if(currentPage==='conocimiento') deb('kb',renderConocimiento);
       setSyncDot('ok');
     }, snapErr);
-    // Bandeja del bot: SOLO lo que necesita atención. Filtrar en el servidor y no acá
-    // es lo que evita traerse todas las conversaciones del historial en cada arranque.
-    onSnapshot(query(convsCol, where('userId','==',uid), where('necesitaAtencion','==',true)), snap => {
+    // El tablero del bot necesita TODAS las conversaciones, no solo las que piden
+    // atención: también las que van a pasar, las indecisas y las dormidas. Se acota por
+    // fecha, como gastos e ingresos, o el arranque se trae el historial entero y agota
+    // la cuota de lecturas cuando se acumulan meses de clientes.
+    onSnapshot(query(convsCol, where('userId','==',uid), where('ultimoMensajeCliente','>=', desdeConvs())), snap => {
       const _b = applySnap('bandeja', snap);
       if(_b) convsItems = _b;
       if(currentPage==='bandeja') deb('bd', renderBandeja);
@@ -10482,35 +10485,123 @@ function renderChat(x){
     <div class="bd-msg ${m.de==='bot'?'bd-de-bot':'bd-de-cliente'}">${esc(m.texto)}<div class="bd-hora">${hora(m.fecha)}</div></div>`).join('')}</div>`;
 }
 
+// ── El tablero ────────────────────────────────────────────
+//
+// Una conversación puede estar en varias pestañas a la vez, y está bien: son vistas de
+// lo mismo, no estados excluyentes. Alguien que dijo que va a pasar Y pidió una foto
+// tiene que aparecer en las dos, porque son dos cosas distintas que hacer con él.
+
+// Cuánto historial se trae el tablero. Más atrás que esto ya no sirve ni para
+// remarketing, y cada conversación es una lectura de Firestore en cada arranque.
+const DIAS_CONVS = 60;
+const desdeConvs = () => new Date(Date.now() - DIAS_CONVS*24*60*60*1000);
+
+// A partir de cuándo una conversación se considera dormida y sirve para remarketing.
+const DORMIDA_DESDE = 3*24*60*60*1000;
+
+const ESTADOS_BOT = {
+  cerrado:    'Va a pasar',
+  indeciso:   'Interesado',
+  permuta:    'Permuta',
+  reparacion: 'Reparación',
+  reclamo:    'Reclamo',
+  curioso:    'Consulta suelta',
+};
+
+// Cada pestaña: a quién muestra, cómo los ordena y qué decir cuando no hay ninguno.
+const TABS_BD = {
+  atencion: {
+    label: '🔔 Para vos',
+    filtra: x => x.necesitaAtencion === true,
+    // Lo más urgente arriba y, dentro de cada nivel, el que hace más rato que espera.
+    ordena: (a,b) => (a.prioridad ?? 99) - (b.prioridad ?? 99) || msDe(a.ultimoMensajeCliente) - msDe(b.ultimoMensajeCliente),
+    vacio: 'No hay nada esperándote: el bot viene contestando todo solo. 🎉',
+  },
+  pasan: {
+    label: '🛍 Van a pasar',
+    filtra: x => x.estado === 'cerrado',
+    ordena: (a,b) => msDe(b.ultimoMensajeCliente) - msDe(a.ultimoMensajeCliente),
+    vacio: 'Todavía nadie dijo que pasa por el local.',
+  },
+  indecisos: {
+    label: '🤔 Interesados',
+    filtra: x => x.estado === 'indeciso',
+    ordena: (a,b) => msDe(b.ultimoMensajeCliente) - msDe(a.ultimoMensajeCliente),
+    vacio: 'Sin consultas de compra en este período.',
+  },
+  dormidas: {
+    // Para remarketing a mano: preguntaron, no cerraron y se quedaron callados. Los más
+    // recientes primero, que son los que todavía se acuerdan de vos.
+    label: '💤 Sin novedades',
+    filtra: x => Date.now() - msDe(x.ultimoMensajeCliente) >= DORMIDA_DESDE && x.estado !== 'curioso',
+    ordena: (a,b) => msDe(b.ultimoMensajeCliente) - msDe(a.ultimoMensajeCliente),
+    vacio: 'Ninguna conversación quedó colgada hace más de 3 días.',
+  },
+  todas: {
+    label: '📋 Todas',
+    filtra: () => true,
+    ordena: (a,b) => msDe(b.ultimoMensajeCliente) - msDe(a.ultimoMensajeCliente),
+    vacio: 'Todavía no entró ningún mensaje.',
+  },
+};
+
+let bdTab = 'atencion';
+const bdAbiertas = new Set();
+
+window.setBdTab = function(tab){ bdTab = tab; renderBandeja(); };
+
+// El chat se despliega al tocar la fila. Cerrado ocupa dos renglones, así que se puede
+// barrer el tablero de un vistazo; abierto se lee la charla completa y se contesta.
+window.toggleConv = function(id){
+  if(bdAbiertas.has(id)) bdAbiertas.delete(id); else bdAbiertas.add(id);
+  renderBandeja();
+};
+
 function renderBandeja(){
   renderSwitchBot();
   const ahora = Date.now();
-  const filas = convsItems.slice().sort((a,b)=>
-    (a.prioridad ?? 99) - (b.prioridad ?? 99) ||
-    msDe(a.ultimoMensajeCliente) - msDe(b.ultimoMensajeCliente));
 
-  const vencidas = filas.filter(x => ahora - msDe(x.ultimoMensajeCliente) >= META_24H).length;
-  document.getElementById('bd-metrics').innerHTML = `
-    <div class="metric"><div class="m-label">Esperando respuesta</div><div class="m-val">${filas.length}</div>${filas.length?`<div class="m-sub" style="margin-top:6px;"><button class="btn-pagar-outline" onclick="vaciarBandeja()">✓ Ya contesté todo — vaciar</button></div>`:''}</div>
-    <div class="metric"><div class="m-label">Fuera de las 24 h</div><div class="m-val" style="${vencidas?'color:var(--neg);':''}">${vencidas}</div><div class="m-sub">esas hay que contestarlas desde Instagram</div></div>
-  `;
+  document.getElementById('bd-tabs').innerHTML = Object.entries(TABS_BD).map(([k,t])=>{
+    const n = convsItems.filter(t.filtra).length;
+    return `<button class="tab-btn ${k===bdTab?'active':''}" onclick="setBdTab('${k}')">${t.label}${n?` (${n})`:''}</button>`;
+  }).join('');
+
+  const tab = TABS_BD[bdTab];
+  const filas = convsItems.filter(tab.filtra).sort(tab.ordena);
+
+  // Vaciar solo tiene sentido sobre lo que te está pidiendo atención.
+  const pendientes = convsItems.filter(TABS_BD.atencion.filtra).length;
+  document.getElementById('bd-acciones').innerHTML = (bdTab==='atencion' && pendientes)
+    ? `<div style="margin-bottom:10px;"><button class="btn-pagar-outline" onclick="vaciarBandeja()">✓ Ya contesté todo — vaciar</button></div>` : '';
 
   document.getElementById('bd-list').innerHTML = filas.map(x=>{
     const t = msDe(x.ultimoMensajeCliente);
-    // Sin fecha no se puede saber si la ventana venció. Se trata como vencida: es el
-    // lado seguro, porque mandar fuera de las 24 h es lo que pone en riesgo la API.
+    // Sin fecha se trata como vencida: es el lado seguro, porque mandar fuera de las
+    // 24 h es lo que pone en riesgo el acceso a la API.
     const vencida = !t || (ahora - t >= META_24H);
-    const borrador = bdBorradores[x.id] ?? (x.mensajes||[]).join('\n');
+    const abierta = bdAbiertas.has(x.id);
     const quien = x.igUsuario ? '@'+x.igUsuario : 'IG '+(x.igUserId||'—');
-    return `<div class="card" style="margin-bottom:10px;${vencida?'border-color:#F09595;':''}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+    const borrador = bdBorradores[x.id] ?? (x.mensajes||[]).join('\n');
+
+    const etiqueta = x.necesitaAtencion
+      ? `<span class="est-badge ${vencida?'est-abandono':'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>`
+      : `<span class="consig-tipo ${x.estado==='cerrado'?'tipo-permuta':'tipo-consig'}" style="white-space:nowrap;">${esc(ESTADOS_BOT[x.estado] || x.estado || '—')}</span>`;
+
+    const bajada = x.necesitaAtencion
+      ? esc(MOTIVOS_BOT[x.motivo] || x.motivo || 'Sin motivo')
+      : esc(ESTADOS_BOT[x.estado] || x.estado || '');
+
+    return `<div class="card" style="margin-bottom:8px;${vencida && x.necesitaAtencion?'border-color:#F09595;':''}">
+      <div onclick="toggleConv('${escJs(x.id)}')" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;">
         <div style="min-width:0;">
-          <div style="font-weight:600;font-size:15px;">💬 ${esc(quien)}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${esc(MOTIVOS_BOT[x.motivo] || x.motivo || 'Sin motivo')} · último mensaje ${t?haceCuanto(ahora-t):'sin fecha'}${x.ultimoProducto?' · '+esc(x.ultimoProducto):''}</div>
-          ${x.resumen?`<div style="font-size:13px;color:var(--text2);margin-top:6px;">${esc(x.resumen)}</div>`:''}
+          <div style="font-weight:600;font-size:15px;">${abierta?'▾':'▸'} 💬 ${esc(quien)}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px;">${bajada} · ${t?haceCuanto(ahora-t):'sin fecha'}${x.ultimoProducto?' · '+esc(x.ultimoProducto):''}</div>
+          ${!abierta && x.resumen?`<div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(x.resumen)}</div>`:''}
         </div>
-        <span class="est-badge ${vencida?'est-abandono':'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>
+        ${etiqueta}
       </div>
+      ${!abierta ? '' : `
+      ${x.resumen?`<div style="font-size:13px;color:var(--text2);margin-top:8px;">${esc(x.resumen)}</div>`:''}
       ${renderChat(x)}
       ${vencida?`<div class="proveedor-alerta alerta-urgente">⏰ <b>Pasaron las 24 h</b> — Instagram ya no deja que el bot conteste. Escribile vos desde la app y después marcala como contestada.</div>`:''}
       <div class="field" style="margin:10px 0 8px;">
@@ -10519,14 +10610,14 @@ function renderBandeja(){
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         ${vencida?'':`<button class="btn-save" id="bd-btn-${x.id}" style="width:auto;padding:10px 18px;" onclick="aprobarBandeja('${escJs(x.id)}')">✓ Aprobar y mandar</button>`}
-        <button class="btn-pagar-outline" onclick="resolverBandeja('${escJs(x.id)}')">Ya le contesté yo</button>
+        ${x.necesitaAtencion?`<button class="btn-pagar-outline" onclick="resolverBandeja('${escJs(x.id)}')">Ya le contesté yo</button>`:''}
         ${modoBotActual()==='prueba' && x.igUserId && !botCfg.cuentasPrueba.includes(String(x.igUserId))
           ? `<button class="btn-pagar-outline" onclick="agregarCuentaPrueba('${escJs(x.igUserId)}')">🧪 Probar con esta cuenta</button>` : ''}
-      </div>
+      </div>`}
     </div>`;
-  }).join('') || '<div class="empty">No hay nada esperando: el bot viene contestando todo solo. 🎉</div>';
+  }).join('') || `<div class="empty">${tab.vacio}</div>`;
 
-  // Cada chat arranca abajo, en lo último que se dijo: es lo que estás por contestar.
+  // Cada chat abierto arranca abajo, en lo último que se dijo.
   document.querySelectorAll('#bd-list .bd-chat').forEach(c=>{ c.scrollTop = c.scrollHeight; });
 }
 
@@ -10535,7 +10626,7 @@ function renderBandeja(){
 // usuario de Instagram y el producto que consultó — y el bot los necesita para la
 // próxima vez que esa persona escriba.
 window.vaciarBandeja = async function(){
-  const filas = convsItems.slice();
+  const filas = convsItems.filter(TABS_BD.atencion.filtra);
   if(!filas.length) return;
   if(!confirm(`¿Marcar como contestadas las ${filas.length} conversaciones de la bandeja?\n\nNo se borra nada: las charlas quedan guardadas, solo dejan de pedirte atención. Usalo cuando ya las respondiste vos.`)) return;
 

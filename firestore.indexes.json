@@ -69,6 +69,14 @@
       "collectionGroup": "conversaciones",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "ultimoMensajeCliente", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversaciones",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "seguimientoEnviado", "order": "ASCENDING" },
         { "fieldPath": "necesitaAtencion", "order": "ASCENDING" },

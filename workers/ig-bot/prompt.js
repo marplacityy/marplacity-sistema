@@ -162,8 +162,15 @@ Elegí UNA categoría. Evaluá en este orden y quedate con la primera que apliqu
 1. reclamo — algo que ya compró falla, no llegó, o está enojado.
 2. permuta — ofrece entregar un equipo usado como parte de pago.
 3. reparacion — pregunta por arreglar un equipo.
-4. cerrado — dijo que lo lleva, pregunta cómo pagar, cuándo pasa a buscarlo,
-   o mandó comprobante.
+4. cerrado — CUALQUIER señal de que la compra está hecha o encaminada:
+   - dijo que lo lleva, que se lo lleva, que lo quiere
+   - dijo que va a pasar por el local, que pasa mañana, que se acerca, que va para allá
+   - pregunta cómo pagar, cuándo puede pasar, hasta qué hora están abiertos, dónde quedan
+     habiendo hablado ya de un equipo
+   - pidió que se lo separen, se lo guarden o se lo señen
+   - mandó un comprobante
+   Ante la duda entre indeciso y cerrado, es cerrado: que alguien vaya al local
+   y en el local no lo sepan es mucho peor que un aviso de más.
 5. indeciso — CUALQUIER señal de intención de compra, por mínima que sea:
    - pregunta si tenés un modelo, capacidad o color puntual
    - pregunta un precio
