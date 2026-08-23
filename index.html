@@ -1142,7 +1142,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-E</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-F</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2465,6 +2465,7 @@
       <div class="tab-btns" id="bd-tabs"></div>
       <div id="bd-acciones"></div>
       <div id="bd-list"></div>
+      <div id="bd-peligro"></div>
     </div>
 
     <div id="page-conocimiento" class="page">
@@ -10617,9 +10618,52 @@ function renderBandeja(){
     </div>`;
   }).join('') || `<div class="empty">${tab.vacio}</div>`;
 
+  // Abajo de todo y solo si hay algo que borrar, para que no esté al alcance de la mano.
+  document.getElementById('bd-peligro').innerHTML = convsItems.length ? `
+    <div class="card danger-zone" style="margin-top:20px;">
+      <div class="card-title" style="color:var(--neg)">Zona de peligro</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Borra <b>todas</b> las conversaciones de Instagram, con sus chats y su historial. No se puede deshacer y no se puede recuperar de Instagram: lo que se borra acá se perdió.<br><br>Es distinto de <i>vaciar</i>: vaciar solo saca de la bandeja lo que ya contestaste y deja las charlas guardadas.</p>
+      <button class="btn-danger" onclick="borrarConversaciones()">Borrar todas las conversaciones</button>
+    </div>` : '';
+
   // Cada chat abierto arranca abajo, en lo último que se dijo.
   document.querySelectorAll('#bd-list .bd-chat').forEach(c=>{ c.scrollTop = c.scrollHeight; });
 }
+
+// Borra las conversaciones de verdad, no las esconde. Mismo patrón que borrarTodo():
+// confirmación, después la cuenta exacta, después una frase tipeada. Es el botón que
+// dentro de tres meses puede llevarse puestas charlas de clientes reales, así que la
+// fricción es a propósito.
+//
+// Se consulta la colección entera, no lo que muestra el tablero: el tablero se acota a
+// 60 días y un botón que dice "todas" tiene que borrar todas.
+window.borrarConversaciones = async function(){
+  const FRASE = 'BORRAR';
+  if(!confirm('⚠️ Esto borra TODAS las conversaciones de Instagram: los chats guardados, el historial de cada cliente y el contexto que el bot usa para contestarles.\n\nNo se puede deshacer, y no se puede recuperar de Instagram.\n\nOJO: no es lo mismo que "vaciar". Vaciar solo las saca de la bandeja y deja las charlas guardadas.')) return;
+
+  setSyncDot('syncing');
+  let snap;
+  try{ snap = await getDocs(myQ(convsCol)); }
+  catch(e){ showToast('No se pudo leer: '+e.message, true); setSyncDot('error'); return; }
+  if(snap.empty){ showToast('No hay conversaciones para borrar'); return; }
+
+  const escrito = prompt(`Último paso — no se puede deshacer.\n\nSe van a borrar ${snap.size} conversación${snap.size===1?'':'es'} con todo su historial.\n\nEscribí  ${FRASE}  para confirmar:`);
+  if((escrito||'').trim().toUpperCase() !== FRASE){ showToast('Cancelado — no se borró nada.'); return; }
+
+  try{
+    for(let i=0; i<snap.docs.length; i+=400){
+      const batch = writeBatch(db);
+      snap.docs.slice(i, i+400).forEach(d=>batch.delete(d.ref));
+      await batch.commit();
+    }
+    Object.keys(bdBorradores).forEach(k=>delete bdBorradores[k]);
+    bdAbiertas.clear();
+    showToast(`Borradas ${snap.size} conversaciones — el bot arranca de cero`);
+  }catch(e){
+    showToast('No se pudo borrar: '+e.message, true);
+    setSyncDot('error');
+  }
+};
 
 // Vaciar la bandeja de una. NO borra los documentos: los marca como contestados, igual
 // que el botón de cada fila. Borrarlos perdería el historial de la conversación, el
