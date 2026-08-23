@@ -41,8 +41,16 @@ const limpio = normalizar({
 ok(limpio.motivo === null && limpio.prioridad === 99, 'motivo null y prioridad 99');
 
 console.log('\n── normalizar: basura y bordes ──');
-const sinMensajes = normalizar({ categoria: 'indeciso', necesita_atencion: false, mensajes: [] }, CANAL);
-ok(sinMensajes.necesitaAtencion === true && sinMensajes.prioridad === 8, 'sin mensajes sube a la bandeja');
+// Callarse es una decision valida: es la unica forma que tiene el bot de cerrar una
+// conversacion. Antes esto subia a la bandeja y llenaba de ruido cada "dale" final.
+const calladoAProposito = normalizar({ categoria: 'indeciso', confianza: 'alta', necesita_atencion: false, mensajes: [] }, CANAL);
+ok(calladoAProposito.necesitaAtencion === false, 'callarse a proposito NO sube a la bandeja');
+ok(calladoAProposito.mensajes.length === 0, 'y no inventa un mensaje');
+
+// Pero callarse CON algo raro sigue subiendo
+ok(normalizar({ categoria: 'inventada', necesita_atencion: false, mensajes: [] }, CANAL).necesitaAtencion === true, 'callado + categoria invalida si sube');
+ok(normalizar({ categoria: 'indeciso', confianza: 'baja', necesita_atencion: false, mensajes: [] }, CANAL).necesitaAtencion === true, 'callado + confianza baja si sube');
+ok(normalizar({}, CANAL).necesitaAtencion === true, 'una respuesta vacia entera sigue subiendo');
 
 const catMala = normalizar({ categoria: 'inventada', necesita_atencion: false, mensajes: ['x'] }, CANAL);
 ok(catMala.categoria === null && catMala.necesitaAtencion === true, 'categoria invalida sube a la bandeja');

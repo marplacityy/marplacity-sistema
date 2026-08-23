@@ -849,12 +849,17 @@ export function normalizar(out, textoCanal) {
   const categoria = CATEGORIAS.includes(out.categoria) ? out.categoria : null;
   const confianza = out.confianza === 'baja' ? 'baja' : 'alta';
 
-  // Sube a la bandeja si el modelo lo pide, si dudó de la categoría, si la categoría
-  // no es una de las válidas, o si no dejó nada para contestar.
+  // Sube a la bandeja si el modelo lo pide, si dudó de la categoría, o si la categoría
+  // no es una de las válidas.
+  //
+  // Un array de mensajes VACÍO ya no cuenta como problema: puede ser una decisión, y es
+  // la única forma que tiene el bot de terminar una conversación. El cliente cierra con
+  // "dale" y no hay nada más que decir; contestarle otro "dale" es peor que callarse.
+  // Las fallas de verdad —JSON que no parsea, la API que no responde— no pasan por acá:
+  // esas devuelven SIN_RESPUESTA, que trae necesitaAtencion en true por su cuenta.
   let necesitaAtencion = out.necesita_atencion === true
     || confianza === 'baja'
-    || !categoria
-    || !mensajes.length;
+    || !categoria;
 
   let motivo = MOTIVOS.includes(out.motivo) ? out.motivo : null;
   if (necesitaAtencion && !motivo) motivo = 'no_supe_responder';
