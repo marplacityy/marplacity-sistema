@@ -1142,7 +1142,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-G</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.23-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2541,7 +2541,8 @@
             <div id="kb-mdp-preview-items"></div>
             <div style="display:flex;gap:8px;margin-top:1rem;">
               <button class="btn-secondary" onclick="cancelarListaKb('mdp')">Cancelar</button>
-              <button class="btn-save" id="btn-kb-mdp-guardar" onclick="guardarListaKb('mdp')">Guardar lista</button>
+              <button class="btn-save" id="btn-kb-mdp-guardar" style="width:auto;padding:11px 18px;" onclick="guardarListaKb('mdp','agregar')">＋ Agregar a la lista</button>
+              <button class="btn-pagar-outline" id="btn-kb-mdp-reemplazar" onclick="guardarListaKb('mdp','reemplazar')">Reemplazar toda la lista</button>
             </div>
           </div>
         </div>
@@ -2581,7 +2582,8 @@
             <div id="kb-caba-preview-items"></div>
             <div style="display:flex;gap:8px;margin-top:1rem;">
               <button class="btn-secondary" onclick="cancelarListaKb('caba')">Cancelar</button>
-              <button class="btn-save" id="btn-kb-caba-guardar" onclick="guardarListaKb('caba')">Guardar lista</button>
+              <button class="btn-save" id="btn-kb-caba-guardar" style="width:auto;padding:11px 18px;" onclick="guardarListaKb('caba','agregar')">＋ Agregar a la lista</button>
+              <button class="btn-pagar-outline" id="btn-kb-caba-reemplazar" onclick="guardarListaKb('caba','reemplazar')">Reemplazar toda la lista</button>
             </div>
           </div>
         </div>
@@ -2973,7 +2975,10 @@ async function init() {
     });
     onSnapshot(myQ(listasCol), snap => {
       listasItems = snap.docs.map(d=>({id:d.id,...d.data()}));
-      listasItems.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+      // Desempate por createdAt: `fecha` es solo el día, y desde que las listas se
+      // actualizan sumando productos hay varios guardados por día. Sin esto, cuál queda
+      // como "la última" lo decide el orden en que Firestore devolvió los docs.
+      listasItems.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'') || (msDe(b.createdAt) - msDe(a.createdAt)));
       if(currentPage==='conocimiento') deb('kb',renderConocimiento);
       setSyncDot('ok');
     }, snapErr);
@@ -10902,8 +10907,56 @@ function renderKbEstado(origen){
     <div style="font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.1;">${esc(kbFecha(l.fecha))}${l.fecha===today()?' <span style="font-size:12px;font-weight:500;vertical-align:middle;background:var(--inc-bg);color:var(--inc);border-radius:100px;padding:3px 10px;">hoy</span>':''}</div>
     <div style="font-size:13px;color:var(--text2);margin-top:4px;">${n} producto${n===1?'':'s'} · precios al público en ${esc(l.moneda||'USD')}${origen==='caba'?' · no vence: actualizala cuando quieras':''}</div>
     ${vieja?`<div style="margin-top:12px;font-size:15px;font-weight:600;color:#854F0B;">⚠️ Lista desactualizada — es del ${esc(kbFecha(l.fecha))}. Pedí la de hoy y cargala.</div>`:''}
+    ${anterioresKb(origen, l)}
   </div>`;
 }
+
+/**
+ * Las versiones anteriores de la lista, con un botón para volver a cualquiera.
+ *
+ * Cada guardado deja un documento nuevo con la lista completa, así que nada se pierde
+ * nunca: lo que cambia es cuál se considera "la actual". Esto lo hace visible y
+ * reversible — hasta ahora, cargar un producto suelto dejaba la lista anterior fuera de
+ * la vista y del alcance del bot, sin forma de volver desde la pantalla.
+ */
+function anterioresKb(origen, actual){
+  const otras = listasItems.filter(l => l.origen===origen && l.id !== actual.id).slice(0, 5);
+  if(!otras.length) return '';
+  return `<details style="margin-top:12px;">
+    <summary style="font-size:12px;color:var(--text3);cursor:pointer;">Versiones anteriores (${otras.length})</summary>
+    <div style="margin-top:8px;">${otras.map(o=>{
+      const n = (o.items||[]).length;
+      return `<div class="pago-item">
+        <div class="pago-info">
+          <div style="font-size:13px;">${esc(kbFecha(o.fecha))}</div>
+          <div class="pago-fecha">${n} producto${n===1?'':'s'}</div>
+        </div>
+        <button class="btn-pagar-outline" onclick="restaurarListaKb('${escJs(origen)}','${escJs(o.id)}')">Volver a esta</button>
+      </div>`;
+    }).join('')}</div>
+  </details>`;
+}
+
+// Restaurar no borra nada: guarda esa versión como la nueva actual, así que la de hoy
+// también queda en el historial por si te arrepentís.
+window.restaurarListaKb = async function(origen, id){
+  const vieja = listasItems.find(l => l.id === id); if(!vieja) return;
+  const actual = kbUltimaLista(origen);
+  const n = (vieja.items||[]).length, nActual = (actual && actual.items||[]).length;
+  if(!confirm(`¿Volver a la lista del ${kbFecha(vieja.fecha)}?\n\nLa lista de ${KB_ORIGENES[origen]} va a quedar con esos ${n} producto${n===1?'':'s'}, en lugar de los ${nActual} de ahora.\n\nNo se borra nada: la actual queda guardada en el historial.`)) return;
+
+  setSyncDot('syncing');
+  try{
+    await addDoc(listasCol, withUser({
+      origen,
+      fecha: today(),
+      moneda: vieja.moneda || 'USD',
+      items: vieja.items || [],
+      createdAt: serverTimestamp(),
+    }));
+    showToast(`Restaurada la lista del ${kbFecha(vieja.fecha)} — ${n} producto${n===1?'':'s'} ✓`);
+  }catch(e){ console.error(e); showToast('No se pudo restaurar: '+e.message, true); setSyncDot('error'); }
+};
 
 window.renderKbLista = function(origen){
   renderKbEstado(origen);
@@ -11001,33 +11054,85 @@ window.cancelarListaKb = function(origen){
   document.getElementById('kb-'+origen+'-preview').style.display = 'none';
 };
 
-window.guardarListaKb = async function(origen){
-  const items = kbParseada[origen];
-  if(!items.length) return;
+// Dos productos son el mismo si coinciden modelo, capacidad y color. Sin normalizar,
+// "iPhone 15  Pro" y "iphone 15 pro" entrarían como dos productos distintos y la lista
+// se llenaría de duplicados a cada actualización.
+const claveItemKb = it => `${it.producto||''}|${it.gb||''}|${it.color||''}`
+  .toLowerCase().replace(/\s+/g,' ').trim();
+
+/**
+ * Suma los productos nuevos a los que ya estaban.
+ *
+ * Los que ya existían conservan su lugar y se les actualiza el precio; los nuevos van
+ * ARRIBA, que es donde se los busca después de cargarlos. Antes cada guardado creaba una
+ * lista con SOLO lo pegado, así que sumar un producto borraba de la vista los cientos
+ * anteriores — y el bot, que mira la lista más reciente, dejaba de conocerlos.
+ */
+function fusionarListaKb(previos, nuevos){
+  const porClave = new Map(nuevos.map(it => [claveItemKb(it), it]));
+  const pisados = new Set();
+
+  const actualizados = previos.map(it => {
+    const k = claveItemKb(it);
+    const nuevo = porClave.get(k);
+    if(!nuevo) return it;
+    pisados.add(k);
+    return nuevo;
+  });
+  const agregados = nuevos.filter(it => !pisados.has(claveItemKb(it)));
+
+  return { items: [...agregados, ...actualizados], agregados: agregados.length, actualizados: pisados.size };
+}
+
+const itemKbLimpio = it => ({
+  producto: String(it.producto||'').trim(),
+  gb: it.gb!=null ? String(it.gb).trim() : '',
+  color: it.color!=null ? String(it.color).trim() : '',
+  // precioPublico va tal cual vino en la lista: ya es el precio final
+  precioPublico: (it.precioPublico!=null && !isNaN(Number(it.precioPublico))) ? Number(it.precioPublico) : null,
+});
+
+window.guardarListaKb = async function(origen, modo){
+  const nuevos = (kbParseada[origen]||[]).map(itemKbLimpio);
+  if(!nuevos.length) return;
+
+  const previa = kbUltimaLista(origen);
+  const previos = (previa && Array.isArray(previa.items)) ? previa.items : [];
+
+  let items = nuevos, aviso = `${nuevos.length} producto${nuevos.length===1?'':'s'}`;
+  if(modo === 'reemplazar'){
+    if(previos.length && !confirm(`¿Reemplazar TODA la lista de ${KB_ORIGENES[origen]}?\n\nHoy tiene ${previos.length} producto${previos.length===1?'':'s'} y va a quedar solo con ${nuevos.length}.\n\nSi lo que querés es sumar productos sin perder los de antes, usá "Agregar a la lista".`)) return;
+  }else{
+    const f = fusionarListaKb(previos, nuevos);
+    items = f.items;
+    aviso = `${f.agregados} nuevo${f.agregados===1?'':'s'}, ${f.actualizados} actualizado${f.actualizados===1?'':'s'} · ${items.length} en total`;
+  }
+
   const moneda = document.getElementById('kb-'+origen+'-moneda').value;
-  const btn = document.getElementById('btn-kb-'+origen+'-guardar');
-  btn.disabled = true; btn.textContent = 'Guardando...';
+  const btns = [document.getElementById('btn-kb-'+origen+'-guardar'), document.getElementById('btn-kb-'+origen+'-reemplazar')].filter(Boolean);
+  btns.forEach(b=>{ b.disabled = true; });
+  const btn = btns[0];
+  const txtOriginal = btn.textContent;
+  btn.textContent = 'Guardando...';
   setSyncDot('syncing');
   try{
+    // Cada guardado deja un documento nuevo con la lista COMPLETA: así queda el
+    // historial de cómo estaba la lista cada día, y `ultimaLista()` del Worker sigue
+    // tomando la más reciente sin cambios.
     await addDoc(listasCol, withUser({
       origen,
       fecha: today(),
       moneda,
-      // precioPublico va tal cual vino en la lista: ya es el precio final
-      items: items.map(it=>({
-        producto: String(it.producto||'').trim(),
-        gb: it.gb!=null ? String(it.gb).trim() : '',
-        color: it.color!=null ? String(it.color).trim() : '',
-        precioPublico: (it.precioPublico!=null && !isNaN(Number(it.precioPublico))) ? Number(it.precioPublico) : null
-      })),
+      items,
       createdAt: serverTimestamp()
     }));
     kbParseada[origen] = [];
     document.getElementById('kb-'+origen+'-preview').style.display = 'none';
     document.getElementById('kb-'+origen+'-texto').value = '';
-    showToast(`Lista de ${KB_ORIGENES[origen]} guardada ✓`);
+    showToast(`Lista de ${KB_ORIGENES[origen]}: ${aviso} ✓`);
   }catch(e){ console.error(e); showToast('Error al guardar la lista', true); setSyncDot('error'); }
-  btn.disabled = false; btn.textContent = 'Guardar lista';
+  btns.forEach(b=>{ b.disabled = false; });
+  btn.textContent = txtOriginal;
 };
 
 window.borrarListaKb = async function(origen){
