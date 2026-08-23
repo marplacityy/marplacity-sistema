@@ -66,6 +66,16 @@
       ]
     },
     {
+      "collectionGroup": "listas_precios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "origen", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "conversaciones",
       "queryScope": "COLLECTION",
       "fields": [

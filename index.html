@@ -11321,8 +11321,12 @@ window.guardarListaKb = async function(origen, modo){
   setSyncDot('syncing');
   try{
     // Cada guardado deja un documento nuevo con la lista COMPLETA: así queda el
-    // historial de cómo estaba la lista cada día, y `ultimaLista()` del Worker sigue
-    // tomando la más reciente sin cambios.
+    // historial de cómo estaba la lista cada día.
+    //
+    // OJO: eso significa que un mismo día hay VARIOS docs con la misma `fecha`, y cuál
+    // es "la última" solo se resuelve mirando `createdAt`. Acá se desempata al ordenar
+    // `listasItems`; el Worker tiene que hacer lo mismo en `ultimaLista()`, y por no
+    // hacerlo le contestó a un cliente que no había AirPods teniéndolos cargados.
     await addDoc(listasCol, withUser({
       origen,
       fecha: today(),

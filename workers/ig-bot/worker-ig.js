@@ -840,12 +840,32 @@ async function leerDoc(env, idToken, path) {
   }
 }
 
-// La lista vigente de un origen: la de fecha más reciente. Igual criterio que el
-// sistema, así el bot cotiza con lo mismo que ve el dueño en pantalla.
+/**
+ * La lista vigente de un origen: la más reciente. Igual criterio que el sistema, así el
+ * bot cotiza con lo mismo que ve el dueño en pantalla.
+ *
+ * "Más reciente" es (`fecha`, `createdAt`), no solo `fecha`, y el detalle importa: cada
+ * vez que se agregan productos desde el sistema se guarda un doc NUEVO con la lista
+ * completa y la fecha del día, así que un día cualquiera hay VARIOS docs con la misma
+ * fecha. Ordenando solo por fecha, cuál de todos gana lo termina decidiendo el id del
+ * documento: le puede tocar el de la mañana y quedarse sin lo que se cargó a la tarde.
+ *
+ * Pasó el 23/08/2026: se cargaron AirPods en la lista de Mar del Plata, el sistema los
+ * mostraba en pantalla, y el bot le contestaba a un cliente "airpods no tengo en este
+ * momento" — estaba leyendo otro doc del mismo día. El sistema ya desempataba por
+ * `createdAt` (ver `kbUltimaLista`); el Worker se había quedado atrás.
+ *
+ * Si la consulta ordenada falla o no devuelve nada, cae a la de antes. Los docs
+ * anteriores a que existiera `createdAt` no tienen ese campo, y Firestore deja afuera de
+ * una consulta ordenada todo doc al que le falte el campo del orden: sin ese respaldo,
+ * una lista vieja dejaría al bot sin precios en vez de darle los de ayer. Vale lo mismo
+ * para el rato en que el índice nuevo se está construyendo.
+ */
 async function ultimaLista(env, idToken, origen) {
   const proj = env.FIREBASE_PROJECT;
   const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
-  const q = {
+
+  const consulta = orderBy => ({
     structuredQuery: {
       from: [{ collectionId: 'listas_precios' }],
       where: {
@@ -857,26 +877,38 @@ async function ultimaLista(env, idToken, origen) {
           ],
         },
       },
-      orderBy: [{ field: { fieldPath: 'fecha' }, direction: 'DESCENDING' }],
+      orderBy,
       limit: 1,
     },
+  });
+
+  const porFecha    = [{ field: { fieldPath: 'fecha' }, direction: 'DESCENDING' }];
+  const porCreacion = [...porFecha, { field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }];
+
+  const traer = async (orderBy, cual) => {
+    try {
+      const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify(consulta(orderBy)),
+      });
+      // Firestore manda el link para crear el indice que falta adentro del cuerpo, asi
+      // que sin el texto un 400 no se distingue de una query mal armada.
+      if (!r.ok) { console.log('lista', origen, cual, 'no disponible', r.status, (await r.text()).slice(0, 300)); return null; }
+      const d = await r.json();
+      const doc = (d || []).find(x => x.document);
+      return doc ? campos(doc.document.fields) : null;
+    } catch (e) {
+      console.log('error trayendo lista', origen, cual, e.message);
+      return null;
+    }
   };
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-      body: JSON.stringify(q),
-    });
-    // Firestore manda el link para crear el indice que falta adentro del cuerpo, asi
-    // que sin el texto un 400 no se distingue de una query mal armada.
-    if (!r.ok) { console.log('lista', origen, 'no disponible', r.status, (await r.text()).slice(0, 300)); return null; }
-    const d = await r.json();
-    const doc = (d || []).find(x => x.document);
-    return doc ? campos(doc.document.fields) : null;
-  } catch (e) {
-    console.log('error trayendo lista', origen, e.message);
-    return null;
-  }
+
+  const lista = await traer(porCreacion, '(fecha + createdAt)');
+  if (lista) return lista;
+
+  console.log('lista', origen, ': sin resultado por createdAt, voy con el orden viejo');
+  return traer(porFecha, '(solo fecha)');
 }
 
 /**
