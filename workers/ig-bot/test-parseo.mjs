@@ -155,6 +155,13 @@ console.log('\n── construirSystem con los docs vacios ──');
   ok(conEjemplos.indexOf('EJEMPLOS Y SITUACIONES') < conEjemplos.indexOf('## EQUIPOS EN EL LOCAL'), 'va ANTES del stock real, que es el que manda');
   ok(!construirSystem({ ...vacio, conocimiento: { entrenamiento: ' ' } }).includes('EJEMPLOS Y SITUACIONES'), 'vacio no agrega el bloque');
 
+  // Accesorios: el bot decia "no tengo cargadores" con los cargadores cargados en el
+  // sistema, porque `inventario` no entraba al prompt (ni tenia permiso de leerla).
+  const conAcc = construirSystem({ ...vacio, accesorios: [{producto:'Cargador Apple 20W', categoria:'Cargadores', precio:25, moneda:'USD'}] });
+  ok(conAcc.includes('Cargador Apple 20W'), 'los accesorios entran al prompt');
+  ok(conAcc.indexOf('ACCESORIOS EN EL LOCAL') !== conAcc.indexOf('EQUIPOS EN EL LOCAL'), 'van en un bloque aparte de los equipos');
+  ok(sistema.includes('No prometas ningún accesorio'), 'sin accesorios cargados lo dice, no se los inventa');
+
   let sinNada = null;
   try { sinNada = construirSystem(); } catch (e) { sinNada = null; }
   ok(!!sinNada, 'tambien se banca que no le pasen nada');

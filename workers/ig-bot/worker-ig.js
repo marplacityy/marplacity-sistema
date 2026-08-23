@@ -469,6 +469,66 @@ async function mandarAutomatico(env, igUserId, mensajes) {
   return mandarMensajes(env, igUserId, mensajes);
 }
 
+/**
+ * Los accesorios: cargadores, fundas, vidrios, cables. Viven en `inventario`, aparte de
+ * `stock`, que son los equipos con IMEI.
+ *
+ * Hasta el 23/08/2026 el bot ni siquiera podia leer esta coleccion, asi que contestaba
+ * "cargadores originales no tengo" con los cargadores cargados en el sistema.
+ *
+ * Solo lo que tiene unidades, y NUNCA el costo: igual que en stock, de aca sale el
+ * precio de venta y nada mas.
+ */
+async function accesoriosDisponibles(env, idToken) {
+  const proj = env.FIREBASE_PROJECT;
+  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
+
+  const q = {
+    structuredQuery: {
+      from: [{ collectionId: 'inventario' }],
+      where: {
+        compositeFilter: {
+          op: 'AND',
+          filters: [
+            { fieldFilter: { field: { fieldPath: 'userId' }, op: 'EQUAL', value: { stringValue: env.OWNER_UID } } },
+            { fieldFilter: { field: { fieldPath: 'qty' }, op: 'GREATER_THAN', value: { integerValue: '0' } } },
+          ],
+        },
+      },
+      orderBy: [{ field: { fieldPath: 'qty' }, direction: 'DESCENDING' }],
+      limit: 80,
+    },
+  };
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify(q),
+    });
+    if (!r.ok) { console.log('accesorios no disponibles', r.status, (await r.text()).slice(0, 300)); return []; }
+
+    const d = await r.json();
+    return (Array.isArray(d) ? d : [])
+      .filter(x => x.document)
+      .map(x => {
+        const f = campos(x.document.fields);
+        return {
+          producto: f.nombre,
+          categoria: f.categoria || null,
+          // `sugerido` es el precio de venta al publico. En 0 significa sin cargar: va
+          // null para que el modelo no lo lea como "sale cero".
+          precio: Number(f.sugerido) > 0 ? Number(f.sugerido) : null,
+          moneda: f.moneda || 'USD',
+        };
+      })
+      .filter(a => a.producto);
+  } catch (e) {
+    console.log('error trayendo accesorios', e.message);
+    return [];
+  }
+}
+
 // ── Traer el stock disponible para que la IA sepa qué hay ─────
 // Solo campos de venta: nombre, gb, color, batería y PRECIO DE VENTA.
 // Nunca el costo — no queremos que la IA lo mencione ni por error.
@@ -629,8 +689,9 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
 
   // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
   // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
-  const [stock, conocimiento, listaMdp, listaCaba, mensajesFijos] = await Promise.all([
+  const [stock, accesorios, conocimiento, listaMdp, listaCaba, mensajesFijos] = await Promise.all([
     stockDisponible(env, idToken),
+    accesoriosDisponibles(env, idToken),
     leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`),
     ultimaLista(env, idToken, 'mdp'),
     ultimaLista(env, idToken, 'caba'),
@@ -641,7 +702,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
   // al modelo para que no prometa un precio viejo como si fuera el de hoy.
   const mdpVencida = !!(listaMdp && listaMdp.fecha !== fechaAR(Date.now()));
 
-  const sistema = construirSystem({ conocimiento, stock, listaMdp, listaCaba, mdpVencida });
+  const sistema = construirSystem({ conocimiento, stock, accesorios, listaMdp, listaCaba, mdpVencida });
   const textoCanal = mensajesFijos?.invitacionCanal || null;
 
   const usuario = texto

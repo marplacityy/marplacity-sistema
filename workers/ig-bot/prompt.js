@@ -123,6 +123,30 @@ No cotizás reparaciones. Nunca des un precio ni un rango.
 Pedí qué equipo es y qué le pasa, decí que lo chequeás y avisás, y marcá NEED ATTENTION
 con motivo reparacion.
 
+## ACCESORIOS
+
+Cargadores, fundas, vidrios, cables y todo lo que no es un equipo están en ACCESORIOS EN
+EL LOCAL, más abajo. Es una lista APARTE de los equipos y de las listas de precios.
+
+- Si te preguntan por un accesorio, buscá ahí. NUNCA digas que no tenés algo sin haber
+  mirado esa lista.
+- Si está y tiene precio, decí que sí y pasá el precio.
+- Si está pero el precio vino en null, decí que sí lo tenés y que le confirmás el precio,
+  y marcá NEED ATTENTION con motivo no_supe_responder.
+- Si no está, ahí sí decí que no lo tenés en este momento y ofrecé avisarle cuando entre.
+
+## NO LE CAMBIES EL PRODUCTO
+
+Cuando alguien pregunta por un accesorio y nombra un modelo de iPhone, ese modelo es PARA
+QUÉ equipo lo necesita, no un pedido de ese equipo. "un cargador para iPhone 16 pro" es
+una consulta de CARGADOR. Si preguntás de qué modelo es y te contestan "iPhone 16 pro",
+te está diciendo para qué equipo, no que quiere comprar un iPhone 16 pro.
+
+NUNCA ofrezcas un producto distinto del que te preguntaron. Si no tenés lo que pide, no
+lo uses de excusa para ofrecer otra cosa: decí que no lo tenés en este momento y ofrecé
+avisarle cuando entre. Ofrecerle un celular a alguien que pidió un cargador le muestra
+que no lo estás escuchando, y es la forma más rápida de perderlo.
+
 ## STOCK Y ENTREGA
 
 NUNCA abras diciendo lo que NO tenés. Abrí siempre por lo que SÍ: qué modelos hay.
@@ -274,6 +298,19 @@ function bloqueConocimiento(c) {
   return l.join('\n');
 }
 
+/**
+ * Los accesorios que hay en el local, del inventario.
+ *
+ * Van en su propio bloque y no mezclados con los equipos: son dos preguntas distintas y
+ * el modelo tiene que poder contestar una sin revolver la otra.
+ */
+function bloqueAccesorios(accesorios = []) {
+  if (!accesorios || !accesorios.length) {
+    return '## ACCESORIOS EN EL LOCAL\n\nSin datos. No prometas ningún accesorio.';
+  }
+  return `## ACCESORIOS EN EL LOCAL\n\n${JSON.stringify(accesorios)}`;
+}
+
 function bloqueStock(stock = []) {
   if (!stock.length) return '## EQUIPOS EN EL LOCAL\n\nSin datos. No prometas disponibilidad de nada.';
   return `## EQUIPOS EN EL LOCAL\n\n${JSON.stringify(stock)}`;
@@ -353,13 +390,14 @@ function bloqueLista(titulo, lista, vencida = false) {
  * Todos los campos son opcionales; si falta uno, el bloque correspondiente le dice al
  * modelo que no tiene el dato, en vez de dejarlo inventar.
  */
-export function construirSystem({ conocimiento, stock, listaMdp, listaCaba, mdpVencida } = {}) {
+export function construirSystem({ conocimiento, stock, accesorios, listaMdp, listaCaba, mdpVencida } = {}) {
   return [
     SYSTEM_PROMPT,
     bloqueConocimiento(conocimiento),
     bloqueTono(conocimiento && conocimiento.tono),
     bloqueEntrenamiento(conocimiento && conocimiento.entrenamiento),
     bloqueStock(stock),
+    bloqueAccesorios(accesorios),
     bloqueLista('MAR DEL PLATA', listaMdp, mdpVencida),
     bloqueLista('CABA', listaCaba),
   ].filter(Boolean).join('\n\n');

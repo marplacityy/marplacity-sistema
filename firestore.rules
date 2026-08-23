@@ -117,6 +117,15 @@ service cloud.firestore {
       allow read: if esBot();
     }
 
+    // Inventario: accesorios (cargadores, fundas, vidrios, cables). El bot solo lee,
+    // para saber que hay y a que precio. Hasta el 23/08/2026 no podia, y decia que no
+    // tenia cargadores mientras estaban cargados aca.
+    // OJO: igual que stock, estos documentos incluyen el costo. El Worker filtra y solo
+    // le pasa a la IA el precio de venta, pero el permiso es sobre el doc entero.
+    match /inventario/{docId} {
+      allow read: if esBot();
+    }
+
     // Colecciones de datos: todas siguen el mismo patron userId.
     function esColeccionDeDatos(col) {
       return col in [

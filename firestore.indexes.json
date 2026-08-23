@@ -49,6 +49,14 @@
       ]
     },
     {
+      "collectionGroup": "inventario",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "qty", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "listas_precios",
       "queryScope": "COLLECTION",
       "fields": [
