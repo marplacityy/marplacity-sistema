@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla } from './worker-ig.js';
 import { construirSystem } from './prompt.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
@@ -158,6 +158,20 @@ console.log('\n── construirSystem con los docs vacios ──');
   let sinNada = null;
   try { sinNada = construirSystem(); } catch (e) { sinNada = null; }
   ok(!!sinNada, 'tambien se banca que no le pasen nada');
+}
+
+console.log('\n── motivoDeLaFalla ──');
+// Paso el 22/08/2026: se acabo el credito de la API y la bandeja mostraba "El bot no
+// supo que contestar" en cada mensaje. El sintoma no se parecia en nada a la causa y
+// hubo que ir a los logs del Worker para darse cuenta.
+{
+  const sinCredito = JSON.stringify({error:{message:'Your credit balance is too low to access the Anthropic API.'}});
+  ok(/SIN CRÉDITO/.test(motivoDeLaFalla(400, sinCredito)), 'sin credito se nombra por su nombre');
+  ok(/console\.anthropic\.com/.test(motivoDeLaFalla(400, sinCredito)), 'y dice donde se arregla');
+  ok(/credencial/.test(motivoDeLaFalla(401, '{}')), '401 es la credencial');
+  ok(/esperar/.test(motivoDeLaFalla(429, '{}')), '429 es rate limit');
+  ok(/529/.test(motivoDeLaFalla(529, '{}')), '5xx trae el codigo');
+  ok(motivoDeLaFalla(418, '') === 'La API de Anthropic devolvió 418', 'lo desconocido no se inventa');
 }
 
 console.log('\n── fechaAR: la lista de hoy tiene que seguir siendo de hoy ──');

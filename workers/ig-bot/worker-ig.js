@@ -630,7 +630,15 @@ async function pensarRespuesta(texto, adjuntos, env) {
       }),
     });
 
-    if (!r.ok) { console.log('IA error', r.status, (await r.text()).slice(0, 200)); return { ...SIN_RESPUESTA }; }
+    if (!r.ok) {
+      const cuerpo = await r.text();
+      console.log('IA error', r.status, cuerpo.slice(0, 300));
+      // El resumen es lo unico de esto que se ve desde la bandeja. Sin el, un problema
+      // de la API (sin credito, rate limit, servicio caido) se lee igual que "el modelo
+      // dudo", y son cosas muy distintas: una se arregla contestando a mano, la otra
+      // deja al bot mudo con TODOS hasta que alguien vaya a mirar los logs.
+      return { ...SIN_RESPUESTA, resumen: `⚠️ ${motivoDeLaFalla(r.status, cuerpo)} — el bot no pudo contestar` };
+    }
 
     const d = await r.json();
     const crudo = (d.content?.map(x => x.text || '').join('') || d.text || '').trim();
@@ -645,6 +653,21 @@ async function pensarRespuesta(texto, adjuntos, env) {
     console.log('IA fallo:', e.message);
     return { ...SIN_RESPUESTA };
   }
+}
+
+/**
+ * Traduce el error de la API a algo accionable para el que mira la bandeja.
+ *
+ * Interesa la diferencia entre "hay que poner plata", "hay que esperar" y "hay que
+ * revisar", que son tres acciones distintas y ninguna es contestar el mensaje a mano.
+ */
+export function motivoDeLaFalla(status, cuerpo) {
+  const txt = String(cuerpo || '');
+  if (/credit balance is too low/i.test(txt)) return 'SIN CRÉDITO en la API de Anthropic: cargá saldo en console.anthropic.com';
+  if (status === 401 || status === 403)       return 'La API de Anthropic rechazó la credencial (ANTHROPIC_KEY)';
+  if (status === 429)                         return 'La API de Anthropic pidió esperar (demasiados mensajes juntos)';
+  if (status >= 500)                          return `La API de Anthropic falló (${status})`;
+  return `La API de Anthropic devolvió ${status}`;
 }
 
 /**
