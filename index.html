@@ -53,6 +53,13 @@
   .tipo-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:100px;margin-left:6px;vertical-align:middle;}
   .tipo-fijo{background:#EEF3FB;color:#2563A8;}
   .tipo-casual{background:var(--bg);color:var(--text3);border:1px solid var(--border);}
+  /* Chat de la bandeja del bot */
+  .bd-chat{background:var(--bg);border-radius:var(--radius-sm);padding:10px 12px;margin:10px 0;max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;}
+  .bd-msg{max-width:78%;padding:7px 11px;border-radius:14px;font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
+  .bd-de-cliente{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px;}
+  .bd-de-bot{align-self:flex-end;background:#DCF3E4;color:#14532D;border-bottom-right-radius:4px;}
+  .bd-hora{font-size:10px;color:var(--text3);margin-top:3px;text-align:right;}
+  .bd-chat-vacio{font-size:12px;color:var(--text3);text-align:center;padding:6px;}
   .proveedor-alerta{font-size:12px;padding:8px 10px;border-radius:var(--radius-sm);margin-top:8px;}
   .alerta-atencion{background:#FEF9E7;color:#854F0B;}
   .alerta-urgente{background:#FDECEC;color:#B42318;font-weight:600;}
@@ -2478,6 +2485,14 @@
           <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Escribí con tus palabras cómo querés que se exprese: si tutea o vosea, si usa emojis, si los mensajes son cortos o largos, qué muletillas usás vos. <b>Esto pisa las reglas de estilo que el bot trae de fábrica</b>, así que es el campo para ir afinando hasta que suene como vos. No cambia los precios ni cuándo te pasa una consulta a la bandeja.</p>
           <div class="field"><textarea id="kb-tono" placeholder="Ej: hablale de vos, nada de usted. Mensajes cortos, de un renglón. Sin emojis. Si no entendés algo, preguntá en vez de suponer. Cuando cierran la compra, decile que lo esperás por el local." style="height:130px;"></textarea></div>
           <button class="btn-save" id="btn-kb-guardar-tono" onclick="guardarConocimiento()">Guardar</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Entrenamiento — ejemplos y situaciones</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Contale cómo resolvés vos las situaciones que se repiten: cómo encarás una permuta, qué decís cuando te regatean, cómo cerrás una venta, qué hacés si preguntan por algo que no tenés. Pegá charlas reales tuyas si querés — el bot aprende del criterio, no copia las palabras.</p>
+          <p style="font-size:12px;color:var(--text3);margin-bottom:12px;"><b>Los precios que pongas acá el bot los toma como inventados</b> y siempre cotiza con el stock y las listas reales. Escribí tranquilo.</p>
+          <div class="field"><textarea id="kb-entrenamiento" placeholder="Ej:&#10;&#10;— Si preguntan por un modelo que no tengo, no digo solo &quot;no tengo&quot;: le ofrezco lo más parecido que sí tengo y le digo el precio.&#10;&#10;— Si me regatean: aguanto el precio una vez, y si insisten le digo que pagando en efectivo es el mejor precio que tengo.&#10;&#10;— Cuando dicen que lo llevan: le digo que lo separo, le paso la dirección y le pregunto cuándo pasa." style="height:220px;font-size:13px;"></textarea></div>
+          <button class="btn-save" id="btn-kb-guardar-entrenamiento" onclick="guardarConocimiento()">Guardar</button>
         </div>
 
         <div class="card">
@@ -10452,6 +10467,21 @@ async function guardarCfgBot(campos, aviso){
   }
 }
 
+// El ida y vuelta de la conversación. El historial se empezó a guardar el 22/08/2026:
+// las charlas anteriores a eso solo tienen el último mensaje, así que se muestra ese y
+// se avisa. No se puede recuperar lo anterior — Instagram no lo devuelve.
+function renderChat(x){
+  const h = Array.isArray(x.historial) ? x.historial : [];
+  if(!h.length){
+    return `<div class="bd-chat"><div class="bd-chat-vacio">${x.ultimoMensaje
+      ? `«${esc(x.ultimoMensaje)}»<br><span style="font-size:11px;">La charla completa se guarda desde el próximo mensaje.</span>`
+      : 'Sin mensajes guardados todavía.'}</div></div>`;
+  }
+  const hora = v => { const t = msDe(v); return t ? new Date(t).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}) : ''; };
+  return `<div class="bd-chat">${h.map(m=>`
+    <div class="bd-msg ${m.de==='bot'?'bd-de-bot':'bd-de-cliente'}">${esc(m.texto)}<div class="bd-hora">${hora(m.fecha)}</div></div>`).join('')}</div>`;
+}
+
 function renderBandeja(){
   renderSwitchBot();
   const ahora = Date.now();
@@ -10478,10 +10508,10 @@ function renderBandeja(){
           <div style="font-weight:600;font-size:15px;">💬 ${esc(quien)}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:2px;">${esc(MOTIVOS_BOT[x.motivo] || x.motivo || 'Sin motivo')} · último mensaje ${t?haceCuanto(ahora-t):'sin fecha'}${x.ultimoProducto?' · '+esc(x.ultimoProducto):''}</div>
           ${x.resumen?`<div style="font-size:13px;color:var(--text2);margin-top:6px;">${esc(x.resumen)}</div>`:''}
-          ${x.ultimoMensaje?`<div style="font-size:12px;color:var(--text3);margin-top:4px;font-style:italic;">«${esc(x.ultimoMensaje)}»</div>`:''}
         </div>
         <span class="est-badge ${vencida?'est-abandono':'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>
       </div>
+      ${renderChat(x)}
       ${vencida?`<div class="proveedor-alerta alerta-urgente">⏰ <b>Pasaron las 24 h</b> — Instagram ya no deja que el bot conteste. Escribile vos desde la app y después marcala como contestada.</div>`:''}
       <div class="field" style="margin:10px 0 8px;">
         <label>${vencida?'Respuesta que había preparado el bot (no se puede mandar desde acá)':'Respuesta — editala si hace falta, una línea por mensaje'}</label>
@@ -10495,6 +10525,9 @@ function renderBandeja(){
       </div>
     </div>`;
   }).join('') || '<div class="empty">No hay nada esperando: el bot viene contestando todo solo. 🎉</div>';
+
+  // Cada chat arranca abajo, en lo último que se dijo: es lo que estás por contestar.
+  document.querySelectorAll('#bd-list .bd-chat').forEach(c=>{ c.scrollTop = c.scrollHeight; });
 }
 
 // Vaciar la bandeja de una. NO borra los documentos: los marca como contestados, igual
@@ -10557,7 +10590,16 @@ window.aprobarBandeja = async function(id){
 
     // Recién con el DM afuera se saca de la bandeja. Si el envío falla, la conversación
     // se queda acá y se puede reintentar.
+    // Lo que aprobaste entra al hilo igual que lo que manda el bot: si no, el chat de
+    // la próxima vez que escriba este cliente aparece sin tus respuestas en el medio.
+    // El tope es el mismo que usa el Worker (MAX_HISTORIAL).
+    const historial = [
+      ...(Array.isArray(x.historial) ? x.historial : []),
+      ...mensajes.map(t=>({ de:'bot', texto:t, fecha:new Date() })),
+    ].slice(-60);
+
     await updateDoc(doc(db,'conversaciones',id), {
+      historial,
       mensajes,
       sugerencia: mensajes.join('\n'),
       respondido: true,
@@ -10608,7 +10650,7 @@ window.resolverBandeja = async function(id){
 // por lista cargada. OJO: el precio de esas listas YA ES el precio final al
 // público — no se le aplica margen en ningún punto del flujo.
 
-const KB_CAMPOS = ['tono','horarios','direccion','mediosPago','garantia','politicaSena','comoLlegar','notasExtra'];
+const KB_CAMPOS = ['tono','entrenamiento','horarios','direccion','mediosPago','garantia','politicaSena','comoLlegar','notasExtra'];
 const KB_ORIGENES = { mdp: 'Mar del Plata', caba: 'CABA' };
 
 let kbParseada = { mdp: [], caba: [] };
@@ -10640,7 +10682,7 @@ function pintarConocimiento(){
 // Guarda TODO el conocimiento, lo llame el botón del tono o el de los datos: los dos
 // escriben el mismo doc y los campos se leen de la misma lista.
 window.guardarConocimiento = async function(){
-  const btns = ['btn-kb-guardar-tono','btn-kb-guardar-datos']
+  const btns = ['btn-kb-guardar-tono','btn-kb-guardar-entrenamiento','btn-kb-guardar-datos']
     .map(id=>document.getElementById(id)).filter(Boolean);
   btns.forEach(b=>{ b.disabled = true; b.textContent = 'Guardando...'; });
   setSyncDot('syncing');

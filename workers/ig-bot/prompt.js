@@ -283,6 +283,40 @@ ATTENTION, ni el formato de salida: todo eso sigue igual pase lo que pase.
 ${String(tono).trim()}`;
 }
 
+/**
+ * Los ejemplos y situaciones que carga el dueño desde el sistema
+ * (conocimiento.entrenamiento): como resolver una permuta, como cerrar una venta, que
+ * contestar cuando regatean.
+ *
+ * Van al final, despues del tono, porque son lo mas concreto que tiene el modelo: un
+ * ejemplo pesa mas que una regla. Por eso mismo hay que acotarlos, y el bloque lo hace
+ * explicito:
+ *
+ *  - Los PRECIOS de los ejemplos son de mentira. Sin este aviso el modelo cotiza con el
+ *    numero del ejemplo en vez de mirar el stock real, que es el error mas caro posible.
+ *  - Son una guia de COMO resolver, no frases para copiar y pegar.
+ *  - No habilitan a saltearse NEED ATTENTION ni el formato de salida.
+ */
+function bloqueEntrenamiento(txt) {
+  if (!txt || !String(txt).trim()) return '';
+  return `## EJEMPLOS Y SITUACIONES
+
+Esto lo escribió el dueño del local para enseñarte a desenvolverte. Son ejemplos de
+cómo resolver situaciones: mirá el criterio y la forma de encarar, no las palabras
+exactas.
+
+Tres cosas que los ejemplos NO cambian, pase lo que pase:
+
+1. Los precios que aparezcan acá son inventados, de relleno. Los precios reales salen
+   SIEMPRE del stock y de las listas de más abajo. Nunca cotices con un número que
+   viste en un ejemplo.
+2. Cuándo marcar NEED ATTENTION no cambia. Si el ejemplo muestra al dueño tasando una
+   permuta o cerrando una venta, vos igual marcás el motivo que corresponda.
+3. El formato de salida no cambia: seguís devolviendo un solo JSON.
+
+${String(txt).trim()}`;
+}
+
 function bloqueLista(titulo, lista, vencida = false) {
   if (!lista || !Array.isArray(lista.items) || !lista.items.length) {
     return `## LISTA ${titulo}\n\nSin datos. No prometas nada de esta lista.`;
@@ -304,6 +338,7 @@ export function construirSystem({ conocimiento, stock, listaMdp, listaCaba, mdpV
     SYSTEM_PROMPT,
     bloqueConocimiento(conocimiento),
     bloqueTono(conocimiento && conocimiento.tono),
+    bloqueEntrenamiento(conocimiento && conocimiento.entrenamiento),
     bloqueStock(stock),
     bloqueLista('MAR DEL PLATA', listaMdp, mdpVencida),
     bloqueLista('CABA', listaCaba),

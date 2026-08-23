@@ -96,6 +96,7 @@ misma persona repetida en cinco filas.
 | `confianza` | string | `alta` / `baja`. Las `baja` suben a la bandeja |
 | `resumen` | string | una línea de qué se habló, para la bandeja |
 | `ultimoProducto` | string | el equipo que consultó, para el seguimiento |
+| `historial` | array | el ida y vuelta de la charla: `{de, texto, fecha}`, últimas 60 líneas |
 | `mensajes` | array | lo que el bot contestó, un elemento por DM |
 | `sugerencia` | string | lo mismo en texto plano |
 | `respondido` | bool | si salió al menos un DM |
@@ -107,6 +108,15 @@ misma persona repetida en cinco filas.
 | `revisado` | bool | |
 | `adjuntos`, `urlsAdjuntos`, `tieneImagen`, `tieneAudio` | | qué mandó el cliente |
 | `userId` | string | el dueño, para las reglas de Firestore |
+
+**El historial** guarda las últimas 60 líneas de la conversación, para que la bandeja
+muestre el chat completo y no una frase suelta. Se arma leyendo el doc antes de
+escribirlo, porque la REST API no tiene un *append* simple: si entran dos DM en el mismo
+instante se puede perder una línea, y es un precio aceptable —es contexto, no el
+registro contable— a cambio de no meter transacciones en el camino caliente del webhook.
+Solo se anota lo que **realmente salió**: si el envío se cortó a la mitad, el historial
+refleja lo que el cliente vio. Empezó a guardarse el 22/08/2026; lo anterior no se puede
+recuperar, Instagram no lo devuelve.
 
 Dos detalles del `PATCH` que importan:
 
@@ -264,6 +274,23 @@ salteaba llamando a `mandarDM()` directo.
 Si el doc no existe o no se puede leer, el bot queda **encendido y para todos**: es el
 estado inicial de cualquier instalación. El respaldo duro, si hiciera falta cortar de raíz sin depender
 de Firestore, sigue siendo sacar `IG_TOKEN` del panel de Cloudflare.
+
+## Lo que se afina desde el sistema
+
+Tres campos de la Base de conocimiento entran al prompt y se leen en cada mensaje, así
+que se tocan y el próximo DM ya sale distinto, sin deploys:
+
+| campo | para qué |
+|---|---|
+| `tono` | cómo escribe: voseo, emojis, largo de los mensajes. **Pisa** la sección CÓMO ESCRIBÍS del prompt |
+| `entrenamiento` | ejemplos y situaciones: cómo encarar una permuta, cómo cerrar, qué hacer si regatean |
+| el resto | datos duros: horarios, dirección, medios de pago, garantía |
+
+Los dos primeros los escribe el dueño en lenguaje suelto, así que cada bloque lleva su
+candado: el de tono aclara que solo cambia la forma de escribir, y el de entrenamiento
+que **los precios de los ejemplos son inventados** y que los reales salen siempre del
+stock y las listas. Sin ese aviso el modelo cotiza con el número del ejemplo, que es el
+error más caro que puede cometer.
 
 ## Una sola cuenta de Instagram
 

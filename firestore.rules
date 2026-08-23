@@ -86,7 +86,7 @@ service cloud.firestore {
           'igUserId', 'userId', 'fecha', 'ultimoMensajeCliente', 'ultimoMensaje',
           'adjuntos', 'urlsAdjuntos', 'tieneImagen', 'tieneAudio',
           'estado', 'confianza', 'resumen', 'ultimoProducto', 'igUsuario',
-          'mensajes', 'sugerencia', 'respondido', 'revisado',
+          'mensajes', 'sugerencia', 'respondido', 'revisado', 'historial',
           'necesitaAtencion', 'motivo', 'prioridad', 'seguimientoEnviado'
         ]);
       }

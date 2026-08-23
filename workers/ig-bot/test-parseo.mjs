@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR } from './worker-ig.js';
 import { construirSystem } from './prompt.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
@@ -148,10 +148,26 @@ console.log('\n── construirSystem con los docs vacios ──');
   ok(!construirSystem({ ...vacio, conocimiento: { tono: '   ' } }).includes('AJUSTES DEL DUEÑO'), 'vacio no agrega el bloque');
   ok(!sistema.includes('AJUSTES DEL DUEÑO'), 'sin tono cargado tampoco');
 
+  // Los ejemplos de entrenamiento
+  const conEjemplos = construirSystem({ ...vacio, conocimiento: { entrenamiento: 'cliente: cuanto el 13?\nvos: 400 usd' } });
+  ok(conEjemplos.includes('EJEMPLOS Y SITUACIONES'), 'el entrenamiento entra al prompt');
+  ok(conEjemplos.includes('inventados'), 'avisa que los precios de los ejemplos son de mentira');
+  ok(conEjemplos.indexOf('EJEMPLOS Y SITUACIONES') < conEjemplos.indexOf('## EQUIPOS EN EL LOCAL'), 'va ANTES del stock real, que es el que manda');
+  ok(!construirSystem({ ...vacio, conocimiento: { entrenamiento: ' ' } }).includes('EJEMPLOS Y SITUACIONES'), 'vacio no agrega el bloque');
+
   let sinNada = null;
   try { sinNada = construirSystem(); } catch (e) { sinNada = null; }
   ok(!!sinNada, 'tambien se banca que no le pasen nada');
 }
+
+console.log('\n── fechaAR: la lista de hoy tiene que seguir siendo de hoy ──');
+// Con toISOString() se comparaba contra la fecha UTC. De 21:00 a 23:59 de Argentina eso
+// ya es mañana, asi que la lista cargada esa tarde quedaba marcada como vieja y el bot
+// hedgeaba los precios toda la noche.
+ok(fechaAR(Date.parse('2026-08-21T14:00:00Z')) === '2026-08-21', 'media tarde');
+ok(fechaAR(Date.parse('2026-08-22T02:00:00Z')) === '2026-08-21', 'las 23 AR siguen siendo el dia 21', fechaAR(Date.parse('2026-08-22T02:00:00Z')));
+ok(fechaAR(Date.parse('2026-08-22T02:59:00Z')) === '2026-08-21', 'un minuto antes de medianoche AR');
+ok(fechaAR(Date.parse('2026-08-22T03:00:00Z')) === '2026-08-22', 'medianoche AR ya es el dia siguiente');
 
 console.log('\n── un solo camino de envio automatico ──');
 // Ya paso una vez: el interruptor se chequeaba adentro de mandarMensajes() y el cron se

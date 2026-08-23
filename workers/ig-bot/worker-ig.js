@@ -208,6 +208,17 @@ async function procesarMensaje(ev, env) {
   const igUsuario = await pedidoUsuario;
   if (igUsuario) doc.igUsuario = igUsuario;
 
+  // El ida y vuelta de esta tanda: primero lo que escribió el cliente, después lo que
+  // contestó el bot. Solo se anota lo que REALMENTE salió: si el envío se cortó a la
+  // mitad, el historial tiene que reflejar lo que el cliente vio, no lo que se pensaba
+  // mandar. Si el bot está apagado o en prueba, no sale nada y solo queda el del cliente.
+  const idToken = await tokenDelBot(env);
+  if (idToken) {
+    const nuevas = [linea('cliente', texto || (adjuntos[0] ? `[${adjuntos[0]}]` : ''), fechaMensaje)];
+    ia.mensajes.slice(0, enviados).forEach(t => nuevas.push(linea('bot', t, new Date())));
+    doc.historial = await historialCon(env, idToken, senderId, nuevas);
+  }
+
   // Solo va si el modelo nombró un equipo. Si este mensaje no habla de ninguno el campo
   // no entra en la máscara del PATCH, así que el doc conserva el de la consulta
   // anterior en vez de quedarse sin nada para el seguimiento.
@@ -235,6 +246,30 @@ async function usuarioDeIG(env, igUserId) {
     return null;
   }
 }
+
+// ── El historial de la conversación ───────────────────────────
+
+// Cuantas lineas se guardan por conversacion. Alcanza de sobra para entender de que se
+// venia hablando, y sin tope el doc crece para siempre (Firestore corta en 1 MB).
+const MAX_HISTORIAL = 60;
+
+/**
+ * Agrega lineas al historial de la charla y devuelve el array completo, recortado.
+ *
+ * Hay que leer el doc antes de escribirlo, porque la REST API no tiene un "append"
+ * simple. Eso abre una ventana chica: si entran dos DM en el mismo instante, los dos
+ * leen el mismo historial y el segundo pisa al primero, y se pierde una linea. Es
+ * aceptable —el historial es contexto, no el registro contable— y a cambio evita
+ * meter transacciones en el camino caliente del webhook.
+ */
+async function historialCon(env, idToken, igUserId, nuevas) {
+  const previo = await leerDoc(env, idToken, `conversaciones/${igUserId}`);
+  const viejo = Array.isArray(previo && previo.historial) ? previo.historial : [];
+  return [...viejo, ...nuevas].slice(-MAX_HISTORIAL);
+}
+
+// Una linea del historial. `de` es 'cliente' o 'bot'.
+const linea = (de, texto, fecha) => ({ de, texto: String(texto || '').slice(0, 1000), fecha });
 
 // ── El interruptor ────────────────────────────────────────────
 
@@ -525,6 +560,17 @@ async function ultimaLista(env, idToken, origen) {
   }
 }
 
+/**
+ * La fecha de un instante segun el reloj argentino.
+ *
+ * Antes esto era `new Date().toISOString()`, o sea la fecha UTC. Despues de las 21:00 de
+ * Argentina eso ya es el dia siguiente, asi que una lista cargada esa misma tarde quedaba
+ * marcada como vieja y el prompt le hacia decir al bot que los precios podian haber
+ * cambiado, todas las noches. El sistema guarda `fecha` con la fecha LOCAL (today() en
+ * index.html), asi que hay que compararla contra la misma.
+ */
+export const fechaAR = ms => new Date(ms + AR).toISOString().split('T')[0];
+
 // ── La IA: clasifica y redacta una respuesta ──────────────────
 
 // Lo que devolvemos cuando la IA no contestó o contestó algo que no se pudo parsear.
@@ -557,8 +603,7 @@ async function pensarRespuesta(texto, adjuntos, env) {
 
   // La lista de MDP es la del día: si es de una fecha anterior, el prompt se lo avisa
   // al modelo para que no prometa un precio viejo como si fuera el de hoy.
-  const hoy = new Date().toISOString().split('T')[0];
-  const mdpVencida = !!(listaMdp && listaMdp.fecha !== hoy);
+  const mdpVencida = !!(listaMdp && listaMdp.fecha !== fechaAR(Date.now()));
 
   const sistema = construirSystem({ conocimiento, stock, listaMdp, listaCaba, mdpVencida });
   const textoCanal = mensajesFijos?.invitacionCanal || null;
@@ -949,18 +994,25 @@ async function patchDoc(env, idToken, name, doc) {
  * se resolvió seguiría arrastrando el `motivo` viejo y no se iría nunca de la bandeja.
  * Para dejar un campo como está hay que no ponerlo en el doc (ver `ultimoProducto`).
  */
+// Un valor suelto, en la representacion por tipo de la REST API.
+function valorDe(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (v instanceof Date)      return { timestampValue: v.toISOString() };
+  if (typeof v === 'string')  return { stringValue: v };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  // prioridad va como entero: el cron patchea integerValue y la bandeja ordena por este
+  // campo, así que conviene que todos los docs lo guarden del mismo tipo.
+  if (typeof v === 'number')  return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  if (Array.isArray(v))       return { arrayValue: { values: v.map(valorDe) } };
+  if (typeof v === 'object')  return { mapValue: { fields: aFields(v) } };
+  return { stringValue: String(v) };
+}
+
 export function aFields(doc) {
   const fields = {};
   for (const [k, v] of Object.entries(doc)) {
     if (v === undefined) continue;
-    if (v === null)                  fields[k] = { nullValue: null };
-    else if (v instanceof Date)      fields[k] = { timestampValue: v.toISOString() };
-    else if (typeof v === 'string')  fields[k] = { stringValue: v };
-    else if (typeof v === 'boolean') fields[k] = { booleanValue: v };
-    // prioridad va como entero: el cron patchea integerValue y la bandeja ordena por
-    // este campo, así que conviene que todos los docs lo guarden del mismo tipo.
-    else if (typeof v === 'number')  fields[k] = Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
-    else if (Array.isArray(v))       fields[k] = { arrayValue: { values: v.map(x => ({ stringValue: String(x) })) } };
+    fields[k] = valorDe(v);
   }
   return fields;
 }
