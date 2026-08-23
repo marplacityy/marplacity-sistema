@@ -207,7 +207,18 @@ Vive en Firestore, en `config/mensajes` campo `invitacionCanal`. El modelo solo 
 la marca `[[CANAL]]` donde va, y el Worker la reemplaza por el texto real. Si el doc no
 está cargado, la marca se descarta en vez de mandarse literal al cliente.
 
-Para cargarlo o actualizarlo (Node 18+, no instala nada):
+**Se edita desde el sistema**, en Base de conocimiento → *Mensaje del canal de difusión*.
+El script de abajo quedó solo para la carga inicial: editarlo desde la app evita pasar la
+contraseña por la línea de comandos, que es exactamente cómo se termina filtrando.
+
+**Sin links.** Instagram rechaza los mensajes que llevan un enlace de invitación
+(`ig.me/j/...`) con *"Link can't be shared"* (error 508, subcode 2534122). Ese mensaje no
+llega **y** corta el envío de los que venían atrás, así que la conversación cae en la
+bandeja como si hubiera fallado otra cosa. Pasó el 22/08/2026 con un cliente real. El
+texto ahora refiere al perfil en vez de linkear, y el campo del sistema avisa si detecta
+un link.
+
+Para la carga inicial (Node 18+, no instala nada):
 
 ```bash
 MC_EMAIL='tu@mail.com' MC_PASSWORD='tu-clave' node workers/ig-bot/cargar-mensajes.mjs

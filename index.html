@@ -1142,7 +1142,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-F</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.22-G</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2498,6 +2498,14 @@
         </div>
 
         <div class="card">
+          <div class="card-title">Mensaje del canal de difusión</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Este mensaje el bot lo manda <b>textual</b>, sin pasar por la IA, cuando invita al canal. Por eso está escrito en primera persona del plural: si el modelo lo tuviera a la vista, le contagiaría ese "nosotros" al resto de la conversación.</p>
+          <p style="font-size:12px;color:var(--neg);margin-bottom:12px;"><b>No pongas links.</b> Instagram rechaza los mensajes con enlaces de invitación (<i>"Link can't be shared"</i>): el mensaje no llega y encima corta la respuesta a la mitad. Referí al perfil en vez de linkear.</p>
+          <div class="field"><textarea id="kb-canal" style="height:150px;font-size:13px;" placeholder="Para ver los precios de todo tenemos un canal de difusión: lo encontrás en nuestro perfil..."></textarea></div>
+          <button class="btn-save" id="btn-kb-guardar-canal" onclick="guardarCanal()">Guardar</button>
+        </div>
+
+        <div class="card">
           <div class="card-title">Datos del local</div>
           <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Escribilo como se lo contarías a un cliente: el bot usa este texto tal cual para responder. Dejá vacío lo que no aplique.</p>
           <div class="field"><label>Horarios de atención</label><textarea id="kb-horarios" placeholder="Lunes a viernes de 10 a 19, sábados de 10 a 14..."></textarea></div>
@@ -2824,6 +2832,7 @@ const amortsCol = collection(db, 'amorts');
 const listasCol = collection(db, 'listas_precios');
 const convsCol = collection(db, 'conversaciones');   // DMs de Instagram, un doc por cliente
 const botDoc = doc(db, 'config', 'bot');             // el interruptor del bot de IG
+const mensajesDoc = doc(db, 'config', 'mensajes');   // mensajes que el bot manda textuales
 let cfgDoc = null; // se setea al loguear: doc(db,'config',uid)
 let conocDoc = null; // idem: doc(db,'conocimiento',uid)
 
@@ -2849,6 +2858,7 @@ let listasItems = [];        // listas_precios: una lista de precios al público
 let conoc = {};              // conocimiento/{uid}: datos del local para el bot de IG
 let convsItems = [];         // conversaciones que necesitan atención (la bandeja del bot)
 let botCfg = {activo:true, modo:'todos', cuentasPrueba:[]};   // config/bot: el interruptor
+let mensajesFijos = {};      // config/mensajes: lo que el bot manda textual, sin pasar por la IA
 let icats = ['Accesorios','Repuestos','Fundas','Vidrios','Cargadores','Cables','Insumos','Otros'];
 let repTab = 'activas';
 let pagosFijosItems = [];
@@ -2986,6 +2996,11 @@ async function init() {
         cuentasPrueba: Array.isArray(d.cuentasPrueba) ? d.cuentasPrueba.map(String) : [],
       };
       if(currentPage==='bandeja') deb('bd', renderBandeja);
+      setSyncDot('ok');
+    }, snapErr);
+    onSnapshot(mensajesDoc, snap => {
+      mensajesFijos = snap.exists() ? snap.data() : {};
+      if(currentPage==='conocimiento') pintarConocimiento();
       setSyncDot('ok');
     }, snapErr);
     onSnapshot(conocDoc, snap => {
@@ -10806,6 +10821,13 @@ window.setKbTab = function(tab, btn){
 // Vuelca el doc a los textareas. No pisa el campo que se está editando: el
 // snapshot vuelve también después de guardar y movería el cursor.
 function pintarConocimiento(){
+  // El mensaje del canal vive en otro doc (config/mensajes), no en el de conocimiento:
+  // el bot lo lee aparte porque lo manda textual.
+  const canal = document.getElementById('kb-canal');
+  if(canal && canal !== document.activeElement){
+    const v = mensajesFijos.invitacionCanal || '';
+    if(canal.value !== v) canal.value = v;
+  }
   KB_CAMPOS.forEach(k=>{
     const el = document.getElementById('kb-'+k);
     if(!el || el===document.activeElement) return;
@@ -10813,6 +10835,23 @@ function pintarConocimiento(){
     if(el.value !== v) el.value = v;
   });
 }
+
+// El mensaje del canal se guarda aparte porque va a otro doc. Antes solo se podía
+// cambiar corriendo cargar-mensajes.mjs con la contraseña en la línea de comandos, que
+// es exactamente cómo se termina filtrando una credencial.
+window.guardarCanal = async function(){
+  const btn = document.getElementById('btn-kb-guardar-canal');
+  const texto = (document.getElementById('kb-canal').value||'').trim();
+  if(/https?:\/\/|ig\.me/i.test(texto) && !confirm('Ese texto tiene un link.\n\nInstagram rechaza los mensajes con enlaces de invitación: no le va a llegar al cliente y encima va a cortar la respuesta a la mitad.\n\n¿Guardar igual?')) return;
+
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  setSyncDot('syncing');
+  try{
+    await setDoc(mensajesDoc, withUser({ invitacionCanal: texto, updatedAt: serverTimestamp() }), {merge:true});
+    showToast('Guardado ✓ — el bot lo usa desde el próximo mensaje');
+  }catch(e){ console.error(e); showToast('Error al guardar: '+e.message, true); setSyncDot('error'); }
+  btn.disabled = false; btn.textContent = 'Guardar';
+};
 
 // Guarda TODO el conocimiento, lo llame el botón del tono o el de los datos: los dos
 // escriben el mismo doc y los campos se leen de la misma lista.

@@ -175,7 +175,7 @@ CUÁNDO MANDARLO:
 
   El texto, como referencia de lo que hay cargado (472 caracteres):
 
-  Para ver los precios de todo, te invito a nuestro canal de difusión haciendo click en el enlace! Acá mandamos todo lo q va ingresando y podes ver q tenemos deslizando hacia arriba en la conversación . Todos los precios q veas son en dólar billete y son válidos solo pagando en efectivo. Por otro medios de pago ,consultas y permutas comunícate con nosotros o pasa directamente por el local en Avellaneda 1239 de 10.00 a 18.00 corrido.     https://ig.me/j/AbYnJMBiH5crJae0/
+  Para ver los precios de todo tenemos un canal de difusión: lo encontrás en nuestro perfil. Ahí mandamos todo lo que va ingresando y podés ver lo que tenemos deslizando hacia arriba en la conversación. Todos los precios que veas son en dólar billete y son válidos solo pagando en efectivo. Por otros medios de pago, consultas y permutas escribinos por acá o pasá directamente por el local, en Avellaneda 1239 de 10.00 a 18.00 corrido.
 -->
 
 

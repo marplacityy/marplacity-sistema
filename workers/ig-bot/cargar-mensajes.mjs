@@ -29,10 +29,15 @@ const EMAIL    = process.env.MC_EMAIL;
 const PASSWORD = process.env.MC_PASSWORD;
 const SOLO_VER = process.argv.includes('--ver');
 
-// TEXTUAL. No lo reformatees: los espacios raros (" ." / " ,c" / los espacios antes
-// del link) son los del mensaje original y se mandan tal cual.
+// TEXTUAL: se manda carácter por carácter, sin pasar por el modelo.
+//
+// SIN LINK, a propósito. La versión anterior terminaba con https://ig.me/j/... y Meta
+// la rechazaba con "Link can't be shared" (error 508 / subcode 2534122): ese mensaje
+// NUNCA llegaba, y encima cortaba el envío de la respuesta, así que la conversación
+// caía en la bandeja como si hubiera fallado algo. Comprobado el 22/08/2026 con un
+// cliente real. Si alguna vez volvés a poner un link acá, probalo antes con un DM.
 const INVITACION_CANAL =
-  'Para ver los precios de todo, te invito a nuestro canal de difusión haciendo click en el enlace! Acá mandamos todo lo q va ingresando y podes ver q tenemos deslizando hacia arriba en la conversación . Todos los precios q veas son en dólar billete y son válidos solo pagando en efectivo. Por otro medios de pago ,consultas y permutas comunícate con nosotros o pasa directamente por el local en Avellaneda 1239 de 10.00 a 18.00 corrido.     https://ig.me/j/AbYnJMBiH5crJae0/';
+  'Para ver los precios de todo tenemos un canal de difusión: lo encontrás en nuestro perfil. Ahí mandamos todo lo que va ingresando y podés ver lo que tenemos deslizando hacia arriba en la conversación. Todos los precios que veas son en dólar billete y son válidos solo pagando en efectivo. Por otros medios de pago, consultas y permutas escribinos por acá o pasá directamente por el local, en Avellaneda 1239 de 10.00 a 18.00 corrido.';
 
 function salir(msg) { console.error(msg); process.exit(1); }
 
