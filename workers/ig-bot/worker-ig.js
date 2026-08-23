@@ -495,8 +495,14 @@ async function accesoriosDisponibles(env, idToken) {
           ],
         },
       },
-      orderBy: [{ field: { fieldPath: 'qty' }, direction: 'DESCENDING' }],
-      limit: 80,
+      // Sin orderBy explicito: con un filtro de rango, Firestore ordena solo por ese
+      // campo y le alcanza el indice (userId + qty) que ya existe. Pedir qty DESC
+      // exigia un indice con esa direccion — que es lo que faltaba y hacia que el bot
+      // dijera "no tengo cables" con los cables cargados (23/08/2026).
+      //
+      // El limite es alto a proposito: asi el orden no decide que se pierde. Un local
+      // no tiene 200 accesorios distintos con stock.
+      limit: 200,
     },
   };
 
