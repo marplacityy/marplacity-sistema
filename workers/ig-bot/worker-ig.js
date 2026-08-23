@@ -258,7 +258,7 @@ async function procesarMensaje(ev, env) {
   // Solo va si el modelo nombró un equipo. Si este mensaje no habla de ninguno el campo
   // no entra en la máscara del PATCH, así que el doc conserva el de la consulta
   // anterior en vez de quedarse sin nada para el seguimiento.
-  if (ia.producto) doc.ultimoProducto = ia.producto;
+  if (ia.producto) doc.ultimoProducto = nombreLindo(ia.producto);
 
   await guardarEnFirestore(doc, env);
 }
@@ -453,6 +453,39 @@ export function turnosParaLaIA(historial, ahora) {
   else turnos.push({ role: 'user', content: ahora });
 
   return turnos;
+}
+
+// ── El nombre de un producto, escrito como se escribe ─────────
+
+/**
+ * `ultimoProducto` sale del JSON del modelo y se guarda tal cual. Los docs que ya
+ * existen —y cualquier descuido nuevo— lo tienen en minúscula, y el seguimiento del cron
+ * lo mete adentro de un mensaje que le llega al cliente: "che seguis interesado en el
+ * macbook pro 14 m5 pro?". El prompt ya pide el nombre bien escrito, pero eso no arregla
+ * lo guardado ni cubre el día que el modelo se distraiga; esto sí, y es barato.
+ *
+ * No es un corrector general: solo las marcas y los apellidos de modelo que vende el
+ * local. Lo que no reconoce lo deja como está.
+ */
+const NOMBRES_PROPIOS = [
+  [/\bairpods\b/gi, 'AirPods'],   [/\biphone\b/gi, 'iPhone'],  [/\bipad\b/gi, 'iPad'],
+  [/\bipod\b/gi, 'iPod'],         [/\bimac\b/gi, 'iMac'],      [/\bmacbook\b/gi, 'MacBook'],
+  [/\bmac\b/gi, 'Mac'],           [/\bairtag\b/gi, 'AirTag'],  [/\bapple\b/gi, 'Apple'],
+  [/\bwatch\b/gi, 'Watch'],       [/\bsamsung\b/gi, 'Samsung'], [/\bgalaxy\b/gi, 'Galaxy'],
+  [/\bxiaomi\b/gi, 'Xiaomi'],     [/\bredmi\b/gi, 'Redmi'],    [/\bmotorola\b/gi, 'Motorola'],
+  [/\bpro\b/gi, 'Pro'],           [/\bmax\b/gi, 'Max'],        [/\bplus\b/gi, 'Plus'],
+  [/\bmini\b/gi, 'Mini'],         [/\bair\b/gi, 'Air'],        [/\bultra\b/gi, 'Ultra'],
+  [/\bse\b/gi, 'SE'],             [/\banc\b/gi, 'ANC'],        [/\busb\s*-?\s*c\b/gi, 'USB-C'],
+  [/\b(\d+)\s*gb\b/gi, '$1GB'],  [/\b(\d+)\s*tb\b/gi, '$1TB'], [/\bm(\d)\b/gi, 'M$1'],
+  // Los Galaxy: s24, s23 ultra. Dos digitos para no tocar un "s" suelto de otra cosa.
+  [/\bs(\d{2})\b/gi, 'S$1'],
+];
+
+export function nombreLindo(producto) {
+  let txt = String(producto || '').trim();
+  if (!txt) return txt;
+  for (const [busca, pone] of NOMBRES_PROPIOS) txt = txt.replace(busca, pone);
+  return txt;
 }
 
 // ── El interruptor ────────────────────────────────────────────
@@ -656,7 +689,7 @@ async function reanudar(request, env) {
   if (ia.categoria) doc.estado = ia.categoria;
   if (ia.confianza) doc.confianza = ia.confianza;
   if (ia.resumen)   doc.resumen = ia.resumen;
-  if (ia.producto)  doc.ultimoProducto = ia.producto;
+  if (ia.producto)  doc.ultimoProducto = nombreLindo(ia.producto);
 
   const name = `projects/${env.FIREBASE_PROJECT}/databases/(default)/documents/conversaciones/${encodeURIComponent(igUserId)}`;
   await patchDoc(env, idToken, name, doc);
@@ -1329,8 +1362,11 @@ async function correrSeguimientos(env) {
     if (ahora < momentoDeSeguir(t)) continue;
 
     // Un solo mensaje, corto y sin apurar a nadie.
-    const texto = doc.ultimoProducto
-      ? `che seguís interesado en el ${doc.ultimoProducto}?`
+    // Pasa por nombreLindo() aunque ya se guarde arreglado: los docs de antes de que
+    // esto existiera tienen el nombre en minúscula y el mensaje sale igual.
+    const producto = nombreLindo(doc.ultimoProducto);
+    const texto = producto
+      ? `che seguís interesado en el ${producto}?`
       : 'che seguís interesado?';
 
     // Sin IG_TOKEN el Worker no le escribe a nadie (modo lee y sugiere): el seguimiento

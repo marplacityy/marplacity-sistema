@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo } from './worker-ig.js';
 import { construirSystem } from './prompt.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
@@ -238,6 +238,25 @@ ok(fechaAR(Date.parse('2026-08-21T14:00:00Z')) === '2026-08-21', 'media tarde');
 ok(fechaAR(Date.parse('2026-08-22T02:00:00Z')) === '2026-08-21', 'las 23 AR siguen siendo el dia 21', fechaAR(Date.parse('2026-08-22T02:00:00Z')));
 ok(fechaAR(Date.parse('2026-08-22T02:59:00Z')) === '2026-08-21', 'un minuto antes de medianoche AR');
 ok(fechaAR(Date.parse('2026-08-22T03:00:00Z')) === '2026-08-22', 'medianoche AR ya es el dia siguiente');
+
+console.log('\n── nombreLindo: el nombre del producto ──');
+// El seguimiento del cron mete `ultimoProducto` adentro de un mensaje que le llega al
+// cliente. El 23/08/2026 salio "che seguis interesado en el macbook pro 14 m5 pro?".
+{
+  const n = nombreLindo;
+  ok(n('macbook pro 14 m5 pro') === 'MacBook Pro 14 M5 Pro', 'macbook pro m5', n('macbook pro 14 m5 pro'));
+  ok(n('airpods 4 con anc') === 'AirPods 4 con ANC', 'airpods con anc', n('airpods 4 con anc'));
+  ok(n('iphone 13 pro max 256 gb') === 'iPhone 13 Pro Max 256GB', 'iphone con capacidad', n('iphone 13 pro max 256 gb'));
+  ok(n('apple watch ultra 2') === 'Apple Watch Ultra 2', 'apple watch', n('apple watch ultra 2'));
+  ok(n('samsung galaxy s24 ultra') === 'Samsung Galaxy S24 Ultra', 'galaxy', n('samsung galaxy s24 ultra'));
+  ok(n('iphone se') === 'iPhone SE', 'el SE', n('iphone se'));
+  ok(n('cable usb c') === 'cable USB-C', 'usb c con espacio', n('cable usb c'));
+
+  // Lo que ya viene bien no se toca, y lo que no conoce lo deja como esta
+  ok(n('iPhone 15 Pro Max') === 'iPhone 15 Pro Max', 'lo que ya estaba bien queda igual');
+  ok(n('parlante jbl') === 'parlante jbl', 'lo que no conoce lo deja como esta');
+  ok(n('') === '' && n(null) === '' && n(undefined) === '', 'vacio, null y undefined no rompen');
+}
 
 console.log('\n── esEcoPropio: el bot se escucha a si mismo ──');
 // Todo lo que sale de la cuenta vuelve como eco, lo haya mandado el bot o Juni a mano.
