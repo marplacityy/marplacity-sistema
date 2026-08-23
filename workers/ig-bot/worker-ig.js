@@ -348,7 +348,14 @@ export function esEcoPropio(historial, texto) {
 async function anotarEco(ev, env) {
   const deQuien = ev.sender?.id;
   const cliente = ev.recipient?.id;
-  const texto = String(ev.message?.text || '').trim();
+
+  // Una respuesta a mano puede ser una foto sin una palabra. No se puede anotar lo que
+  // dice una imagen, pero sí QUE le mandaste una: sin eso, el bot retoma una charla
+  // donde vos ya mandaste la foto que el cliente pedía y le vuelve a decir "ahora te
+  // mando". Misma convención que el lado del cliente: `[image]`, `[video]`.
+  const textoReal = String(ev.message?.text || '').trim();
+  const adjunto = ev.message?.attachments?.[0]?.type;
+  const texto = textoReal || (adjunto ? `[${adjunto}]` : '');
 
   // En un eco los roles están al revés —el sender es la cuenta del local y el recipient
   // es el cliente—, así que el filtro por cuenta del webhook no se puede reusar tal cual.
@@ -371,8 +378,11 @@ async function anotarEco(ev, env) {
 
   // (`app_id` distinguiría el origen sin ambigüedad, pero Meta no lo manda siempre; se
   // loguea para poder confirmarlo mirando los logs.)
+  // El chequeo corre solo si hay TEXTO: el bot nunca manda adjuntos, así que un eco sin
+  // texto no puede ser suyo. Y si corriera, dos fotos seguidas darían dos líneas iguales
+  // y la segunda se perdería tomada por un duplicado.
   if (ev.message?.app_id) console.log('eco con app_id', ev.message.app_id);
-  if (esEcoPropio(historial, texto)) {
+  if (textoReal && esEcoPropio(historial, textoReal)) {
     console.log('eco: es un mensaje que ya mandamos, no se duplica');
     return;
   }
@@ -1495,7 +1505,9 @@ async function guardarEnFirestore(doc, env) {
   });
 
   if (!r.ok) console.log('firestore error', r.status, await r.text());
-  else console.log('guardado OK:', doc.estado, '-', doc.ultimoMensaje.slice(0, 40));
+  // `estado` no viaja cuando el chat está pausado: ahí la clasificación vieja se
+  // conserva a propósito, y el log tiene que decir eso y no "null".
+  else console.log('guardado OK:', doc.estado || '(clasificacion sin cambios)', '-', String(doc.ultimoMensaje || '').slice(0, 40));
 }
 
 // ── Verificar firma HMAC de Meta ──────────────────────────────
