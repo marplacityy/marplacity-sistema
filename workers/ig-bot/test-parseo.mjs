@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio } from './worker-ig.js';
 import { construirSystem } from './prompt.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
@@ -200,6 +200,17 @@ console.log('\n── turnosParaLaIA ──');
   ok(t(null, 'hola').length === 1, 'un historial que no es array no rompe');
 
   // El ultimo turno siempre es del cliente y termina con lo que acaba de escribir
+  // Lo que contesto Juni a mano desde Instagram cuenta como nuestro, no como del
+  // cliente. Es lo que hace que el bot pueda retomar un chat que estuvo pausado: si
+  // 'juni' cayera del lado 'user', el modelo leeria las respuestas de ella como cosas
+  // que dijo el cliente y contestaria cualquier cosa.
+  const conJuni = t([{de:'cliente',texto:'tenes el 14?'},{de:'juni',texto:'si, 500 usd'}], 'lo llevo');
+  ok(conJuni.length === 3, 'lo de Juni arma su propio turno', String(conJuni.length));
+  ok(conJuni[1].role === 'assistant', 'y va del lado nuestro', conJuni[1].role);
+  ok(t([{de:'cliente',texto:'hola'},{de:'bot',texto:'si'},{de:'juni',texto:'500 usd'}], 'dale')[1].content === 'si\n500 usd',
+     'el bot y Juni seguidos se juntan en un turno');
+  ok(t([{de:'juni',texto:'te escribo yo'}], 'hola').length === 1, 'si la charla arranca con Juni, esa linea se descarta');
+
   const largo = t(Array.from({length:80}, (_,i)=>({de: i%2 ? 'bot':'cliente', texto:'m'+i})), 'ahora');
   ok(largo.length <= 21, 'se recorta a los ultimos turnos', String(largo.length));
   ok(largo[largo.length-1].role === 'user' && largo[largo.length-1].content.endsWith('ahora'), 'cierra con el mensaje de ahora');
@@ -228,6 +239,29 @@ ok(fechaAR(Date.parse('2026-08-22T02:00:00Z')) === '2026-08-21', 'las 23 AR sigu
 ok(fechaAR(Date.parse('2026-08-22T02:59:00Z')) === '2026-08-21', 'un minuto antes de medianoche AR');
 ok(fechaAR(Date.parse('2026-08-22T03:00:00Z')) === '2026-08-22', 'medianoche AR ya es el dia siguiente');
 
+console.log('\n── esEcoPropio: el bot se escucha a si mismo ──');
+// Todo lo que sale de la cuenta vuelve como eco, lo haya mandado el bot o Juni a mano.
+// Lo de ella hay que anotarlo (es el contexto para retomar un chat pausado); lo del bot
+// ya esta anotado desde que salio, y anotarlo de nuevo lo duplicaria en la charla.
+{
+  const h = [
+    { de:'cliente', texto:'tenes el 14?' },
+    { de:'bot', texto:'si, tengo' },
+    { de:'bot', texto:'500 usd' },
+  ];
+  ok(esEcoPropio(h, '500 usd') === true, 'lo que mando el bot se reconoce');
+  ok(esEcoPropio(h, '  500 usd  ') === true, 'y tolera los espacios de los costados');
+  ok(esEcoPropio(h, 'te hago 480') === false, 'lo que escribio Juni a mano NO es propio');
+  ok(esEcoPropio(h, 'tenes el 14?') === false, 'lo del cliente no cuenta como nuestro');
+  ok(esEcoPropio(h, '') === false && esEcoPropio(h, null) === false, 'un eco sin texto no es propio');
+  ok(esEcoPropio([], 'hola') === false && esEcoPropio(null, 'hola') === false, 'sin historial no rompe');
+
+  // Solo las ultimas 10 de este lado: mas atras es otra tanda, y repetir un precio dos
+  // dias despues es un mensaje nuevo, no un eco.
+  const viejo = [{ de:'bot', texto:'500 usd' }, ...Array.from({length:10}, (_,i)=>({ de:'bot', texto:'m'+i }))];
+  ok(esEcoPropio(viejo, '500 usd') === false, 'mas atras de las ultimas 10 ya no cuenta');
+}
+
 console.log('\n── un solo camino de envio automatico ──');
 // Ya paso una vez: el interruptor se chequeaba adentro de mandarMensajes() y el cron se
 // lo salteaba, porque llamaba a mandarDM() directo. Andaba de casualidad. Los dos
@@ -247,9 +281,10 @@ console.log('\n── un solo camino de envio automatico ──');
 
   const webhook = cuerpo('async function procesarMensaje');
   const cron = cuerpo('async function correrSeguimientos');
-  ok(webhook.length > 200 && cron.length > 200, 'el test encontro las dos funciones');
+  const retomar = cuerpo('async function reanudar');
+  ok(webhook.length > 200 && cron.length > 200 && retomar.length > 200, 'el test encontro las tres funciones');
 
-  for (const [nombre, txt] of [['el webhook', webhook], ['el cron', cron]]) {
+  for (const [nombre, txt] of [['el webhook', webhook], ['el cron', cron], ['reanudar', retomar]]) {
     ok(/mandarAutomatico\(/.test(txt), `${nombre} manda por mandarAutomatico()`);
     ok(!/[^A-Za-z]mandarDM\(/.test(txt), `${nombre} no llama a mandarDM() por atras`);
     ok(!/[^A-Za-z]mandarMensajes\(/.test(txt), `${nombre} no llama a mandarMensajes() por atras`);

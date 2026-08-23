@@ -309,8 +309,13 @@ Motivos y prioridad (1 = más urgente):
 | 4 | permuta | hay que tasar |
 | 5 | reparacion | no cotizás |
 | 6 | otro_medio_de_pago | hay que calcular recargo |
+| 2 | en_mano | el chat está pausado y lo lleva Juni (lo pone el Worker, no vos) |
 | 7 | visto | quedó en silencio (lo marca el cron, no vos) |
 | 8 | no_supe_responder | te faltó data |
+
+cerrado y en_mano comparten la prioridad 2 a propósito: los dos son alguien esperando
+algo puntual, y dentro de cada nivel la bandeja pone arriba a la que hace más rato que
+espera.
 
 ## FORMATO DE SALIDA
 

@@ -77,6 +77,13 @@ export default {
       return responder(request, env);
     }
 
+    // ── 2b. Retomar un chat que estuvo pausado ──
+    // El sistema despausa y llama acá: el bot lee la charla completa —lo que contestó
+    // Juni a mano incluido— y contesta el último mensaje del cliente si quedó colgado.
+    if (request.method === 'POST' && url.pathname === '/reanudar') {
+      return reanudar(request, env);
+    }
+
     // ── 3. Mensajes entrantes (POST) ──
     if (request.method === 'POST') {
       const raw = await request.text();
@@ -134,7 +141,11 @@ async function procesarMensaje(ev, env) {
   if (!ev.message){ console.log('descarto: no es mensaje, claves:', Object.keys(ev).join(',')); return; }
 
   const m = ev.message;
-  if (m.is_echo)  { console.log('descarto: es eco de un mensaje mio'); return; }
+
+  // Un eco es un mensaje que salió DE la cuenta del local. Antes se descartaba entero;
+  // ahora el que escribió Juni a mano se anota en el historial, que es lo único que le
+  // permite al bot retomar una charla que estuvo pausada. Ver `anotarEco`.
+  if (m.is_echo) return anotarEco(ev, env);
 
   // El webhook puede traer eventos de MAS DE UNA cuenta de Instagram, si hay varias
   // conectadas a la misma app de Meta. IG_TOKEN es de una sola: contestar un mensaje
@@ -165,16 +176,24 @@ async function procesarMensaje(ev, env) {
   const previo = idToken ? await leerDoc(env, idToken, `conversaciones/${senderId}`) : null;
   const historial = Array.isArray(previo && previo.historial) ? previo.historial : [];
 
+  // Pausado en ESTE chat: la charla la lleva Juni a mano. No se llama a la IA —no hay
+  // respuesta que redactar y cada llamada se paga— pero el mensaje se guarda igual y
+  // sube a la bandeja, que es donde ella lo va a ver.
+  const pausado = previo ? previo.botPausado === true : false;
+
   // La IA lee el mensaje EN CONTEXTO de la charla, lo clasifica y redacta la respuesta
   let ia = { ...SIN_RESPUESTA };
-  if (env.ANTHROPIC_KEY && (texto || adjuntos.length)) {
+  if (pausado) {
+    ia = { ...EN_MANO };
+    console.log('bot PAUSADO en el chat de', senderId, '— no contesta, va a la bandeja');
+  } else if (env.ANTHROPIC_KEY && (texto || adjuntos.length)) {
     ia = await pensarRespuesta(texto, adjuntos, env, historial);
   } else {
     console.log(env.ANTHROPIC_KEY ? 'mensaje sin texto ni adjuntos' : 'sin ANTHROPIC_KEY: no se llama a la IA');
   }
 
   // Cada elemento del array sale como un DM aparte, en orden.
-  const enviados = await mandarAutomatico(env, senderId, ia.mensajes);
+  const enviados = await mandarAutomatico(env, senderId, ia.mensajes, { pausado });
 
   // Lo que no llegó a salir queda para Juni: sin IG_TOKEN (modo lee y sugiere) no sale
   // ninguno, y si un envío falla se corta ahí. En los dos casos la conversación sube a
@@ -208,6 +227,18 @@ async function procesarMensaje(ev, env) {
     revisado: false,
     userId: env.OWNER_UID,
   };
+
+  // Pausado, el doc guarda el mensaje y poco más: `mensajes` y `sugerencia` sí se
+  // limpian (la respuesta vieja ya salió, ofrecerla de nuevo en la bandeja sería
+  // mandarla dos veces), pero la clasificación no se toca. Sin la IA solo quedaría
+  // `clasificarBasico()`, y una charla que venía como `cerrado` no se merece volver a
+  // `curioso` porque el último mensaje fue "dale". Lo que no entra en el PATCH conserva
+  // su valor (ver `guardarEnFirestore`).
+  if (pausado) {
+    delete doc.estado;
+    delete doc.confianza;
+    delete doc.resumen;
+  }
 
   // Igual que el producto: si no se pudo traer, el campo no entra en la máscara y el
   // doc conserva el que ya tenía.
@@ -252,6 +283,88 @@ async function usuarioDeIG(env, igUserId) {
   }
 }
 
+// ── Lo que contesta Juni a mano ───────────────────────────────
+
+// Cuántas líneas de las nuestras se miran para reconocer un eco propio. Con 10 alcanza:
+// el bot manda como mucho 3 o 4 mensajes por tanda.
+const ECOS_A_MIRAR = 10;
+
+/**
+ * ¿Este eco es un mensaje que ya mandamos nosotros?
+ *
+ * El bot se escucha a sí mismo: los DM que manda por la API vuelven como eco, y ya
+ * quedaron anotados en el historial al salir. Se los reconoce por el texto contra las
+ * últimas líneas de este lado —las del bot y las que ya se anotaron de Juni—, así una
+ * respuesta aprobada desde la bandeja tampoco se duplica.
+ *
+ * Comparación exacta a propósito: dos mensajes distintos con el mismo texto en la misma
+ * tanda no existen, y aflojar el criterio se comería una respuesta de verdad.
+ */
+export function esEcoPropio(historial, texto) {
+  const limpio = String(texto || '').trim();
+  if (!limpio) return false;
+  return (Array.isArray(historial) ? historial : [])
+    .filter(h => h && h.de !== 'cliente')
+    .slice(-ECOS_A_MIRAR)
+    .some(h => String(h.texto || '').trim() === limpio);
+}
+
+/**
+ * Un mensaje que salió de la cuenta del local, que Meta nos avisa como eco.
+ *
+ * Puede venir de dos lados y solo uno interesa:
+ *  - lo mandó el bot por la API: ya quedó anotado al mandarlo, se descarta;
+ *  - lo escribió Juni a mano desde Instagram: ESO es lo que hay que anotar.
+ *
+ * Sin esto, pausar el bot en un chat lo dejaba ciego. Juni contestaba cuatro mensajes a
+ * mano, lo volvía a prender, y el bot retomaba como si esos cuatro no existieran:
+ * repitiendo lo ya dicho, o contradiciendo el precio que ella acababa de arreglar. El
+ * historial es lo único que el modelo ve de la charla, así que lo que no entra acá, para
+ * el bot no pasó.
+ *
+ * Solo anota sobre conversaciones que YA existen. Si Juni le escribe primero a alguien
+ * que nunca mandó un DM, el doc que se crearía no tendría `ultimoMensajeCliente` y
+ * quedaría fuera de la consulta del sistema: invisible en la bandeja y sin forma de
+ * arreglarlo desde la pantalla.
+ */
+async function anotarEco(ev, env) {
+  const deQuien = ev.sender?.id;
+  const cliente = ev.recipient?.id;
+  const texto = String(ev.message?.text || '').trim();
+
+  // En un eco los roles están al revés —el sender es la cuenta del local y el recipient
+  // es el cliente—, así que el filtro por cuenta del webhook no se puede reusar tal cual.
+  if (env.IG_ACCOUNT_ID && deQuien !== env.IG_ACCOUNT_ID) {
+    console.log('eco: salió de la cuenta', deQuien, '— la nuestra es', env.IG_ACCOUNT_ID);
+    return;
+  }
+  if (!cliente || !texto) { console.log('eco: sin destinatario o sin texto, lo salteo'); return; }
+
+  const idToken = await tokenDelBot(env);
+  if (!idToken) { console.log('eco: sin token, no se anota'); return; }
+
+  const previo = await leerDoc(env, idToken, `conversaciones/${cliente}`);
+  if (!previo) { console.log('eco: no hay conversación con', cliente, '— no se anota'); return; }
+
+  const historial = Array.isArray(previo.historial) ? previo.historial : [];
+
+  // (`app_id` distinguiría el origen sin ambigüedad, pero Meta no lo manda siempre; se
+  // loguea para poder confirmarlo mirando los logs.)
+  if (ev.message?.app_id) console.log('eco con app_id', ev.message.app_id);
+  if (esEcoPropio(historial, texto)) {
+    console.log('eco: es un mensaje que ya mandamos, no se duplica');
+    return;
+  }
+
+  // Se anota `historial` y NADA más. En particular no se toca `ultimoMensajeCliente`:
+  // ese campo es la ventana de 24 h de Meta, y la corre el cliente cuando escribe, no
+  // nosotros cuando le contestamos. Moverlo daría 24 h de aire que Meta no dio.
+  const nuevo = [...historial, linea('juni', texto, new Date(ev.timestamp || Date.now()))].slice(-MAX_HISTORIAL);
+  const name = `projects/${env.FIREBASE_PROJECT}/databases/(default)/documents/conversaciones/${encodeURIComponent(cliente)}`;
+  const ok = await patchDoc(env, idToken, name, { historial: nuevo });
+  console.log(ok ? `eco anotado: le contestaste a mano a ${cliente}` : 'eco: no se pudo anotar');
+}
+
 // ── El historial de la conversación ───────────────────────────
 
 // Cuantas lineas se guardan por conversacion. Alcanza de sobra para entender de que se
@@ -265,7 +378,8 @@ const MAX_HISTORIAL = 60;
 // contexto, no el registro contable— y a cambio no hay que meter transacciones en el
 // camino caliente del webhook.
 
-// Una linea del historial. `de` es 'cliente' o 'bot'.
+// Una linea del historial. `de` es 'cliente', 'bot' o 'juni' (lo que contesto ella a
+// mano desde Instagram, que entra por `anotarEco`).
 const linea = (de, texto, fecha) => ({ de, texto: String(texto || '').slice(0, 1000), fecha });
 
 // Cuantos turnos del historial se le pasan al modelo. No hace falta la charla entera:
@@ -291,7 +405,10 @@ export function turnosParaLaIA(historial, ahora) {
   for (const h of previos) {
     const texto = h && typeof h.texto === 'string' ? h.texto.trim() : '';
     if (!texto) continue;
-    const role = h.de === 'bot' ? 'assistant' : 'user';
+    // Todo lo que no escribió el cliente es nuestro: lo del bot y lo que contestó Juni
+    // a mano. Los dos van como assistant, y eso es lo que hace que el bot retome una
+    // charla pausada sin repetir lo que ella ya dijo ni contradecirla.
+    const role = h.de === 'cliente' ? 'user' : 'assistant';
     const ultimo = turnos[turnos.length - 1];
     if (ultimo && ultimo.role === role) ultimo.content += '\n' + texto;
     else turnos.push({ role, content: texto });
@@ -446,6 +563,78 @@ async function uidDelToken(idToken, env) {
 }
 
 /**
+ * Retomar una conversacion que estuvo pausada.
+ *
+ * Mientras el bot estuvo pausado en ese chat, Juni contesto a mano desde Instagram y
+ * esas respuestas quedaron anotadas en el historial (ver `anotarEco`). Al prenderlo
+ * puede haber quedado un mensaje del cliente sin contestar; esto le pasa al modelo la
+ * charla COMPLETA —lo de ella incluido— y lo deja contestar ese ultimo mensaje.
+ *
+ * Sin esto, prender el bot no hacia nada hasta que el cliente volviera a escribir, y el
+ * que estaba esperando una respuesta se quedaba esperando.
+ */
+async function reanudar(request, env) {
+  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
+  if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
+
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'json invalido' }, 400); }
+
+  const igUserId = String(body.igUserId || '').trim();
+  if (!igUserId) return json({ error: 'falta igUserId' }, 400);
+
+  const idToken = await tokenDelBot(env);
+  if (!idToken) return json({ error: 'el Worker no se pudo loguear a Firebase' }, 503);
+
+  const previo = await leerDoc(env, idToken, `conversaciones/${igUserId}`);
+  if (!previo) return json({ error: 'no hay conversacion con esa cuenta' }, 404);
+
+  // El sistema despausa ANTES de llamar acá. Si sigue pausado es que esa escritura no
+  // llego, y contestar igual seria exactamente lo que la pausa quiere evitar.
+  if (previo.botPausado === true) return json({ error: 'el chat sigue pausado' }, 409);
+
+  const historial = Array.isArray(previo.historial) ? previo.historial : [];
+  const ultima = historial[historial.length - 1];
+
+  // Si la ultima palabra es nuestra no quedo nada colgado. Meter un mensaje ahi es
+  // hablar porque si, que es justo lo que el prompt le prohibe en CUANDO NO CONTESTAR.
+  if (!ultima || ultima.de !== 'cliente') return json({ pendiente: false, enviados: 0, total: 0 });
+
+  // La ventana de Meta vale igual que en el cron: esto lo redacta el bot, no Juni.
+  const desde = Date.parse(previo.ultimoMensajeCliente);
+  if (!desde || Date.now() - desde >= VENTANA_META) return json({ error: 'pasaron las 24 h', vencida: true }, 409);
+
+  // El ultimo mensaje del cliente va como "el mensaje de ahora"; todo lo anterior, de
+  // contexto. Es el mismo reparto que hace el webhook.
+  const ia = await pensarRespuesta(String(ultima.texto || ''), [], env, historial.slice(0, -1));
+  const enviados = await mandarAutomatico(env, igUserId, ia.mensajes);
+  const quedoSinMandar = enviados < ia.mensajes.length;
+
+  const doc = {
+    mensajes: ia.mensajes,
+    sugerencia: ia.mensajes.join('\n') || null,
+    respondido: enviados > 0,
+    necesitaAtencion: ia.necesitaAtencion || quedoSinMandar,
+    motivo: quedoSinMandar ? (ia.motivo || 'no_supe_responder') : ia.motivo,
+    prioridad: quedoSinMandar ? Math.min(ia.prioridad, 8) : ia.prioridad,
+    historial: [...historial, ...ia.mensajes.slice(0, enviados).map(txt => linea('bot', txt, new Date()))].slice(-MAX_HISTORIAL),
+  };
+
+  // Lo que el modelo no nombro no se pisa: la conversacion ya venia clasificada de antes
+  // y un campo en null la sacaria de su pestaña del tablero.
+  if (ia.categoria) doc.estado = ia.categoria;
+  if (ia.confianza) doc.confianza = ia.confianza;
+  if (ia.resumen)   doc.resumen = ia.resumen;
+  if (ia.producto)  doc.ultimoProducto = ia.producto;
+
+  const name = `projects/${env.FIREBASE_PROJECT}/databases/(default)/documents/conversaciones/${encodeURIComponent(igUserId)}`;
+  await patchDoc(env, idToken, name, doc);
+
+  return json({ pendiente: true, enviados, total: ia.mensajes.length },
+               enviados === ia.mensajes.length ? 200 : 502);
+}
+
+/**
  * TODO mensaje que el bot manda por su cuenta pasa por aca. Los dos caminos automaticos
  * —la respuesta del webhook y el seguimiento del cron— llaman a esta funcion y a
  * ninguna otra; `mandarMensajes()` queda para lo que manda el dueño desde la bandeja,
@@ -453,8 +642,15 @@ async function uidDelToken(idToken, env) {
  *
  * (Antes el chequeo vivia adentro de mandarMensajes y el cron se lo salteaba, porque
  * llamaba a mandarDM directo. Andaba de casualidad, por un corte aparte en el cron.)
+ *
+ * `opciones.pausado` es el interruptor de UN chat, el del semaforo de cada fila de la
+ * bandeja. Viene de afuera y no se lee acá a proposito: los dos que llaman ya tienen el
+ * doc de la conversacion en la mano, y volver a leerlo seria una lectura de Firestore de
+ * mas en el camino caliente del webhook.
  */
-async function mandarAutomatico(env, igUserId, mensajes) {
+async function mandarAutomatico(env, igUserId, mensajes, opciones = {}) {
+  if (opciones.pausado) { console.log('chat pausado:', igUserId, '— no se manda nada'); return 0; }
+
   const cfg = await configDelBot(env);
 
   if (!cfg.activo) { console.log('bot APAGADO desde el sistema: no se manda nada'); return 0; }
@@ -684,6 +880,20 @@ const SIN_RESPUESTA = {
   necesitaAtencion: true,
   motivo: 'no_supe_responder',
   prioridad: 8,
+  resumen: null,
+  producto: null,
+  mensajes: [],
+};
+
+// Lo que se guarda cuando el bot está pausado en ese chat. No es una falla: nadie se
+// equivocó, la conversación la está llevando Juni. Por eso motivo propio y no
+// `no_supe_responder`, que la mandaría al fondo de la cola con prioridad 8.
+const EN_MANO = {
+  categoria: null,
+  confianza: null,
+  necesitaAtencion: true,
+  motivo: 'en_mano',
+  prioridad: 2,
   resumen: null,
   producto: null,
   mensajes: [],
@@ -1037,6 +1247,11 @@ async function correrSeguimientos(env) {
       continue;
     }
 
+    // Pausado a mano: ese chat lo lleva Juni. Ni seguimiento ni `visto` — se deja como
+    // esta y se retoma cuando lo vuelva a prender. Un "seguis interesado?" automatico
+    // arriba de una charla que esta atendiendo una persona es lo peor de los dos mundos.
+    if (doc.botPausado === true) { console.log('cron: chat pausado, lo salteo', name); continue; }
+
     // Se pasó la ventana de Meta: el bot no le escribe, va derecho a la bandeja.
     // `seguimientoEnviado` se marca igual, para no volver a mirarlo cada hora.
     const t = Date.parse(doc.ultimoMensajeCliente);
@@ -1057,7 +1272,9 @@ async function correrSeguimientos(env) {
 
     // Sin IG_TOKEN el Worker no le escribe a nadie (modo lee y sugiere): el seguimiento
     // no sale y la conversación queda para que la mande Juni.
-    const salio = await mandarAutomatico(env, doc.igUserId, [texto]) > 0;
+    // El `pausado` va igual, aunque el `continue` de arriba ya los saco: si alguna vez
+    // se agrega otra salida, el chequeo tiene que estar en el embudo y no en el camino.
+    const salio = await mandarAutomatico(env, doc.igUserId, [texto], { pausado: doc.botPausado === true }) > 0;
 
     // Si el envío no salió, la conversación no se pierde: sube a la bandeja. Y se marca
     // igual como seguida, para no reintentar el mismo mensaje cada hora.
@@ -1138,7 +1355,8 @@ async function paraSeguir(env, idToken, ahora) {
 
 /**
  * Pisa unos pocos campos de un doc que ya existe. `name` es la ruta completa que
- * devuelve la query (`projects/.../documents/conversaciones/xxx`).
+ * devuelve la query (`projects/.../documents/conversaciones/xxx`), y la arman igual
+ * `anotarEco` y `reanudar`, que escriben sobre un doc que ya existe seguro.
  *
  * Los campos que toca el cron son de los que habilita `soloCamposDelBot()` en
  * `firestore.rules`; si se agrega otro hay que sumarlo también allá o el update se
@@ -1154,10 +1372,10 @@ async function patchDoc(env, idToken, name, doc) {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
       body: JSON.stringify({ fields }),
     });
-    if (!r.ok) console.log('cron: no se pudo actualizar', name, r.status, (await r.text()).slice(0, 200));
+    if (!r.ok) console.log('no se pudo actualizar', name, r.status, (await r.text()).slice(0, 200));
     return r.ok;
   } catch (e) {
-    console.log('cron: no se pudo actualizar', name, e.message);
+    console.log('no se pudo actualizar', name, e.message);
     return false;
   }
 }

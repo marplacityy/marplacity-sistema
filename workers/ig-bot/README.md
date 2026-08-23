@@ -17,6 +17,11 @@ de MarplaCity.
 6. Guarda todo (mensaje, clasificación, respuesta y campos de NEED ATTENTION) en la
    colección `conversaciones`.
 
+También escucha los **ecos**: cuando Juni le contesta a alguien a mano desde la app de
+Instagram, Meta manda ese mensaje al webhook con `is_echo: true`. Esas respuestas se
+anotan en el historial de la charla, que es lo que le permite al bot retomar una
+conversación que estuvo pausada (ver más abajo).
+
 **Nada de lo que devuelve el modelo se toma por bueno.** Si el JSON no parsea, si un
 campo no es de los válidos, si el modelo dudó (`confianza: "baja"`) o si algún DM no
 llegó a salir, el mensaje **no se descarta**: la conversación se guarda igual y sube a
@@ -96,7 +101,7 @@ misma persona repetida en cinco filas.
 | `confianza` | string | `alta` / `baja`. Las `baja` suben a la bandeja |
 | `resumen` | string | una línea de qué se habló, para la bandeja |
 | `ultimoProducto` | string | el equipo que consultó, para el seguimiento |
-| `historial` | array | el ida y vuelta de la charla: `{de, texto, fecha}`, últimas 60 líneas |
+| `historial` | array | el ida y vuelta de la charla: `{de, texto, fecha}`, últimas 60 líneas. `de` es `cliente`, `bot` o `juni` |
 | `mensajes` | array | lo que el bot contestó, un elemento por DM |
 | `sugerencia` | string | lo mismo en texto plano |
 | `respondido` | bool | si salió al menos un DM |
@@ -104,6 +109,8 @@ misma persona repetida en cinco filas.
 | `motivo` | string | por qué (ver la tabla de prioridades en `prompt-bot.md`) |
 | `prioridad` | int | 1 a 8, o 99 si no necesita atención |
 | `seguimientoEnviado` | bool | lo marca el cron cuando manda el seguimiento |
+| `botPausado` | bool | el semáforo de ESE chat: `true` = el bot no le contesta. **Lo escribe el sistema, el bot solo lo lee** |
+| `pausadoPor`, `pausadoEn` | string, timestamp | quién tocó el semáforo y cuándo. **Los escribe el sistema, no el bot** |
 | `aprobadoPor`, `aprobadoEn` | string, timestamp | quién cerró la conversación desde la bandeja y cuándo. **Los escribe el sistema, no el bot** |
 | `revisado` | bool | |
 | `adjuntos`, `urlsAdjuntos`, `tieneImagen`, `tieneAudio` | | qué mandó el cliente |
@@ -312,6 +319,67 @@ salteaba llamando a `mandarDM()` directo.
 Si el doc no existe o no se puede leer, el bot queda **encendido y para todos**: es el
 estado inicial de cualquier instalación. El respaldo duro, si hiciera falta cortar de raíz sin depender
 de Firestore, sigue siendo sacar `IG_TOKEN` del panel de Cloudflare.
+
+## El semáforo de cada chat (`botPausado`)
+
+El interruptor de arriba es para el bot entero. El semáforo es para **una conversación**:
+cada fila de la bandeja tiene un botón 🟢/🔴 que decide si el bot atiende ESE chat.
+
+Es para cuando una charla se pone delicada —una permuta rara, un reclamo, un cliente que
+está por cerrar— y la querés llevar vos, sin apagar el bot para los otros cuarenta.
+
+Pausado **no es apagado**:
+
+- el bot **no llama a la IA** en ese chat (no hay respuesta que redactar, y cada llamada
+  se paga) y **no manda ningún DM**;
+- el mensaje del cliente se guarda igual y sube a la bandeja con `motivo: 'en_mano'` y
+  prioridad 2, para que no se te pase;
+- **la clasificación vieja no se pisa**. Sin la IA solo quedaría `clasificarBasico()`, y
+  una charla que venía como `cerrado` no se merece volver a `curioso` porque el último
+  mensaje fue "dale";
+- el cron de seguimiento lo saltea entero: ni le manda un "¿seguís interesado?" ni lo
+  marca `visto`. Un mensaje automático arriba de una charla que está atendiendo una
+  persona es lo peor de los dos mundos.
+
+### Cómo retoma
+
+Mientras está pausado, **lo que escribís vos desde Instagram entra al historial** como
+líneas `de: 'juni'` (`anotarEco()` en `worker-ig.js`). Para el modelo esas líneas van del
+lado `assistant`, igual que las suyas: retoma sabiendo lo que dijiste, sin repetirlo ni
+contradecirlo.
+
+Sin eso, la pausa dejaba al bot ciego: contestabas cuatro mensajes a mano, lo prendías, y
+el bot seguía como si esos cuatro no existieran.
+
+El bot también se escucha a sí mismo —sus propios DM vuelven como eco— así que un eco
+cuyo texto ya esté en las últimas 10 líneas nuestras se descarta en vez de duplicarse.
+
+Al prenderlo de nuevo, si el último que habló fue el cliente, el sistema ofrece que el bot
+**conteste ese mensaje ahora** en vez de esperar a que la persona vuelva a escribir. Eso
+es `POST /reanudar`.
+
+## `POST /reanudar` — retomar un chat pausado
+
+Lo llama el sistema cuando ponés el semáforo en verde y quedó un mensaje sin contestar.
+Mismo esquema de auth que `/responder`: `X-Firebase-Token` y solo el `OWNER_UID`.
+
+```json
+{ "igUserId": "1343632157755566" }
+```
+
+El Worker lee el doc, agarra la última línea del historial y, **solo si es del cliente**,
+se la pasa al modelo con toda la charla de contexto —lo que contestaste vos incluido— y
+manda lo que salga. Si la última palabra es nuestra devuelve `{"pendiente": false}` y no
+manda nada: meter un mensaje ahí es hablar porque sí, justo lo que el prompt le prohíbe
+en *CUÁNDO NO CONTESTAR*.
+
+Dos cortes más, los dos a propósito:
+
+- **el chat tiene que estar despausado.** El sistema escribe `botPausado: false` y recién
+  después llama; si el Worker lo ve todavía en `true`, esa escritura no llegó y contestar
+  sería exactamente lo que la pausa quiere evitar (`409`);
+- **la ventana de 24 h de Meta vale igual.** Esto lo redacta el bot, no vos: pasadas las
+  24 h devuelve `409` y hay que contestar a mano desde Instagram.
 
 ## Lo que se afina desde el sistema
 
