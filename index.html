@@ -1142,7 +1142,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.23-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.23-B</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2550,10 +2550,11 @@
           <input type="text" id="kb-mdp-buscar" placeholder="🔎 Buscar producto, GB, color..." oninput="deb('kbMdpB',function(){renderKbLista('mdp')})" style="flex:2;">
           <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="borrarListaKb('mdp')" title="Borrar la lista mostrada">🗑 Borrar lista</button>
         </div>
+        <div id="kb-mdp-cambios"></div>
         <div class="card" style="padding:0;overflow:hidden;">
           <div style="overflow-x:auto;">
             <table class="rp-table">
-              <thead><tr><th>Producto</th><th style="width:90px;">GB</th><th style="width:150px;">Color</th><th style="text-align:right;width:130px;">Precio público</th></tr></thead>
+              <thead><tr><th>Producto</th><th style="width:90px;">GB</th><th style="width:150px;">Color</th><th style="text-align:right;width:130px;">Precio público</th><th style="width:40px;"></th></tr></thead>
               <tbody id="kb-mdp-body"></tbody>
             </table>
           </div>
@@ -2591,10 +2592,11 @@
           <input type="text" id="kb-caba-buscar" placeholder="🔎 Buscar producto, GB, color..." oninput="deb('kbCabaB',function(){renderKbLista('caba')})" style="flex:2;">
           <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="borrarListaKb('caba')" title="Borrar la lista mostrada">🗑 Borrar lista</button>
         </div>
+        <div id="kb-caba-cambios"></div>
         <div class="card" style="padding:0;overflow:hidden;">
           <div style="overflow-x:auto;">
             <table class="rp-table">
-              <thead><tr><th>Producto</th><th style="width:90px;">GB</th><th style="width:150px;">Color</th><th style="text-align:right;width:130px;">Precio público</th></tr></thead>
+              <thead><tr><th>Producto</th><th style="width:90px;">GB</th><th style="width:150px;">Color</th><th style="text-align:right;width:130px;">Precio público</th><th style="width:40px;"></th></tr></thead>
               <tbody id="kb-caba-body"></tbody>
             </table>
           </div>
@@ -10958,25 +10960,126 @@ window.restaurarListaKb = async function(origen, id){
   }catch(e){ console.error(e); showToast('No se pudo restaurar: '+e.message, true); setSyncDot('error'); }
 };
 
+// Los cambios que se están haciendo a mano sobre la lista, antes de guardarlos. null =
+// no se tocó nada y se muestra lo que hay en Firestore. En cuanto se edita un precio o
+// se borra un ítem, se trabaja sobre esta copia hasta que se guarde o se cancele: así
+// se pueden hacer diez cambios y que sea UN guardado, no diez versiones de la lista.
+const kbEdicion = { mdp: null, caba: null };
+
+// Lo que se está mostrando: la copia en edición si hay, lo guardado si no.
+function kbItemsVista(origen){
+  if(kbEdicion[origen]) return kbEdicion[origen];
+  const l = kbUltimaLista(origen);
+  return (l && Array.isArray(l.items)) ? l.items : [];
+}
+
+// Antes de tocar nada se clona, para no mutar el array que vino del snapshot.
+function kbEmpezarEdicion(origen){
+  if(!kbEdicion[origen]) kbEdicion[origen] = kbItemsVista(origen).map(it=>({...it}));
+  return kbEdicion[origen];
+}
+
+window.editarPrecioKb = function(origen, i, valor){
+  const items = kbEmpezarEdicion(origen);
+  if(!items[i]) return;
+  const n = Number(String(valor).replace(',','.'));
+  items[i].precioPublico = (valor === '' || isNaN(n)) ? null : n;
+  renderKbLista(origen);
+};
+
+window.borrarItemKb = function(origen, i){
+  const items = kbEmpezarEdicion(origen);
+  const it = items[i]; if(!it) return;
+  if(!confirm(`¿Sacar "${it.producto||''}" de la lista?\n\nSe va a aplicar cuando guardes los cambios.`)) return;
+  items.splice(i, 1);
+  renderKbLista(origen);
+};
+
+window.cancelarEdicionKb = function(origen){
+  kbEdicion[origen] = null;
+  renderKbLista(origen);
+};
+
+// Guarda la lista editada como una versión nueva. Igual que cargar productos: no pisa
+// nada, la anterior queda en el historial y se puede volver.
+window.guardarEdicionKb = async function(origen){
+  const items = kbEdicion[origen]; if(!items) return;
+  const l = kbUltimaLista(origen);
+  const btn = document.getElementById('btn-kb-'+origen+'-guardar-edicion');
+  if(btn){ btn.disabled = true; btn.textContent = 'Guardando...'; }
+  setSyncDot('syncing');
+  try{
+    await addDoc(listasCol, withUser({
+      origen,
+      fecha: today(),
+      moneda: (l && l.moneda) || 'USD',
+      items: items.map(itemKbLimpio),
+      createdAt: serverTimestamp(),
+    }));
+    kbEdicion[origen] = null;
+    showToast(`Lista de ${KB_ORIGENES[origen]} actualizada ✓`);
+  }catch(e){
+    console.error(e);
+    showToast('No se pudo guardar: '+e.message, true);
+    setSyncDot('error');
+    if(btn){ btn.disabled = false; btn.textContent = '✓ Guardar cambios'; }
+  }
+};
+
 window.renderKbLista = function(origen){
   renderKbEstado(origen);
   const tb = document.getElementById('kb-'+origen+'-body');
   if(!tb) return;
   const l = kbUltimaLista(origen);
+  const moneda = (l && l.moneda) || 'USD';
+  const base = kbItemsVista(origen);
+
+  // El buscador filtra la vista, pero los handlers necesitan la posición REAL en la
+  // lista: sin esto, editar un precio con el buscador activo tocaría otro producto.
   const q = (document.getElementById('kb-'+origen+'-buscar').value||'').trim().toLowerCase();
-  let items = (l && Array.isArray(l.items)) ? l.items : [];
-  if(q) items = items.filter(it => `${it.producto||''} ${it.gb||''} ${it.color||''}`.toLowerCase().includes(q));
-  if(!items.length){
-    const msg = !l ? 'Todavía no cargaste ninguna lista.' : (q ? 'Ningún producto coincide con la búsqueda.' : 'La lista está vacía.');
-    tb.innerHTML = `<tr><td colspan="4"><div class="empty">${msg}</div></td></tr>`;
+  let filas = base.map((it,i)=>({it,i}));
+  if(q) filas = filas.filter(({it}) => `${it.producto||''} ${it.gb||''} ${it.color||''}`.toLowerCase().includes(q));
+
+  // Aviso de cambios sin guardar
+  const cambios = document.getElementById('kb-'+origen+'-cambios');
+  if(cambios){
+    const editando = !!kbEdicion[origen];
+    const antes = (l && Array.isArray(l.items)) ? l.items.length : 0;
+    const ahora = base.length;
+    cambios.innerHTML = !editando ? '' : `
+      <div class="card" style="margin-bottom:10px;background:#FEF9E7;border-color:#FAC775;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+          <div style="font-size:13px;color:#854F0B;">
+            <b>Cambios sin guardar.</b> ${ahora===antes ? 'Editaste precios.' : `La lista pasa de ${antes} a ${ahora} producto${ahora===1?'':'s'}.`} Nada se aplica hasta que guardes.
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn-pagar-outline" onclick="cancelarEdicionKb('${escJs(origen)}')">Descartar</button>
+            <button class="btn-save" id="btn-kb-${escJs(origen)}-guardar-edicion" style="width:auto;padding:9px 16px;" onclick="guardarEdicionKb('${escJs(origen)}')">✓ Guardar cambios</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if(!filas.length){
+    const msg = !l && !kbEdicion[origen] ? 'Todavía no cargaste ninguna lista.' : (q ? 'Ningún producto coincide con la búsqueda.' : 'La lista está vacía.');
+    tb.innerHTML = `<tr><td colspan="5"><div class="empty">${msg}</div></td></tr>`;
     return;
   }
-  const moneda = (l && l.moneda) || 'USD';
-  tb.innerHTML = items.map(it=>`<tr>
+
+  const simbolo = moneda==='ARS' ? '$' : 'u$s';
+  tb.innerHTML = filas.map(({it,i})=>`<tr>
     <td>${esc(it.producto||'')}</td>
     <td>${esc(it.gb||'')}</td>
     <td>${esc(it.color||'')}</td>
-    <td style="text-align:right;font-weight:600;white-space:nowrap;">${fmtPrecioKb(it.precioPublico, moneda)}</td>
+    <td style="text-align:right;white-space:nowrap;">
+      <span style="font-size:11px;color:var(--text3);">${simbolo}</span>
+      <input type="number" step="0.01" min="0" value="${it.precioPublico!=null?esc(String(it.precioPublico)):''}" placeholder="—"
+             onchange="editarPrecioKb('${escJs(origen)}', ${i}, this.value)"
+             style="width:88px;text-align:right;font-weight:600;font-family:'DM Mono',monospace;padding:5px 7px;">
+    </td>
+    <td style="text-align:center;">
+      <a onclick="borrarItemKb('${escJs(origen)}', ${i})" title="Sacar de la lista" style="cursor:pointer;color:var(--text3);font-weight:700;">✕</a>
+    </td>
   </tr>`).join('');
 };
 
