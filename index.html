@@ -58,6 +58,15 @@
   .bd-msg{max-width:78%;padding:7px 11px;border-radius:14px;font-size:13px;line-height:1.4;white-space:pre-wrap;word-break:break-word;}
   .bd-de-cliente{align-self:flex-start;background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px;}
   .bd-de-bot{align-self:flex-end;background:#DCF3E4;color:#14532D;border-bottom-right-radius:4px;}
+  /* Lo que contestaste vos a mano desde Instagram: de tu lado, pero distinto del bot */
+  .bd-de-juni{align-self:flex-end;background:#EEF3FB;color:#1E3A5F;border:1px solid #B5D4F4;border-bottom-right-radius:4px;}
+  .bd-de-juni .bd-quien{font-size:9px;font-weight:700;letter-spacing:.04em;opacity:.65;margin-bottom:2px;}
+  /* El semaforo de cada chat: verde = el bot contesta, rojo = lo llevas vos */
+  .bd-semaforo{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:100px;border:1px solid;font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .15s;}
+  .sem-on{background:#EAF5EF;color:#1A6B3C;border-color:#A8DFC3;}
+  .sem-on:hover{background:#DCF3E4;}
+  .sem-off{background:#FDECEC;color:#B42318;border-color:#F09595;}
+  .sem-off:hover{background:#FBDCDC;}
   .bd-hora{font-size:10px;color:var(--text3);margin-top:3px;text-align:right;}
   .bd-chat-vacio{font-size:12px;color:var(--text3);text-align:center;padding:6px;}
   .proveedor-alerta{font-size:12px;padding:8px 10px;border-radius:var(--radius-sm);margin-top:8px;}
@@ -10378,6 +10387,7 @@ const MOTIVOS_BOT = {
   permuta:            'Hay que tasar una permuta',
   reparacion:         'Pregunta por una reparación',
   otro_medio_de_pago: 'Otro medio de pago — hay que calcular el recargo',
+  en_mano:            'Lo estás llevando vos — el bot está pausado acá',
   visto:              'Quedó en silencio',
   no_supe_responder:  'El bot no supo qué contestar',
 };
@@ -10493,6 +10503,85 @@ async function guardarCfgBot(campos, aviso){
   }
 }
 
+// ── El semáforo de cada chat ──────────────────────────────
+//
+// El interruptor de arriba es para el bot entero; este es para UNA conversación.
+//
+//   🟢  la contesta solo, como siempre
+//   🔴  no contesta nada acá: la seguís vos desde Instagram
+//
+// Pausado no es apagado: sigue leyendo y anotando. Lo que entre te aparece en la bandeja
+// con el motivo "lo estás llevando vos", y lo que le escribas desde la app de Instagram
+// entra al historial de la charla. Eso último es lo que hace que prenderlo de nuevo no
+// sea empezar de cero — el bot retoma con lo que dijiste vos ya leído.
+window.toggleBotChat = async function(id){
+  const x = convsItems.find(c=>c.id===id); if(!x) return;
+  const quien = x.igUsuario ? '@'+x.igUsuario : 'IG '+(x.igUserId||'—');
+
+  if(!x.botPausado){
+    if(!confirm(`¿Pausar el bot en el chat de ${quien}?\n\nDeja de contestarle solo a esta persona: le contestás vos desde Instagram. Todo lo que entre, y todo lo que le escribas, se sigue guardando acá.\n\nAl resto de los clientes les sigue contestando igual.`)) return;
+    await pausarChat(id, true, 'Bot pausado en este chat — contestale vos');
+    return;
+  }
+
+  // Prenderlo de nuevo. Si el cliente escribió último y nadie le contestó, quedó alguien
+  // esperando: el bot puede retomar AHORA, con la charla entera y la tuya adentro.
+  const h = Array.isArray(x.historial) ? x.historial : [];
+  const t = msDe(x.ultimoMensajeCliente);
+  const pendiente = !!(h.length && h[h.length-1].de === 'cliente' && t && Date.now()-t < META_24H);
+
+  // Una sola pregunta, que dice exactamente qué va a pasar en cada caso. Prender con
+  // algo sin contestar es, justamente, pedirle que lo conteste: no hace falta una
+  // segunda ventana para eso.
+  if(!confirm(pendiente
+    ? `¿Que el bot vuelva a contestar el chat de ${quien}?\n\nQuedó un mensaje del cliente sin responder: lo va a leer con toda la charla —lo que le escribiste vos incluido— y le contesta ahora.`
+    : `¿Que el bot vuelva a contestar el chat de ${quien}?\n\nRetoma cuando el cliente escriba, con todo lo que se dijo, incluido lo que le escribiste vos desde Instagram.`)) return;
+
+  if(!await pausarChat(id, false, pendiente ? 'Prendido — el bot está leyendo la charla…' : 'Bot prendido en este chat')) return;
+  if(pendiente) await retomarChat(x);
+};
+
+// Solo el campo del semáforo, y quién lo tocó. El Worker lo lee pero no lo escribe nunca:
+// por eso no está en la lista blanca de `soloCamposDelBot()` de firestore.rules.
+async function pausarChat(id, pausado, aviso){
+  setSyncDot('syncing');
+  try{
+    await updateDoc(doc(db,'conversaciones',id), {
+      botPausado: pausado,
+      pausadoPor: (currentUser && currentUser.email) || uid,
+      pausadoEn: serverTimestamp(),
+    });
+    showToast(aviso);
+    return true;
+  }catch(e){
+    showToast('No se pudo cambiar: '+e.message, true);
+    setSyncDot('error');
+    return false;
+  }
+}
+
+// El bot lee la charla completa —lo que contestaste vos incluido— y responde el último
+// mensaje del cliente. El DM lo manda el Worker: el token de Instagram no puede vivir
+// en un HTML público, igual que en "Aprobar y mandar".
+async function retomarChat(x){
+  if(!x.igUserId){ showToast('Esta conversación no tiene guardado el usuario de Instagram.', true); return; }
+  try{
+    const r = await fetch(IG_WORKER_URL+'/reanudar', {
+      method: 'POST',
+      headers: await workerHeaders(),
+      body: JSON.stringify({ igUserId: x.igUserId }),
+    });
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok){ showToast('El bot no pudo retomar: '+(d.error || `el Worker respondió ${r.status}`), true); return; }
+    showToast(d.pendiente === false ? 'No había nada sin contestar — el bot sigue cuando el cliente escriba'
+            : d.enviados ? `El bot retomó — ${d.enviados} mensaje${d.enviados===1?'':'s'}`
+            : 'El bot leyó la charla y no vio nada para contestar');
+  }catch(e){
+    console.error('reanudar:', e);
+    showToast('No se pudo hablar con el bot: '+e.message, true);
+  }
+}
+
 // El ida y vuelta de la conversación. El historial se empezó a guardar el 22/08/2026:
 // las charlas anteriores a eso solo tienen el último mensaje, así que se muestra ese y
 // se avisa. No se puede recuperar lo anterior — Instagram no lo devuelve.
@@ -10504,8 +10593,12 @@ function renderChat(x){
       : 'Sin mensajes guardados todavía.'}</div></div>`;
   }
   const hora = v => { const t = msDe(v); return t ? new Date(t).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}) : ''; };
+  // Tres orígenes: el cliente, el bot, y lo que contestaste vos a mano desde Instagram
+  // (`juni`, lo anota el Worker cuando Meta le avisa del mensaje). Van separados a
+  // propósito: para saber qué dijiste vos y qué dijo el bot cuando algo salió torcido.
+  const clase = de => de==='bot' ? 'bd-de-bot' : de==='juni' ? 'bd-de-juni' : 'bd-de-cliente';
   return `<div class="bd-chat">${h.map(m=>`
-    <div class="bd-msg ${m.de==='bot'?'bd-de-bot':'bd-de-cliente'}">${esc(m.texto)}<div class="bd-hora">${hora(m.fecha)}</div></div>`).join('')}</div>`;
+    <div class="bd-msg ${clase(m.de)}">${m.de==='juni'?'<div class="bd-quien">VOS, DESDE INSTAGRAM</div>':''}${esc(m.texto)}<div class="bd-hora">${hora(m.fecha)}</div></div>`).join('')}</div>`;
 }
 
 // ── El tablero ────────────────────────────────────────────
@@ -10605,6 +10698,13 @@ function renderBandeja(){
     const abierta = bdAbiertas.has(x.id);
     const quien = x.igUsuario ? '@'+x.igUsuario : 'IG '+(x.igUserId||'—');
     const borrador = bdBorradores[x.id] ?? (x.mensajes||[]).join('\n');
+    const pausado = x.botPausado === true;
+
+    // El semáforo va en la fila cerrada también: de un vistazo tenés que poder ver qué
+    // chats está llevando el bot y cuáles estás llevando vos.
+    const semaforo = `<button class="bd-semaforo ${pausado?'sem-off':'sem-on'}"
+      title="${pausado?'El bot no contesta este chat. Tocá para que vuelva a contestar.':'El bot contesta este chat solo. Tocá para pausarlo y seguirlo vos.'}"
+      onclick="event.stopPropagation(); toggleBotChat('${escJs(x.id)}')">${pausado?'🔴 Pausado':'🟢 Bot'}</button>`;
 
     const etiqueta = x.necesitaAtencion
       ? `<span class="est-badge ${vencida?'est-abandono':'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>`
@@ -10621,11 +10721,12 @@ function renderBandeja(){
           <div style="font-size:12px;color:var(--text3);margin-top:2px;">${bajada} · ${t?haceCuanto(ahora-t):'sin fecha'}${x.ultimoProducto?' · '+esc(x.ultimoProducto):''}</div>
           ${!abierta && x.resumen?`<div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(x.resumen)}</div>`:''}
         </div>
-        ${etiqueta}
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">${semaforo}${etiqueta}</div>
       </div>
       ${!abierta ? '' : `
       ${x.resumen?`<div style="font-size:13px;color:var(--text2);margin-top:8px;">${esc(x.resumen)}</div>`:''}
       ${renderChat(x)}
+      ${pausado?`<div class="proveedor-alerta alerta-atencion">🔴 <b>El bot está pausado en este chat</b> — contestale vos desde Instagram. Lo que le escribas se anota acá abajo, y cuando lo vuelvas a prender el bot retoma sabiendo todo lo que le dijiste.</div>`:''}
       ${vencida?`<div class="proveedor-alerta alerta-urgente">⏰ <b>Pasaron las 24 h</b> — Instagram ya no deja que el bot conteste. Escribile vos desde la app y después marcala como contestada.</div>`:''}
       <div class="field" style="margin:10px 0 8px;">
         <label>${vencida?'Respuesta que había preparado el bot (no se puede mandar desde acá)':'Respuesta — editala si hace falta, una línea por mensaje'}</label>
