@@ -192,6 +192,22 @@ async function procesarMensaje(ev, env) {
     console.log(env.ANTHROPIC_KEY ? 'mensaje sin texto ni adjuntos' : 'sin ANTHROPIC_KEY: no se llama a la IA');
   }
 
+  // El ida y vuelta se anota ANTES de mandar los DM, no después. Dos razones, las dos
+  // aprendidas a los golpes:
+  //
+  //  - el eco de cada DM que manda el bot vuelve por el webhook un segundo después de
+  //    salir. Si sus líneas todavía no están escritas, ese eco parece escrito a mano y la
+  //    charla queda con el mensaje repetido;
+  //  - y sobre todo: mientras la IA piensa y los DM salen, Juni puede estar contestando a
+  //    mano desde Instagram. Esa respuesta entra al historial por su cuenta, y si al
+  //    final escribiéramos el historial que leímos al principio, la pisaríamos.
+  //
+  // Lo que no salga se saca después: es mucho más barato corregir un envío fallado —que
+  // es raro— que perder lo que Juni escribió, que no se puede recuperar de ningún lado.
+  const nuevas = [linea('cliente', texto || (adjuntos[0] ? `[${adjuntos[0]}]` : ''), fechaMensaje)];
+  ia.mensajes.forEach(t => nuevas.push(linea('bot', t, new Date())));
+  if (idToken) await anotarEnHistorial(env, idToken, senderId, nuevas);
+
   // Cada elemento del array sale como un DM aparte, en orden.
   const enviados = await mandarAutomatico(env, senderId, ia.mensajes, { pausado });
 
@@ -245,14 +261,12 @@ async function procesarMensaje(ev, env) {
   const igUsuario = await pedidoUsuario;
   if (igUsuario) doc.igUsuario = igUsuario;
 
-  // El ida y vuelta de esta tanda: primero lo que escribió el cliente, después lo que
-  // contestó el bot. Solo se anota lo que REALMENTE salió: si el envío se cortó a la
-  // mitad, el historial tiene que reflejar lo que el cliente vio, no lo que se pensaba
-  // mandar. Si el bot está apagado o en prueba, no sale nada y solo queda el del cliente.
-  if (idToken) {
-    const nuevas = [linea('cliente', texto || (adjuntos[0] ? `[${adjuntos[0]}]` : ''), fechaMensaje)];
-    ia.mensajes.slice(0, enviados).forEach(t => nuevas.push(linea('bot', t, new Date())));
-    doc.historial = [...historial, ...nuevas].slice(-MAX_HISTORIAL);
+  // El historial ya se escribió arriba. Acá solo se corrige si algo no llegó a salir: el
+  // cliente tiene que ver en la charla lo que realmente le llegó, no lo que se pensaba
+  // mandar. Si el bot está apagado, en prueba o pausado no sale nada, y las líneas del
+  // bot se sacan todas.
+  if (idToken && quedoSinMandar) {
+    await sacarDelHistorial(env, idToken, senderId, ia.mensajes.slice(enviados));
   }
 
   // Solo va si el modelo nombró un equipo. Si este mensaje no habla de ninguno el campo
@@ -288,24 +302,6 @@ async function usuarioDeIG(env, igUserId) {
 // Cuántas líneas de las nuestras se miran para reconocer un eco propio. Con 10 alcanza:
 // el bot manda como mucho 3 o 4 mensajes por tanda.
 const ECOS_A_MIRAR = 10;
-
-/**
- * Cuánto se espera antes de mirar el historial.
- *
- * El eco de un DM del bot puede llegar ANTES de que `procesarMensaje()` termine de
- * escribir la charla: manda los mensajes, y recién después de mandarlos todos guarda. Si
- * el eco mira el historial en esa ventana, su línea todavía no está, el mensaje parece
- * escrito a mano y la charla queda con el texto repetido —una vez como del bot y otra
- * como tuya.
- *
- * Pasó en la primera prueba, el 23/08/2026: de los dos DM que mandó el bot, el eco del
- * primero entró a mitad de camino y se anotó como si lo hubieras escrito vos.
- *
- * Esperar unos segundos lo resuelve y no tiene contra: el webhook ya contestó 200 y esto
- * corre en `waitUntil`, así que no hay nadie esperando. Un mensaje escrito a mano tampoco
- * pierde nada por anotarse seis segundos más tarde.
- */
-const ESPERA_ECO = 6000;
 
 /**
  * ¿Este eco es un mensaje que ya mandamos nosotros?
@@ -365,9 +361,6 @@ async function anotarEco(ev, env) {
   }
   if (!cliente || !texto) { console.log('eco: sin destinatario o sin texto, lo salteo'); return; }
 
-  // Antes de mirar nada: que el webhook termine de escribir lo suyo (ver ESPERA_ECO).
-  await dormir(ESPERA_ECO);
-
   const idToken = await tokenDelBot(env);
   if (!idToken) { console.log('eco: sin token, no se anota'); return; }
 
@@ -390,10 +383,87 @@ async function anotarEco(ev, env) {
   // Se anota `historial` y NADA más. En particular no se toca `ultimoMensajeCliente`:
   // ese campo es la ventana de 24 h de Meta, y la corre el cliente cuando escribe, no
   // nosotros cuando le contestamos. Moverlo daría 24 h de aire que Meta no dio.
-  const nuevo = [...historial, linea('juni', texto, new Date(ev.timestamp || Date.now()))].slice(-MAX_HISTORIAL);
-  const name = `projects/${env.FIREBASE_PROJECT}/databases/(default)/documents/conversaciones/${encodeURIComponent(cliente)}`;
-  const ok = await patchDoc(env, idToken, name, { historial: nuevo });
+  const ok = await anotarEnHistorial(env, idToken, cliente, [linea('juni', texto, new Date(ev.timestamp || Date.now()))]);
   console.log(ok ? `eco anotado: le contestaste a mano a ${cliente}` : 'eco: no se pudo anotar');
+}
+
+/**
+ * La ruta completa del doc de una conversación, como la piden `patchDoc` y las queries.
+ */
+const docConversacion = (env, igUserId) =>
+  `projects/${env.FIREBASE_PROJECT}/databases/(default)/documents/conversaciones/${encodeURIComponent(igUserId)}`;
+
+/**
+ * Agrega líneas al final del historial de una conversación.
+ *
+ * RELEE el doc justo antes de escribir, en vez de usar la copia que se leyó al empezar a
+ * procesar el mensaje. Entre una cosa y la otra pasan varios segundos —la IA piensa, los
+ * DM salen de a uno— y en esos segundos puede entrar otra línea: casi siempre, una
+ * respuesta que Juni escribió a mano desde Instagram. Con la copia vieja, esa línea se
+ * perdía: la escribía el eco y la pisaba el guardado del webhook un segundo después.
+ *
+ * Queda una ventana chica: si dos escrituras releen en el mismo instante, la segunda pisa
+ * a la primera. Cerrarla del todo pide transacciones en el camino caliente del webhook, y
+ * el historial es contexto, no el registro contable.
+ *
+ * `userId` viaja siempre porque este puede ser el PRIMER write del doc (el primer DM de
+ * un cliente nuevo): sin ese campo el doc queda sin dueño y las reglas rechazan el
+ * update siguiente entero.
+ */
+async function anotarEnHistorial(env, idToken, igUserId, lineas) {
+  if (!lineas.length) return true;
+
+  const previo = await leerDoc(env, idToken, `conversaciones/${igUserId}`);
+  const historial = Array.isArray(previo && previo.historial) ? previo.historial : [];
+
+  // El tercer argumento va en una variable `name`, como en el resto de las llamadas a
+  // patchDoc(): asi lo espera el test que compara lo que escribe el bot contra la lista
+  // blanca de firestore.rules.
+  const name = docConversacion(env, igUserId);
+  return patchDoc(env, idToken, name, {
+    historial: [...historial, ...lineas].slice(-MAX_HISTORIAL),
+    userId: env.OWNER_UID,
+  });
+}
+
+/**
+ * Saca del historial las líneas del bot que no llegaron a salir.
+ *
+ * Se anota lo que se VA a mandar antes de mandarlo, así que si un envío falla queda
+ * anotado algo que el cliente nunca vio. Peor que un hueco: el bot retomaría dando por
+ * dicho un precio que no llegó.
+ */
+async function sacarDelHistorial(env, idToken, igUserId, textos) {
+  if (!textos.length) return true;
+
+  const previo = await leerDoc(env, idToken, `conversaciones/${igUserId}`);
+  const historial = Array.isArray(previo && previo.historial) ? previo.historial : [];
+
+  console.log('sacando del historial', textos.length, 'mensaje(s) que no salieron');
+  const name = docConversacion(env, igUserId);
+  return patchDoc(env, idToken, name, {
+    historial: sinLasQueNoSalieron(historial, textos),
+    userId: env.OWNER_UID,
+  });
+}
+
+/**
+ * El historial sin las líneas del bot que no salieron.
+ *
+ * Se busca desde el final y una por una: si el bot mandó dos veces el mismo texto en la
+ * charla y solo falló el segundo, tiene que quedar el primero.
+ */
+export function sinLasQueNoSalieron(historial, textos) {
+  const pendientes = (textos || []).map(t => String(t || '').trim());
+  const salida = [];
+
+  for (let i = (historial || []).length - 1; i >= 0; i--) {
+    const l = historial[i];
+    const j = l && l.de === 'bot' ? pendientes.indexOf(String(l.texto || '').trim()) : -1;
+    if (j !== -1) { pendientes.splice(j, 1); continue; }
+    salida.unshift(l);
+  }
+  return salida;
 }
 
 // ── El historial de la conversación ───────────────────────────
@@ -828,7 +898,8 @@ async function accesoriosDisponibles(env, idToken) {
 // precio— así que van juntos en el mismo bloque. Hasta el 23/08/2026 el bot solo veía
 // `stock`: la mitad de los equipos que el local tenía para vender no existían para él.
 //
-// De los dos se sacan solo campos de venta: nombre, gb, color, batería, ciclos y PRECIO
+// De los dos se sacan solo campos de venta: nombre, gb, color, batería, ciclos, condición
+// (nuevo o usado) y PRECIO
 // DE VENTA. Nunca el costo, ni el proveedor de la consignación — no queremos que la IA
 // los mencione ni por error.
 
@@ -883,6 +954,8 @@ async function stockDisponible(env, idToken) {
           color: v('color'),
           bateria: v('bateria'),
           ciclos: v('ciclos'),
+          // Nuevo sellado o usado. Sin esto el modelo lo deducía —mal— de la batería.
+          condicion: v('estadoProducto'),
           precio: v('precioVentaUSD'),   // precio de venta, NUNCA el costo
           // No es un campo para el modelo: se usa acá abajo y se saca antes de pasarlo.
           refurb: f.refurb?.booleanValue === true,
@@ -950,6 +1023,7 @@ async function consigDisponible(env, idToken) {
           color: v('color'),
           bateria: v('bateria'),
           ciclos: v('ciclos'),
+          condicion: v('estadoProducto'),
           precio: v('precioVentaUSD') ?? v('precioUSD'),
         };
       })

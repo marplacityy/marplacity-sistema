@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento, sinLasQueNoSalieron } from './worker-ig.js';
 import { construirSystem } from './prompt.js';
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
@@ -256,6 +256,36 @@ console.log('\n── nombreLindo: el nombre del producto ──');
   ok(n('iPhone 15 Pro Max') === 'iPhone 15 Pro Max', 'lo que ya estaba bien queda igual');
   ok(n('parlante jbl') === 'parlante jbl', 'lo que no conoce lo deja como esta');
   ok(n('') === '' && n(null) === '' && n(undefined) === '', 'vacio, null y undefined no rompen');
+}
+
+console.log('\n── sinLasQueNoSalieron ──');
+// El historial se anota ANTES de mandar, para que el eco reconozca las lineas del bot y
+// para no pisar lo que Juni escriba mientras tanto. Si un envio falla hay que sacar lo
+// que el cliente nunca vio: peor que un hueco es que el bot retome dando por dicho un
+// precio que no llego.
+{
+  const h = [
+    { de:'cliente', texto:'que precio?' },
+    { de:'bot', texto:'800 usd' },
+    { de:'juni', texto:'te hago 780' },
+    { de:'bot', texto:'ahora te mando la foto' },
+  ];
+  const sin = sinLasQueNoSalieron(h, ['ahora te mando la foto']);
+  ok(sin.length === 3, 'saca la linea que no salio', JSON.stringify(sin));
+  ok(!sin.some(l => l.texto === 'ahora te mando la foto'), 'y es la correcta');
+  ok(sin.some(l => l.de === 'juni'), 'lo que escribio Juni no se toca');
+
+  // Si el mismo texto salio dos veces y fallo el segundo, tiene que quedar el primero
+  const dos = sinLasQueNoSalieron(
+    [{de:'bot',texto:'hola'},{de:'cliente',texto:'?'},{de:'bot',texto:'hola'}], ['hola']);
+  ok(dos.filter(l=>l.texto==='hola').length === 1, 'de dos iguales saca una sola');
+  ok(dos[0].texto === 'hola' && dos[0].de === 'bot', 'y saca la ultima, no la primera');
+
+  ok(sinLasQueNoSalieron(h, []).length === 4, 'sin nada que sacar queda igual');
+  ok(sinLasQueNoSalieron([], ['x']).length === 0, 'historial vacio no rompe');
+  ok(sinLasQueNoSalieron(null, ['x']).length === 0, 'historial nulo no rompe');
+  // Una linea del cliente con el mismo texto no se toca: solo se sacan las del bot
+  ok(sinLasQueNoSalieron([{de:'cliente',texto:'hola'}], ['hola']).length === 1, 'no toca las del cliente');
 }
 
 console.log('\n── textoSeguimiento ──');
