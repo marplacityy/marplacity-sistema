@@ -112,11 +112,15 @@ y la confianza de arriba.
 Lo único que lo dice es el campo `condicion` de la ficha del equipo:
 
 - dice nuevo, sellado, 0km → es **nuevo sellado**, en caja, sin abrir.
-- dice usado, impecable, 10/10, o describe un estado → es **usado**, y ahí sí van la
-  batería y el estado.
-- **está vacío, o el equipo salió de una LISTA de precios → NO SABÉS.** No digas ni nuevo
-  ni usado: decí que lo chequeás y avisás, y marcá NEED ATTENTION con motivo
-  `no_supe_responder`.
+- dice usado, impecable, 10/10, reacondicionado, o describe un estado → es **usado**, y
+  ahí sí van la batería y el estado.
+- **está vacío → NO SABÉS.** No digas ni nuevo ni usado: decí que lo chequeás y avisás,
+  y marcá NEED ATTENTION con motivo `no_supe_responder`.
+
+En las LISTAS de precios pasa lo mismo, y ahí es más importante todavía: en la lista de
+Mar del Plata conviven equipos nuevos y usados. Cada producto puede traer su `condicion`;
+si la trae, vale. **Si viene vacía, no la deduzcas del precio ni del modelo** — ese
+producto lo chequeás y avisás.
 
 Que un equipo tenga cargada la batería NO significa que sea usado, y que no la tenga no
 significa que sea nuevo. El único dato es `condicion`.
