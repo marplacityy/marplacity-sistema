@@ -1151,7 +1151,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.23-D</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.24-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -11139,7 +11139,7 @@ window.renderKbLista = function(origen){
   // lista: sin esto, editar un precio con el buscador activo tocaría otro producto.
   const q = (document.getElementById('kb-'+origen+'-buscar').value||'').trim().toLowerCase();
   let filas = base.map((it,i)=>({it,i}));
-  if(q) filas = filas.filter(({it}) => `${it.producto||''} ${it.gb||''} ${it.color||''}`.toLowerCase().includes(q));
+  if(q) filas = filas.filter(({it}) => `${it.producto||''} ${it.gb||''} ${it.color||''} ${it.condicion||''}`.toLowerCase().includes(q));
 
   // Aviso de cambios sin guardar
   const cambios = document.getElementById('kb-'+origen+'-cambios');
@@ -11169,7 +11169,7 @@ window.renderKbLista = function(origen){
 
   const simbolo = moneda==='ARS' ? '$' : 'u$s';
   tb.innerHTML = filas.map(({it,i})=>`<tr>
-    <td>${esc(it.producto||'')}</td>
+    <td>${esc(it.producto||'')}${badgeCondicion(it.condicion)}</td>
     <td>${esc(it.gb||'')}</td>
     <td>${esc(it.color||'')}</td>
     <td style="text-align:right;white-space:nowrap;">
@@ -11208,6 +11208,7 @@ Cada objeto tiene exactamente estos campos (poné null en los que no aparezcan, 
 - gb: capacidad, ej "256GB", "1TB"
 - color: color si está, ej "Desert Titanium", "Negro"
 - precioPublico: número sin símbolos ni separadores de miles
+- condicion: "nuevo" o "usado", SOLO si la lista lo aclara para ese producto (con esas palabras, con "sellado", "0km", "impecable", una batería, ciclos, o un encabezado que separe una sección de otra). Si no lo dice, va null. NO lo deduzcas del precio ni del modelo.
 
 IMPORTANTE: el precio que figura en la lista YA ES el precio final al público. Copialo tal cual: no le apliques ningún margen, recargo, descuento ni redondeo.
 
@@ -11235,12 +11236,17 @@ ${texto}`
   btn.disabled = false; btn.textContent = '✨ Interpretar con IA';
 };
 
+// El cartelito de nuevo/usado. Vacío no dibuja nada: la mayoría de las listas no lo
+// aclaran, y un "—" en cada fila sería ruido.
+const badgeCondicion = c => !c ? '' :
+  `<span class="consig-tipo ${c==='nuevo'?'tipo-permuta':'tipo-consig'}" style="margin-left:6px;">${c==='nuevo'?'nuevo':'usado'}</span>`;
+
 function renderKbPreview(origen){
   const moneda = document.getElementById('kb-'+origen+'-moneda').value;
   document.getElementById('kb-'+origen+'-preview-items').innerHTML = kbParseada[origen].map((it,i)=>`<div class="stock-item" style="align-items:center;">
     <div class="stock-info">
       <div class="stock-nombre">${esc(it.producto||'')}</div>
-      <div class="stock-meta" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${[it.gb,it.color].filter(Boolean).map(ch=>`<span style="font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:100px;padding:1px 7px;">${esc(ch)}</span>`).join('')}</div>
+      <div class="stock-meta" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${[it.gb,it.color].filter(Boolean).map(ch=>`<span style="font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:100px;padding:1px 7px;">${esc(ch)}</span>`).join('')}${badgeCondicion(it.condicion)}</div>
     </div>
     <div class="stock-val"><div class="stock-usd">${fmtPrecioKb(it.precioPublico, moneda)}</div></div>
     <button class="ei-btn del" onclick="quitarDeKbPreview('${escJs(origen)}',${i})" title="Quitar">×</button>
@@ -11258,10 +11264,13 @@ window.cancelarListaKb = function(origen){
   document.getElementById('kb-'+origen+'-preview').style.display = 'none';
 };
 
-// Dos productos son el mismo si coinciden modelo, capacidad y color. Sin normalizar,
-// "iPhone 15  Pro" y "iphone 15 pro" entrarían como dos productos distintos y la lista
-// se llenaría de duplicados a cada actualización.
-const claveItemKb = it => `${it.producto||''}|${it.gb||''}|${it.color||''}`
+// Dos productos son el mismo si coinciden modelo, capacidad, color Y CONDICIÓN. Sin
+// normalizar, "iPhone 15  Pro" y "iphone 15 pro" entrarían como dos productos distintos
+// y la lista se llenaría de duplicados a cada actualización.
+//
+// La condición entra en la clave porque el mismo modelo nuevo y usado son dos productos
+// con dos precios: sin ella, cargar el usado le pisaba el precio al nuevo.
+const claveItemKb = it => `${it.producto||''}|${it.gb||''}|${it.color||''}|${it.condicion||''}`
   .toLowerCase().replace(/\s+/g,' ').trim();
 
 /**
@@ -11288,10 +11297,22 @@ function fusionarListaKb(previos, nuevos){
   return { items: [...agregados, ...actualizados], agregados: agregados.length, actualizados: pisados.size };
 }
 
+// La condición es lo único que el bot no puede deducir: en la lista de Mar del Plata
+// conviven equipos nuevos y usados. Si la lista no la aclara queda vacía, y el bot
+// escala en vez de arriesgar — decirle "usado" a alguien que mira un equipo sellado
+// (o al revés) es de las peores cosas que puede contestar.
+const condicionKb = v => {
+  const t = String(v||'').toLowerCase();
+  if(/nuev|sellad|0 ?km/.test(t)) return 'nuevo';
+  if(/usad|impecab|refurb|reacond/.test(t)) return 'usado';
+  return '';
+};
+
 const itemKbLimpio = it => ({
   producto: String(it.producto||'').trim(),
   gb: it.gb!=null ? String(it.gb).trim() : '',
   color: it.color!=null ? String(it.color).trim() : '',
+  condicion: condicionKb(it.condicion),
   // precioPublico va tal cual vino en la lista: ya es el precio final
   precioPublico: (it.precioPublico!=null && !isNaN(Number(it.precioPublico))) ? Number(it.precioPublico) : null,
 });
