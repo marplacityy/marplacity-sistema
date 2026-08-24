@@ -117,6 +117,16 @@ service cloud.firestore {
       allow read: if esBot();
     }
 
+    // Consignacion: equipos de un proveedor que estan en el local para vender. Para el
+    // cliente son un celular mas, al lado de los propios, asi que el bot los tiene que
+    // ver igual que `stock`. Hasta el 23/08/2026 no podia, y la mitad de los equipos que
+    // el local tenia para vender no existian para el.
+    // OJO: estos documentos incluyen el costo y el proveedor. El Worker filtra y solo le
+    // pasa a la IA el precio de venta, pero el permiso es sobre el doc entero.
+    match /consig/{docId} {
+      allow read: if esBot();
+    }
+
     // Inventario: accesorios (cargadores, fundas, vidrios, cables). El bot solo lee,
     // para saber que hay y a que precio. Hasta el 23/08/2026 no podia, y decia que no
     // tenia cargadores mientras estaban cargados aca.

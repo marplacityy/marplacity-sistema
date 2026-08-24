@@ -817,9 +817,32 @@ async function accesoriosDisponibles(env, idToken) {
   }
 }
 
-// ── Traer el stock disponible para que la IA sepa qué hay ─────
-// Solo campos de venta: nombre, gb, color, batería y PRECIO DE VENTA.
-// Nunca el costo — no queremos que la IA lo mencione ni por error.
+// ── Traer los equipos disponibles para que la IA sepa qué hay ─
+//
+// Son DOS colecciones y las dos se venden igual en el mostrador:
+//
+//   stock   equipos propios del local
+//   consig  equipos en consignación, de un proveedor
+//
+// Para el cliente no hay ninguna diferencia —es un celular que está en el local, a un
+// precio— así que van juntos en el mismo bloque. Hasta el 23/08/2026 el bot solo veía
+// `stock`: la mitad de los equipos que el local tenía para vender no existían para él.
+//
+// De los dos se sacan solo campos de venta: nombre, gb, color, batería, ciclos y PRECIO
+// DE VENTA. Nunca el costo, ni el proveedor de la consignación — no queremos que la IA
+// los mencione ni por error.
+
+/**
+ * Los equipos de las dos colecciones, en una sola lista.
+ */
+async function equiposDisponibles(env, idToken) {
+  const [propios, consignados] = await Promise.all([
+    stockDisponible(env, idToken),
+    consigDisponible(env, idToken),
+  ]);
+  return [...propios, ...consignados];
+}
+
 async function stockDisponible(env, idToken) {
   const proj = env.FIREBASE_PROJECT;
   const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
@@ -859,12 +882,80 @@ async function stockDisponible(env, idToken) {
           gb: v('gb'),
           color: v('color'),
           bateria: v('bateria'),
+          ciclos: v('ciclos'),
           precio: v('precioVentaUSD'),   // precio de venta, NUNCA el costo
+          // No es un campo para el modelo: se usa acá abajo y se saca antes de pasarlo.
+          refurb: f.refurb?.booleanValue === true,
+        };
+      })
+      // En refurbishment = está en el taller, no se puede vender hoy. Se filtra acá y no
+      // en la consulta porque un `refurb != true` de Firestore deja afuera también a los
+      // documentos que no tienen el campo, que son casi todos. Es el mismo criterio con
+      // el que el sistema arma la lista de precios que se le pasa a un cliente.
+      .filter(x => x.equipo && !x.refurb)
+      .map(({ refurb, ...equipo }) => equipo);
+  } catch (e) {
+    console.log('error trayendo stock', e.message);
+    return [];
+  }
+}
+
+/**
+ * Los equipos en consignación disponibles.
+ *
+ * Misma forma que `stockDisponible`, con dos diferencias del doc: el nombre está en
+ * `producto` (no en `nombre`) y el precio de venta puede estar en `precioVentaUSD` o en
+ * `precioUSD`, según cómo se cargó. El mismo criterio que usa el sistema para armar la
+ * lista de precios que se le manda a un cliente.
+ *
+ * El proveedor NO se pasa: es información nuestra, no del cliente.
+ */
+async function consigDisponible(env, idToken) {
+  const proj = env.FIREBASE_PROJECT;
+  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
+
+  const q = {
+    structuredQuery: {
+      from: [{ collectionId: 'consig' }],
+      where: {
+        compositeFilter: {
+          op: 'AND',
+          filters: [
+            { fieldFilter: { field: { fieldPath: 'userId' }, op: 'EQUAL', value: { stringValue: env.OWNER_UID } } },
+            { fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: 'en_stock' } } },
+          ],
+        },
+      },
+      limit: 60,
+    },
+  };
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+      body: JSON.stringify(q),
+    });
+    if (!r.ok) { console.log('consignacion no disponible', r.status, (await r.text()).slice(0, 300)); return []; }
+
+    const d = await r.json();
+    return (d || [])
+      .filter(x => x.document)
+      .map(x => {
+        const f = x.document.fields || {};
+        const v = k => f[k]?.stringValue ?? f[k]?.doubleValue ?? f[k]?.integerValue ?? null;
+        return {
+          equipo: v('producto'),
+          gb: v('gb'),
+          color: v('color'),
+          bateria: v('bateria'),
+          ciclos: v('ciclos'),
+          precio: v('precioVentaUSD') ?? v('precioUSD'),
         };
       })
       .filter(x => x.equipo);
   } catch (e) {
-    console.log('error trayendo stock', e.message);
+    console.log('error trayendo consignacion', e.message);
     return [];
   }
 }
@@ -1024,7 +1115,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
   // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
   // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
   const [stock, accesorios, conocimiento, listaMdp, listaCaba, mensajesFijos] = await Promise.all([
-    stockDisponible(env, idToken),
+    equiposDisponibles(env, idToken),
     accesoriosDisponibles(env, idToken),
     leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`),
     ultimaLista(env, idToken, 'mdp'),
