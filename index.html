@@ -914,6 +914,9 @@
     <div id="cc-summary" class="permuta-box" style="margin-bottom:14px;"></div>
     <div class="card-title" style="margin-bottom:8px;">Movimientos</div>
     <div id="cc-timeline"></div>
+    <div class="modal-actions" style="justify-content:flex-end;">
+      <button class="btn-secondary" style="color:var(--neg);border-color:var(--neg);" onclick="borrarCuentaProveedorActual()">🗑 Dejar la cuenta en 0</button>
+    </div>
   </div>
 </div>
 
@@ -1151,7 +1154,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.25-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.25-B</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -1990,10 +1993,15 @@
             <div class="field"><label>Monto pagado</label>
               <div style="display:flex;gap:6px;">
                 <input type="number" id="pago-monto" placeholder="0" step="0.01" min="0" style="flex:1">
-                <select id="pago-moneda" style="width:80px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="USD">USD</option><option value="ARS">ARS</option></select>
+                <select id="pago-moneda" onchange="pagoTcToggle()" style="width:80px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="USD">USD</option><option value="ARS">ARS</option></select>
               </div>
             </div>
             <div class="field"><label>Medio de pago</label><select id="pago-medio"></select></div>
+          </div>
+          <div class="field" id="pago-tc-wrap" style="display:none;">
+            <label>Cotización del día (ARS/USD)</label>
+            <input type="number" id="pago-tc" placeholder="1410" step="1" oninput="pagoTcPreview()">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;" id="pago-tc-preview">Con esto el pago en pesos descuenta del saldo en dólares.</div>
           </div>
           <div class="field"><label>Notas</label><input type="text" id="pago-notas" placeholder="Transferencia, efectivo, referencia..."></div>
           <button class="btn-save" id="btn-pago-guardar" onclick="guardarPago()">Registrar pago</button>
@@ -9317,15 +9325,47 @@ window.guardarConsig = async function(){
   btn.disabled=false;btn.textContent='Agregar producto';
 };
 
+// El pago vale en dólares: el que se hizo en pesos, a la cotización que se guardó
+// cuando se cargó. Los viejos, que se cargaron antes de que existiera el campo, caen
+// al TC habitual y se muestran marcados como estimados.
+function pagoUSD(p){
+  if(p.moneda!=='ARS') return p.monto||0;
+  const tc = p.tc || parseFloat(cfg.tc) || null;
+  return tc ? (p.monto||0)/tc : 0;
+}
+
+window.pagoTcToggle = function(){
+  const ars = document.getElementById('pago-moneda').value==='ARS';
+  document.getElementById('pago-tc-wrap').style.display = ars?'':'none';
+  const tcIn = document.getElementById('pago-tc');
+  if(ars && !tcIn.value) tcIn.value = cfg.tc||'';
+  pagoTcPreview();
+};
+
+window.pagoTcPreview = function(){
+  const el = document.getElementById('pago-tc-preview'); if(!el) return;
+  const monto = parseFloat(document.getElementById('pago-monto').value)||0;
+  const tc = parseFloat(document.getElementById('pago-tc').value)||0;
+  el.textContent = (monto&&tc)
+    ? 'Descuenta '+fmtUSD(monto/tc)+' del saldo.'
+    : 'Con esto el pago en pesos descuenta del saldo en dólares.';
+};
+
 window.guardarPago = async function(){
   const proveedor=document.getElementById('pago-proveedor').value.trim();
   const monto=parseFloat(document.getElementById('pago-monto').value);
   if(!proveedor){showToast('Completá el proveedor.',true);return;}
   if(!monto||monto<=0){showToast('Completá el monto.',true);return;}
+  const moneda=document.getElementById('pago-moneda').value;
+  // El pago en pesos guarda su cotización, si no no hay forma de bajarlo del saldo
+  // en dólares: convertirlo después, con el TC de hoy, falsearía un pago viejo.
+  const tc = moneda==='ARS' ? (parseFloat(document.getElementById('pago-tc').value)||parseFloat(cfg.tc)||null) : null;
+  if(moneda==='ARS' && !tc){showToast('Poné la cotización del día para el pago en pesos.',true);return;}
   const entry={
     proveedor,
     monto,
-    moneda:document.getElementById('pago-moneda').value,
+    moneda,
+    tc,
     medio:document.getElementById('pago-medio').value,
     fecha:document.getElementById('pago-fecha').value||today(),
     notas:document.getElementById('pago-notas').value.trim(),
@@ -9340,6 +9380,7 @@ window.guardarPago = async function(){
     document.getElementById('pago-proveedor').value='';
     document.getElementById('pago-monto').value='';
     document.getElementById('pago-notas').value='';
+    pagoTcPreview();
     document.getElementById('pago-fecha').value=today();
   }catch(e){showToast('Error al guardar',true);setSyncDot('error');}
   btn.disabled=false;btn.textContent='Registrar pago';
@@ -9454,7 +9495,7 @@ function proveedorAging(prov, idx){
   const hoy = new Date(today());
   const liberados = deudaLiberada(items, esProvFijo(prov));
   const pagosProv = idx ? (idx.pagos.get(prov)||[]) : pagosItems.filter(p=>p.proveedor===prov);
-  const pagadoUSD = pagosProv.filter(p=>p.moneda==='USD').reduce((s,p)=>s+(p.monto||0),0);
+  const pagadoUSD = pagosProv.reduce((s,p)=>s+pagoUSD(p),0);
   // FIFO: los pagos consumen la deuda más vieja primero
   let restante = pagadoUSD;
   let masVieja = null;
@@ -9484,8 +9525,9 @@ function renderProveedores(){
     const enEspera=esFijo ? [] : vendidos.filter(g=>g.fechaVenta && (hoy-new Date(g.fechaVenta))/86400000<2);
     const liberadoUSD=deudaLiberada(items, esFijo).reduce((s,d)=>s+d.monto,0);
     const esperaUSD=enEspera.reduce((s,g)=>s+(g.precioUSD||0),0);
-    const pagado=pagosItems.filter(p=>p.proveedor===prov&&p.moneda==='USD').reduce((s,p)=>s+(p.monto||0),0);
-    const pagadoARS=pagosItems.filter(p=>p.proveedor===prov&&p.moneda==='ARS').reduce((s,p)=>s+(p.monto||0),0);
+    const pagosProv=_idxProv.pagos.get(prov)||[];
+    const pagado=pagosProv.reduce((s,p)=>s+pagoUSD(p),0);
+    const pagadoARS=pagosProv.filter(p=>p.moneda==='ARS').reduce((s,p)=>s+(p.monto||0),0);
     const aPagar=Math.max(0, liberadoUSD-pagado);
     const dni=items.find(g=>g.provDni)?.provDni||'';
     const tel=items.find(g=>g.provTel)?.provTel||'';
@@ -9508,7 +9550,7 @@ function renderProveedores(){
         <div class="proveedor-stat">Vendidos: <strong>${vendidos.length}</strong></div>
         ${esperaUSD?`<div class="proveedor-stat">⏳ En espera 48hs: <strong style="color:#854F0B">${fmtUSD(esperaUSD)}</strong></div>`:''}
         <div class="proveedor-stat">${esFijo?'💰 Le debés':'💰 Disponible p/ pagar'}: <strong style="color:${aPagar>0?'#237A4B':'var(--text3)'}">${fmtUSD(aPagar)}</strong></div>
-        <div class="proveedor-stat">Pagado: <strong style="color:#237A4B">${fmtUSD(pagado)}${pagadoARS?(' / '+fmtARS(pagadoARS)):''}</strong></div>
+        <div class="proveedor-stat">Pagado: <strong style="color:#237A4B">${fmtUSD(pagado)}</strong>${pagadoARS?` <span style="color:var(--text3)">(incluye ${fmtARS(pagadoARS)})</span>`:''}</div>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;">
         <button class="btn-pagar-outline" onclick="event.stopPropagation();abrirCuentaCorriente('${esc(prov).replace(/'/g,"\\'")}')">📋 Cuenta corriente</button>
@@ -9519,7 +9561,9 @@ function renderProveedores(){
 }
 
 // ── Cuenta corriente: libro mayor de retiros y pagos ──
+let ccProv = null;
 window.abrirCuentaCorriente = function(prov){
+  ccProv = prov;
   const items = consigItems.filter(g=>g.proveedor===prov);
   const pagos = pagosItems.filter(p=>p.proveedor===prov);
   const fijo  = esProvFijo(prov);
@@ -9541,10 +9585,12 @@ window.abrirCuentaCorriente = function(prov){
   });
   pagos.forEach(p=>{
     const ars = p.moneda==='ARS';
+    const usd = pagoUSD(p);
+    const tc  = p.tc || parseFloat(cfg.tc) || null;
     movs.push({fecha:p.fecha||'', peso:1,
       detalle:'Pago'+(p.medio?' · '+p.medio:'')+(p.notas?' — '+p.notas:''),
-      nota:ars?'en pesos — no descuenta del saldo en dólares':'',
-      haber:ars?0:(p.monto||0), haberARS:ars?(p.monto||0):0});
+      nota:ars?(fmtARS(p.monto||0)+' a '+(p.tc?'TC '+tc:'TC '+tc+' estimado')):'',
+      haber:usd, haberARS:ars?(p.monto||0):0, tcPropio:!!p.tc});
   });
   movs.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'') || a.peso-b.peso);
 
@@ -9566,7 +9612,7 @@ window.abrirCuentaCorriente = function(prov){
   document.getElementById('cc-title').textContent = 'Cuenta corriente — '+prov+(fijo?' 🔁':' 👤');
   document.getElementById('cc-summary').innerHTML = `
     <div class="profit-row"><span class="profit-label">${fijo?'Total retirado':'Total vendido'}</span><span class="profit-val">${fmtUSD(totDebe)}</span></div>
-    <div class="profit-row"><span class="profit-label">Total pagado</span><span class="profit-val" style="color:#237A4B">${fmtUSD(totHaber)}${totHaberARS?' / '+fmtARS(totHaberARS):''}</span></div>
+    <div class="profit-row"><span class="profit-label">Total pagado</span><span class="profit-val" style="color:#237A4B">${fmtUSD(totHaber)}${totHaberARS?`<span style="color:var(--text3);font-size:11px;"> · incluye ${fmtARS(totHaberARS)}</span>`:''}</span></div>
     <div class="profit-row"><span class="profit-label" style="font-weight:700">${saldo<-0.5?'SALDO A FAVOR':'SALDO A PAGAR'}</span><span class="profit-val tk-b" style="color:${saldo>0.5?'var(--neg)':'#237A4B'}">${Math.abs(saldo)<0.5?'✓ AL DÍA':fmtUSD(Math.abs(saldo))}</span></div>
     ${esperaUSD>0.5?`<div class="profit-row"><span class="profit-label">Disponible para pagar hoy</span><span class="profit-val">${fmtUSD(disponible)} <span style="color:var(--text3);font-size:11px;">· ${fmtUSD(esperaUSD)} en espera 48 hs</span></span></div>`:''}
     ${saldo>0.5 && dias!=null && dias>=3 ? `<div class="proveedor-alerta ${dias>=7?'alerta-urgente':'alerta-atencion'}" style="margin-top:8px;">${dias>=7?'⚠️':'🔔'} La deuda más vieja tiene <b>${dias} días</b>.</div>` : ''}
@@ -9585,7 +9631,7 @@ window.abrirCuentaCorriente = function(prov){
           <td style="font-family:'DM Mono',monospace;color:var(--text3);white-space:nowrap;">${fFecha(m.fecha)}</td>
           <td>${esc(m.detalle)}${m.nota?`<div style="font-size:10.5px;color:var(--text3);">${esc(m.nota)}</div>`:''}</td>
           <td style="text-align:right;font-family:'DM Mono',monospace;${m.debe?'color:#B45309;':'color:var(--text3);'}">${m.debe?fmtUSD(m.debe):'—'}</td>
-          <td style="text-align:right;font-family:'DM Mono',monospace;${(m.haber||m.haberARS)?'color:#237A4B;':'color:var(--text3);'}">${m.haber?fmtUSD(m.haber):m.haberARS?fmtARS(m.haberARS):'—'}</td>
+          <td style="text-align:right;font-family:'DM Mono',monospace;${m.haber?'color:#237A4B;':'color:var(--text3);'}">${m.haber?fmtUSD(m.haber):'—'}</td>
           <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;">${m.saldo<-0.5?'a favor '+num(m.saldo):num(m.saldo)}</td>
         </tr>`).join('')}
       </tbody>
@@ -9597,10 +9643,38 @@ window.abrirCuentaCorriente = function(prov){
       </tr></tfoot>
     </table></div>
     ${sinVender.length?`<div style="font-size:11.5px;color:var(--text3);margin-top:8px;">📦 ${sinVender.length} equipo(s) suyo(s) en stock sin vender (${fmtUSD(sinVenderUSD)}) — todavía no suman a la cuenta.</div>`:''}
-    ${totHaberARS?`<div style="font-size:11.5px;color:var(--text3);margin-top:4px;">Los pagos en pesos se listan pero no descuentan del saldo en dólares.</div>`:''}
+    ${movs.some(m=>m.haberARS && !m.tcPropio)?`<div style="font-size:11.5px;color:var(--text3);margin-top:4px;">Los pagos marcados <i>estimado</i> se cargaron sin cotización: se convierten al TC habitual (${cfg.tc||'—'}).</div>`:''}
   ` : '<div class="home-empty">Sin movimientos.</div>';
   document.getElementById('cc-modal').classList.add('open');
 };
+
+
+// Deja la cuenta de un proveedor en cero borrando sus equipos y sus pagos. Es a
+// propósito destructivo: el que quiere conservar el historial no usa este botón.
+window.borrarCuentaProveedorActual = function(){ return borrarCuentaProveedor(ccProv); };
+
+async function borrarCuentaProveedor(prov){
+  if(!prov) return;
+  const items = consigItems.filter(g=>g.proveedor===prov && !String(g.id).startsWith('tmp_'));
+  const pagos = pagosItems.filter(p=>p.proveedor===prov && !String(p.id).startsWith('tmp_'));
+  if(!items.length && !pagos.length){ showToast('Esa cuenta ya está vacía.'); return; }
+  const enStock = items.filter(g=>g.status!=='vendido').length;
+  if(!confirm(`⚠️ Dejar en 0 la cuenta de ${prov}\n\nSe borran ${items.length} equipo(s)${enStock?' — '+enStock+' todavía en stock':''} y ${pagos.length} pago(s).\n\nLos equipos también desaparecen de Consignación. No se puede deshacer.`)) return;
+  const escrito = prompt(`Último paso.\n\nEscribí  BORRAR  para dejar la cuenta de ${prov} en cero:`);
+  if((escrito||'').trim().toUpperCase() !== 'BORRAR'){ showToast('Cancelado — no se borró nada.'); return; }
+  setSyncDot('syncing');
+  try{
+    const refs = [...items.map(g=>doc(db,'consig',g.id)), ...pagos.map(x=>doc(db,'pagos_consig',x.id))];
+    for(let i=0;i<refs.length;i+=400){
+      const batch = writeBatch(db);
+      refs.slice(i,i+400).forEach(r=>batch.delete(r));
+      await batch.commit();
+    }
+    document.getElementById('cc-modal').classList.remove('open');
+    showToast('Cuenta de '+prov+' en cero ✓');
+    setSyncDot('ok');
+  }catch(e){ console.error(e); showToast('Error al borrar: '+e.message,true); setSyncDot('error'); }
+}
 
 
 // ── Comprobante de consignación (térmico) ─────────────
@@ -9665,7 +9739,7 @@ function renderPagos(){
         <div style="font-size:14px;font-weight:500;">${esc(p.proveedor||'')}</div>
         <div class="pago-fecha">${p.fecha||''} ${p.medio?'· '+esc(p.medio):''} ${p.notas?'· '+esc(p.notas):''}</div>
       </div>
-      <div class="pago-monto">${p.moneda==='USD'?fmtUSD(p.monto):fmtARS(p.monto)}</div>
+      <div class="pago-monto">${p.moneda==='USD'?fmtUSD(p.monto):fmtARS(p.monto)}${p.moneda==='ARS'?`<div style="font-size:10.5px;color:var(--text3);font-weight:400;">${fmtUSD(pagoUSD(p))}${p.tc?' · TC '+p.tc:' · TC estimado'}</div>`:''}</div>
       <button class="ei-btn del" onclick="eliminarPago('${p.id}')">×</button>
     </div>
   `).join('');
