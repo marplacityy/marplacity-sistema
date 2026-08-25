@@ -906,7 +906,7 @@
 
 <!-- Cuenta corriente de proveedor -->
 <div class="modal-backdrop" id="cc-modal">
-  <div class="modal" style="max-width:640px;">
+  <div class="modal" style="max-width:780px;">
     <div class="modal-header">
       <h2 id="cc-title">Cuenta corriente</h2>
       <button class="modal-close" onclick="document.getElementById('cc-modal').classList.remove('open')">×</button>
@@ -1151,7 +1151,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.24-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.25-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -9435,27 +9435,35 @@ function indiceProveedores(){
   return {items, pagos};
 }
 
+// Lo que ya se le debe al proveedor, cada renglón con su fecha y lo más viejo primero.
+// Al fijo se le debe desde que el equipo entra: lo retiraste y ya lo debés, se haya
+// vendido o no. Al casual recién 48 hs después de vendido su equipo; antes de eso la
+// plata está en espera.
+function deudaLiberada(items, fijo){
+  const hoy = new Date(today());
+  return (fijo
+    ? items.filter(g=>g.fechaEntrada).map(g=>({fecha:g.fechaEntrada, monto:g.precioUSD||0}))
+    : items.filter(g=>g.status==='vendido' && g.fechaVenta && (hoy-new Date(g.fechaVenta))/86400000>=2)
+           .map(g=>({fecha:g.fechaVenta, monto:g.precioUSD||0}))
+  ).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+}
+
 function proveedorAging(prov, idx){
   // Antigüedad de la deuda: hace cuántos días se liberó plata que todavía no se pagó
   const items = idx ? (idx.items.get(prov)||[]) : consigItems.filter(g=>g.proveedor===prov);
-  const vendidos = items.filter(g=>g.status==='vendido' && g.fechaVenta);
   const hoy = new Date(today());
-  const fijo = esProvFijo(prov);
-  const liberados = vendidos.filter(g=>fijo || (hoy-new Date(g.fechaVenta))/86400000>=2)
-    .sort((a,b)=>a.fechaVenta.localeCompare(b.fechaVenta)); // más viejo primero
+  const liberados = deudaLiberada(items, esProvFijo(prov));
   const pagosProv = idx ? (idx.pagos.get(prov)||[]) : pagosItems.filter(p=>p.proveedor===prov);
   const pagadoUSD = pagosProv.filter(p=>p.moneda==='USD').reduce((s,p)=>s+(p.monto||0),0);
   // FIFO: los pagos consumen la deuda más vieja primero
   let restante = pagadoUSD;
   let masVieja = null;
   for(const g of liberados){
-    const monto = g.precioUSD||0;
-    if(restante >= monto){ restante -= monto; continue; }
+    if(restante >= g.monto){ restante -= g.monto; continue; }
     masVieja = g; break;
   }
   if(!masVieja) return null;
-  const dias = Math.floor((hoy-new Date(masVieja.fechaVenta))/86400000);
-  return dias;
+  return Math.floor((hoy-new Date(masVieja.fecha))/86400000);
 }
 
 function renderProveedores(){
@@ -9473,9 +9481,8 @@ function renderProveedores(){
     const enStock=items.filter(g=>g.status==='en_stock');
     const vendidos=items.filter(g=>g.status==='vendido');
     const hoy=new Date(today());
-    const liberados=vendidos.filter(g=>g.fechaVenta && (esFijo || (hoy-new Date(g.fechaVenta))/86400000>=2));
     const enEspera=esFijo ? [] : vendidos.filter(g=>g.fechaVenta && (hoy-new Date(g.fechaVenta))/86400000<2);
-    const liberadoUSD=liberados.reduce((s,g)=>s+(g.precioUSD||0),0);
+    const liberadoUSD=deudaLiberada(items, esFijo).reduce((s,d)=>s+d.monto,0);
     const esperaUSD=enEspera.reduce((s,g)=>s+(g.precioUSD||0),0);
     const pagado=pagosItems.filter(p=>p.proveedor===prov&&p.moneda==='USD').reduce((s,p)=>s+(p.monto||0),0);
     const pagadoARS=pagosItems.filter(p=>p.proveedor===prov&&p.moneda==='ARS').reduce((s,p)=>s+(p.monto||0),0);
@@ -9500,7 +9507,7 @@ function renderProveedores(){
         <div class="proveedor-stat">En stock: <strong>${enStock.length}</strong></div>
         <div class="proveedor-stat">Vendidos: <strong>${vendidos.length}</strong></div>
         ${esperaUSD?`<div class="proveedor-stat">⏳ En espera 48hs: <strong style="color:#854F0B">${fmtUSD(esperaUSD)}</strong></div>`:''}
-        <div class="proveedor-stat">💰 Disponible p/ pagar: <strong style="color:${aPagar>0?'#237A4B':'var(--text3)'}">${fmtUSD(aPagar)}</strong></div>
+        <div class="proveedor-stat">${esFijo?'💰 Le debés':'💰 Disponible p/ pagar'}: <strong style="color:${aPagar>0?'#237A4B':'var(--text3)'}">${fmtUSD(aPagar)}</strong></div>
         <div class="proveedor-stat">Pagado: <strong style="color:#237A4B">${fmtUSD(pagado)}${pagadoARS?(' / '+fmtARS(pagadoARS)):''}</strong></div>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;">
@@ -9511,51 +9518,87 @@ function renderProveedores(){
   }).join('');
 }
 
-// ── Cuenta corriente: historial cronológico unificado ──
+// ── Cuenta corriente: libro mayor de retiros y pagos ──
 window.abrirCuentaCorriente = function(prov){
   const items = consigItems.filter(g=>g.proveedor===prov);
   const pagos = pagosItems.filter(p=>p.proveedor===prov);
-  const dias = proveedorAging(prov);
-  const fijo = esProvFijo(prov);
+  const fijo  = esProvFijo(prov);
+  const hoy   = new Date(today());
+  const fFecha = f => f ? f.slice(8,10)+'/'+f.slice(5,7)+'/'+f.slice(2,4) : '—';
 
-  // Movimientos en orden cronológico ASC con peso intra-día (recibido → vendido → pago)
+  // Al proveedor fijo se le debe desde que el equipo entra: lo retirás y ya lo debés,
+  // se haya vendido o no. Al casual recién cuando se vende su equipo.
   const movs = [];
   items.forEach(g=>{
-    movs.push({fecha:g.fechaEntrada||'', peso:0, tipo:'entrada', txt:`📦 Recibido: ${g.producto||''}${g.imei?' · IMEI '+g.imei.slice(-6):''}`, delta:0});
-    if(g.status==='vendido' && g.fechaVenta){
-      movs.push({fecha:g.fechaVenta, peso:1, tipo:'venta', txt:`✅ Vendido: ${g.producto||''}`, delta:(g.precioUSD||0)});
+    const specs = [g.gb, g.color].filter(Boolean).join(' ');
+    const det = `${g.producto||'—'}${specs?' '+specs:''}${g.imei?' · '+g.imei.slice(-6):''}`;
+    if(fijo){
+      movs.push({fecha:g.fechaEntrada||'', peso:0, detalle:det, nota:g.status==='vendido'?'vendido':'en stock', debe:(g.precioUSD||0)});
+    }else if(g.status==='vendido' && g.fechaVenta){
+      const espera = (hoy-new Date(g.fechaVenta))/86400000 < 2;
+      movs.push({fecha:g.fechaVenta, peso:0, detalle:'Vendido: '+det, nota:espera?'en espera 48 hs':'', debe:(g.precioUSD||0), espera});
     }
   });
   pagos.forEach(p=>{
-    const usd = p.moneda==='USD' ? (p.monto||0) : 0; // pagos en ARS no bajan la cuenta USD (raros)
-    movs.push({fecha:p.fecha||'', peso:2, tipo:'pago', txt:`💸 Pago${p.medio?' ('+p.medio+')':''}${p.notas?' — '+p.notas:''}`, delta:-usd, montoStr: p.moneda==='ARS'?('− '+fmtARS(p.monto)):null});
+    const ars = p.moneda==='ARS';
+    movs.push({fecha:p.fecha||'', peso:1,
+      detalle:'Pago'+(p.medio?' · '+p.medio:'')+(p.notas?' — '+p.notas:''),
+      nota:ars?'en pesos — no descuenta del saldo en dólares':'',
+      haber:ars?0:(p.monto||0), haberARS:ars?(p.monto||0):0});
   });
   movs.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||'') || a.peso-b.peso);
 
-  // Saldo corriente (lo que le debés después de cada movimiento)
-  let saldo = 0;
-  movs.forEach(m=>{ saldo += m.delta; m.saldo = saldo; });
-  movs.reverse(); // mostrar el más reciente arriba
+  // Saldo corriente, de arriba (lo más viejo) hacia abajo, como en un libro mayor
+  let saldo=0, totDebe=0, totHaber=0, totHaberARS=0, esperaUSD=0;
+  movs.forEach(m=>{
+    saldo += (m.debe||0)-(m.haber||0);
+    m.saldo = saldo;
+    totDebe += m.debe||0; totHaber += m.haber||0; totHaberARS += m.haberARS||0;
+    if(m.espera) esperaUSD += m.debe||0;
+  });
+  const disponible = Math.max(0, saldo-esperaUSD);
+  const dias = proveedorAging(prov);
+  const sinVender = fijo ? [] : items.filter(g=>g.status!=='vendido');
+  const sinVenderUSD = sinVender.reduce((s,g)=>s+(g.precioUSD||0),0);
+  const colDebe = fijo ? 'Retiros' : 'Ventas';
+  const num = n => Math.abs(n)<0.5 ? '0' : fmtUSD(Math.abs(n));
 
-  const liberadoUSD = items.filter(g=>g.status==='vendido'&&g.fechaVenta&&(fijo || (new Date(today())-new Date(g.fechaVenta))/86400000>=2)).reduce((s,g)=>s+(g.precioUSD||0),0);
-  const pagadoUSD = pagos.filter(p=>p.moneda==='USD').reduce((s,p)=>s+(p.monto||0),0);
-  const aPagar = Math.max(0, liberadoUSD-pagadoUSD);
-
-  document.getElementById('cc-title').textContent = 'Cuenta corriente — '+prov+(fijo?' 🔁':'');
+  document.getElementById('cc-title').textContent = 'Cuenta corriente — '+prov+(fijo?' 🔁':' 👤');
   document.getElementById('cc-summary').innerHTML = `
-    <div class="profit-row"><span class="profit-label">${fijo?'Total por ventas':'Total liberado (ventas +48hs)'}</span><span class="profit-val">u$s ${liberadoUSD.toFixed(2)}</span></div>
-    <div class="profit-row"><span class="profit-label">Total pagado</span><span class="profit-val" style="color:#237A4B">u$s ${pagadoUSD.toFixed(2)}</span></div>
-    <div class="profit-row"><span class="profit-label" style="font-weight:700">SALDO A PAGAR</span><span class="profit-val tk-b" style="color:${aPagar>0?'var(--neg)':'#237A4B'}">${aPagar>0?'u$s '+aPagar.toFixed(2):'✓ AL DÍA'}</span></div>
-    ${aPagar>0 && dias!=null && dias>=3 ? `<div class="proveedor-alerta ${dias>=7?'alerta-urgente':'alerta-atencion'}" style="margin-top:8px;">${dias>=7?'⚠️':'🔔'} La deuda más vieja tiene <b>${dias} días</b>.</div>` : ''}
+    <div class="profit-row"><span class="profit-label">${fijo?'Total retirado':'Total vendido'}</span><span class="profit-val">${fmtUSD(totDebe)}</span></div>
+    <div class="profit-row"><span class="profit-label">Total pagado</span><span class="profit-val" style="color:#237A4B">${fmtUSD(totHaber)}${totHaberARS?' / '+fmtARS(totHaberARS):''}</span></div>
+    <div class="profit-row"><span class="profit-label" style="font-weight:700">${saldo<-0.5?'SALDO A FAVOR':'SALDO A PAGAR'}</span><span class="profit-val tk-b" style="color:${saldo>0.5?'var(--neg)':'#237A4B'}">${Math.abs(saldo)<0.5?'✓ AL DÍA':fmtUSD(Math.abs(saldo))}</span></div>
+    ${esperaUSD>0.5?`<div class="profit-row"><span class="profit-label">Disponible para pagar hoy</span><span class="profit-val">${fmtUSD(disponible)} <span style="color:var(--text3);font-size:11px;">· ${fmtUSD(esperaUSD)} en espera 48 hs</span></span></div>`:''}
+    ${saldo>0.5 && dias!=null && dias>=3 ? `<div class="proveedor-alerta ${dias>=7?'alerta-urgente':'alerta-atencion'}" style="margin-top:8px;">${dias>=7?'⚠️':'🔔'} La deuda más vieja tiene <b>${dias} días</b>.</div>` : ''}
   `;
-  document.getElementById('cc-timeline').innerHTML = movs.length ? movs.map(m=>`
-    <div class="home-list-item" style="cursor:default;${m.tipo==='entrada'?'opacity:.55;':''}">
-      <div>${m.txt}<div class="sub">${m.fecha}</div></div>
-      <div style="text-align:right;">
-        <div style="font-family:'DM Mono',monospace;${m.delta>0?'color:#B45309;':m.delta<0?'color:#237A4B;':''}">${m.montoStr || (m.delta ? (m.delta>0?'+ debés u$s '+m.delta.toFixed(0):'− pagaste u$s '+Math.abs(m.delta).toFixed(0)) : '')}</div>
-        ${m.tipo!=='entrada'?`<div class="sub" style="font-family:'DM Mono',monospace;">saldo: ${m.saldo>0.001?'u$s '+m.saldo.toFixed(0):m.saldo<-0.001?'a favor u$s '+Math.abs(m.saldo).toFixed(0):'✓ 0'}</div>`:''}
-      </div>
-    </div>`).join('') : '<div class="home-empty">Sin movimientos.</div>';
+
+  document.getElementById('cc-timeline').innerHTML = movs.length ? `
+    <div style="overflow-x:auto;"><table class="tkh-table">
+      <thead><tr>
+        <th style="width:76px;">Fecha</th><th>Detalle</th>
+        <th style="text-align:right;width:88px;">${colDebe}</th>
+        <th style="text-align:right;width:88px;">Pagos</th>
+        <th style="text-align:right;width:96px;">Saldo</th>
+      </tr></thead>
+      <tbody>${movs.map(m=>`
+        <tr>
+          <td style="font-family:'DM Mono',monospace;color:var(--text3);white-space:nowrap;">${fFecha(m.fecha)}</td>
+          <td>${esc(m.detalle)}${m.nota?`<div style="font-size:10.5px;color:var(--text3);">${esc(m.nota)}</div>`:''}</td>
+          <td style="text-align:right;font-family:'DM Mono',monospace;${m.debe?'color:#B45309;':'color:var(--text3);'}">${m.debe?fmtUSD(m.debe):'—'}</td>
+          <td style="text-align:right;font-family:'DM Mono',monospace;${(m.haber||m.haberARS)?'color:#237A4B;':'color:var(--text3);'}">${m.haber?fmtUSD(m.haber):m.haberARS?fmtARS(m.haberARS):'—'}</td>
+          <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;">${m.saldo<-0.5?'a favor '+num(m.saldo):num(m.saldo)}</td>
+        </tr>`).join('')}
+      </tbody>
+      <tfoot><tr style="font-weight:700;">
+        <td colspan="2" style="text-align:right;border-bottom:none;">TOTALES</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;color:#B45309;border-bottom:none;">${fmtUSD(totDebe)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;color:#237A4B;border-bottom:none;">${fmtUSD(totHaber)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;border-bottom:none;color:${saldo>0.5?'var(--neg)':'#237A4B'};">${Math.abs(saldo)<0.5?'✓ 0':(saldo<0?'a favor ':'')+num(saldo)}</td>
+      </tr></tfoot>
+    </table></div>
+    ${sinVender.length?`<div style="font-size:11.5px;color:var(--text3);margin-top:8px;">📦 ${sinVender.length} equipo(s) suyo(s) en stock sin vender (${fmtUSD(sinVenderUSD)}) — todavía no suman a la cuenta.</div>`:''}
+    ${totHaberARS?`<div style="font-size:11.5px;color:var(--text3);margin-top:4px;">Los pagos en pesos se listan pero no descuentan del saldo en dólares.</div>`:''}
+  ` : '<div class="home-empty">Sin movimientos.</div>';
   document.getElementById('cc-modal').classList.add('open');
 };
 
