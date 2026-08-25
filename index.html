@@ -1154,7 +1154,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.25-B</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.25-C</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -9399,11 +9399,10 @@ function renderConsig(){
     return true;
   });
   const enStock=items.filter(g=>g.status==='en_stock');
-  const totalDeudaUSD=enStock.reduce((s,g)=>s+(g.precioUSD||0),0);
-  const totalDeudaARS=enStock.reduce((s,g)=>s+(g.precioARS||0),0);
+  const {deuda:totalDeudaUSD, espera:esperaUSD} = deudaConsignacion(items);
   document.getElementById('consig-metrics').innerHTML=`
     <div class="metric"><div class="m-label">En stock</div><div class="m-val">${enStock.length}</div><div class="m-sub">productos</div></div>
-    <div class="metric"><div class="m-label">Deuda total USD</div><div class="m-val" style="color:var(--neg)">${fmtUSD(totalDeudaUSD)}</div>${totalDeudaARS?`<div class="m-sub">${fmtARS(totalDeudaARS)}</div>`:''}</div>
+    <div class="metric"><div class="m-label">Deuda total USD</div><div class="m-val" style="color:${totalDeudaUSD>0?'var(--neg)':'#237A4B'}">${fmtUSD(totalDeudaUSD)}</div>${esperaUSD>0.5?`<div class="m-sub">${fmtUSD(esperaUSD)} en espera 48 hs</div>`:'<div class="m-sub">menos lo ya pagado</div>'}</div>
     <div class="metric"><div class="m-label">Vendidos</div><div class="m-val">${items.filter(g=>g.status==='vendido').length}</div></div>
   `;
   if(!items.length){document.getElementById('consig-list-body').innerHTML='<div class="empty">Sin productos en este filtro.</div>';return;}
@@ -9487,6 +9486,32 @@ function deudaLiberada(items, fijo){
     : items.filter(g=>g.status==='vendido' && g.fechaVenta && (hoy-new Date(g.fechaVenta))/86400000>=2)
            .map(g=>({fecha:g.fechaVenta, monto:g.precioUSD||0}))
   ).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+}
+
+// Deuda real de la consignación: por cada proveedor que aparece en la vista, lo que
+// ya se le debe menos lo que se le pagó. Antes esta métrica sumaba el precio de los
+// equipos en stock, que no es lo que debés: al casual no le debés nada hasta venderle
+// el equipo, y del fijo ya podías haber pagado la mitad.
+// Se suma proveedor por proveedor y sin bajar de cero, para que uno al que le pagaste
+// de más no tape la deuda que tenés con otro.
+function deudaConsignacion(itemsVista){
+  const idx = indiceProveedores();
+  const hoy = new Date(today());
+  let deuda = 0, espera = 0;
+  for(const prov of new Set(itemsVista.map(g=>g.proveedor).filter(Boolean))){
+    const its  = idx.items.get(prov)||[];
+    const fijo = its.some(g=>g.tipoProveedor==='fijo');
+    // Todo lo que entró a la cuenta, incluso lo que todavía está en espera de 48 hs
+    const cargado = (fijo ? its : its.filter(g=>g.status==='vendido'&&g.fechaVenta))
+      .reduce((s,g)=>s+(g.precioUSD||0),0);
+    const pagado = (idx.pagos.get(prov)||[]).reduce((s,p)=>s+pagoUSD(p),0);
+    const saldo = Math.max(0, cargado-pagado);
+    deuda += saldo;
+    if(!fijo && saldo>0) espera += its
+      .filter(g=>g.status==='vendido' && g.fechaVenta && (hoy-new Date(g.fechaVenta))/86400000<2)
+      .reduce((s,g)=>s+(g.precioUSD||0),0);
+  }
+  return {deuda, espera:Math.min(espera, deuda)};
 }
 
 function proveedorAging(prov, idx){
