@@ -1154,7 +1154,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.25-C</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.26-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2495,6 +2495,7 @@
         <button class="tab-btn active" id="kb-tab-datos" onclick="setKbTab('datos',this)">🏪 Datos del local</button>
         <button class="tab-btn" id="kb-tab-mdp" onclick="setKbTab('mdp',this)">📋 Lista Mar del Plata</button>
         <button class="tab-btn" id="kb-tab-caba" onclick="setKbTab('caba',this)">🚚 Lista CABA</button>
+        <button class="tab-btn" id="kb-tab-prompt" onclick="setKbTab('prompt',this)">🧠 Prompt del bot</button>
       </div>
 
       <!-- TAB: Datos del local -->
@@ -2616,6 +2617,26 @@
               <thead><tr><th>Producto</th><th style="width:90px;">GB</th><th style="width:150px;">Color</th><th style="text-align:right;width:130px;">Precio público</th><th style="width:40px;"></th></tr></thead>
               <tbody id="kb-caba-body"></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Prompt del bot -->
+      <div id="kb-sec-prompt" style="display:none;">
+        <div class="card">
+          <div class="card-title">Las reglas del bot</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Esto es <b>todo</b> lo que el bot tiene escrito de fábrica: quién es, cómo escribe, cómo pasa precios, cuándo te pasa una consulta a la bandeja, qué formato devuelve. Antes vivía solo en el código; acá lo ves entero y lo podés cambiar sin esperar a nadie.</p>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Abajo de este texto el bot recibe, aparte y automáticamente, tu stock, las listas de precios y los datos del local. Eso no se toca desde acá.</p>
+          <p style="font-size:12px;color:var(--neg);margin-bottom:12px;"><b>Cuidado.</b> Si rompés el final del texto (la parte del formato de salida), el bot deja de contestar bien. Ante la duda, tocá <i>Volver al original</i>. Para probar de a poco, mejor usá <i>Cómo habla el bot</i> y <i>Entrenamiento</i> en la primera pestaña: eso se suma sin pisar nada.</p>
+          <div id="kb-prompt-estado" style="margin-bottom:12px;"></div>
+          <div class="field">
+            <textarea id="kb-prompt" spellcheck="false" style="height:60vh;min-height:340px;font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.5;" oninput="kbPromptContar()"></textarea>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;" id="kb-prompt-contador"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-save" id="btn-kb-guardar-prompt" style="width:auto;padding:11px 18px;" onclick="guardarPromptBot()">Guardar</button>
+            <button class="btn-secondary" onclick="verPromptOriginal()">👁 Ver el original</button>
+            <button class="btn-secondary" style="color:var(--neg);border-color:var(--neg);" onclick="volverAlPromptOriginal()">↩ Volver al original</button>
           </div>
         </div>
       </div>
@@ -2854,6 +2875,7 @@ const listasCol = collection(db, 'listas_precios');
 const convsCol = collection(db, 'conversaciones');   // DMs de Instagram, un doc por cliente
 const botDoc = doc(db, 'config', 'bot');             // el interruptor del bot de IG
 const mensajesDoc = doc(db, 'config', 'mensajes');   // mensajes que el bot manda textuales
+const promptDoc   = doc(db, 'config', 'prompt');     // las reglas del bot, editables desde acá
 let cfgDoc = null; // se setea al loguear: doc(db,'config',uid)
 let conocDoc = null; // idem: doc(db,'conocimiento',uid)
 
@@ -2877,6 +2899,7 @@ let repuestosItems = [];
 let preciosRepItems = [];
 let listasItems = [];        // listas_precios: una lista de precios al público por doc
 let conoc = {};              // conocimiento/{uid}: datos del local para el bot de IG
+let promptBot = {};          // config/prompt: las reglas del bot, si el dueño las reescribió
 let convsItems = [];         // conversaciones que necesitan atención (la bandeja del bot)
 let botCfg = {activo:true, modo:'todos', cuentasPrueba:[]};   // config/bot: el interruptor
 let mensajesFijos = {};      // config/mensajes: lo que el bot manda textual, sin pasar por la IA
@@ -3030,6 +3053,10 @@ async function init() {
     onSnapshot(conocDoc, snap => {
       conoc = snap.exists() ? snap.data() : {};
       if(currentPage==='conocimiento') pintarConocimiento();
+    }, snapErr);
+    onSnapshot(promptDoc, snap => {
+      promptBot = snap.exists() ? snap.data() : {};
+      if(currentPage==='conocimiento') pintarPromptBot();
     }, snapErr);
     onSnapshot(cfgDoc, snap => {
       if (snap.exists()) {
@@ -11059,11 +11086,13 @@ window.setKbTab = function(tab, btn){
   try{
     document.querySelectorAll('#page-conocimiento .tab-btn').forEach(b=>b.classList.remove('active'));
     if(btn) btn.classList.add('active');
-    ['datos','mdp','caba'].forEach(t=>{
+    ['datos','mdp','caba','prompt'].forEach(t=>{
       const el = document.getElementById('kb-sec-'+t);
       if(el) el.style.display = t===tab?'block':'none';
     });
-    if(tab==='datos') pintarConocimiento(); else renderKbLista(tab);
+    if(tab==='datos') pintarConocimiento();
+    else if(tab==='prompt') pintarPromptBot();
+    else renderKbLista(tab);
   }catch(e){ console.error('setKbTab', e); showToast('Error: '+e.message, true); }
 };
 
@@ -11101,6 +11130,95 @@ window.guardarCanal = async function(){
     showToast('Guardado ✓ — el bot lo usa desde el próximo mensaje');
   }catch(e){ console.error(e); showToast('Error al guardar: '+e.message, true); setSyncDot('error'); }
   btn.disabled = false; btn.textContent = 'Guardar';
+};
+
+// ── Prompt del bot ──
+// Las reglas del bot vivían solo en workers/ig-bot/prompt.js, así que desde el local no
+// había forma de leerlas ni de cambiar una coma sin un deploy. Ahora el Worker las lee
+// de config/prompt en cada mensaje y este editor escribe ese doc. El archivo del repo
+// queda de respaldo: es lo que se manda mientras no haya una versión guardada acá.
+let promptFabricaCache = null;
+
+// El original se lee del propio repo publicado, así que siempre es el que está
+// desplegado de verdad, sin tener que duplicar el texto acá adentro.
+async function promptDeFabrica(){
+  if(promptFabricaCache) return promptFabricaCache;
+  const r = await fetch('workers/ig-bot/prompt.js', {cache:'no-store'});
+  if(!r.ok) throw new Error('no se pudo leer prompt.js ('+r.status+')');
+  const src = await r.text();
+  const MARCA = 'export const SYSTEM_PROMPT = `';
+  const ini = src.indexOf(MARCA);
+  const fin = ini<0 ? -1 : src.indexOf('`;', ini);   // el backtick de cierre va pegado al último renglón
+  if(ini<0 || fin<0) throw new Error('no encontré el texto dentro de prompt.js');
+  promptFabricaCache = src.slice(ini+MARCA.length, fin).replaceAll('${MARCA_CANAL}', '[[CANAL]]');
+  return promptFabricaCache;
+}
+
+window.kbPromptContar = function(){
+  const el = document.getElementById('kb-prompt'); if(!el) return;
+  const t = el.value||'';
+  document.getElementById('kb-prompt-contador').textContent =
+    t.split('\n').length+' líneas · '+t.length.toLocaleString('es-AR')+' caracteres';
+};
+
+function pintarPromptBot(){
+  const el = document.getElementById('kb-prompt'); if(!el) return;
+  const est = document.getElementById('kb-prompt-estado');
+  const propio = (promptBot.texto||'').trim();
+  if(propio){
+    const f = promptBot.updatedAt?.toDate ? promptBot.updatedAt.toDate().toLocaleString('es-AR') : null;
+    est.innerHTML = `<div class="proveedor-alerta alerta-atencion">✏️ El bot está usando <b>esta versión, escrita por vos</b>${f?' el '+esc(f):''}. El original del código quedó de respaldo.</div>`;
+    if(el !== document.activeElement && el.value !== propio) el.value = propio;
+    kbPromptContar();
+    return;
+  }
+  est.innerHTML = `<div class="proveedor-alerta">📦 El bot está usando el <b>original de fábrica</b>. Lo que ves abajo es ese texto: si lo cambiás y guardás, pasa a usar el tuyo.</div>`;
+  if(el === document.activeElement) return;
+  promptDeFabrica()
+    .then(t=>{ if(!(promptBot.texto||'').trim() && el !== document.activeElement){ el.value = t; kbPromptContar(); } })
+    .catch(e=>{ est.innerHTML += `<div style="font-size:12px;color:var(--neg);margin-top:6px;">No pude leer el original: ${esc(e.message)}</div>`; });
+}
+
+window.verPromptOriginal = async function(){
+  try{
+    const t = await promptDeFabrica();
+    const el = document.getElementById('kb-prompt');
+    if((el.value||'').trim() && el.value.trim() !== t.trim()
+       && !confirm('Esto reemplaza lo que tenés escrito en pantalla por el texto original.\n\nNo guarda nada todavía: si no tocás Guardar, el bot sigue como está.')) return;
+    el.value = t; kbPromptContar();
+    showToast('Este es el original — todavía no se guardó');
+  }catch(e){ showToast('No pude leer el original: '+e.message, true); }
+};
+
+window.guardarPromptBot = async function(){
+  const btn = document.getElementById('btn-kb-guardar-prompt');
+  const texto = (document.getElementById('kb-prompt').value||'').trim();
+  if(!texto){ showToast('Está vacío. Si querés volver al original, usá el botón.', true); return; }
+  // El formato de salida es lo único que no es opinable: sin eso el Worker no puede
+  // leer la respuesta y el cliente no recibe nada.
+  if(!/FORMATO DE SALIDA/i.test(texto) &&
+     !confirm('Al texto le falta la sección FORMATO DE SALIDA.\n\nSin eso el bot puede contestar algo que el sistema no sabe leer, y el cliente no recibe nada.\n\n¿Guardar igual?')) return;
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  setSyncDot('syncing');
+  try{
+    await setDoc(promptDoc, withUser({ texto, updatedAt: serverTimestamp() }), {merge:true});
+    showToast('Guardado ✓ — el bot lo usa desde el próximo mensaje');
+  }catch(e){ console.error(e); showToast('Error al guardar: '+e.message, true); setSyncDot('error'); }
+  btn.disabled = false; btn.textContent = 'Guardar';
+};
+
+// Vaciar el campo alcanza: el Worker, cuando lo encuentra vacío, cae al prompt.js del
+// repo. Así se vuelve atrás sin tener que reescribir el original a mano.
+window.volverAlPromptOriginal = async function(){
+  if(!(promptBot.texto||'').trim()){ showToast('Ya está usando el original.'); return; }
+  if(!confirm('El bot vuelve a usar el prompt original del código y se descarta tu versión.\n\n¿Seguro?')) return;
+  setSyncDot('syncing');
+  try{
+    await setDoc(promptDoc, withUser({ texto: '', updatedAt: serverTimestamp() }), {merge:true});
+    promptFabricaCache = null;
+    const el = document.getElementById('kb-prompt'); if(el) el.value = '';
+    showToast('Listo — el bot vuelve al original ✓');
+  }catch(e){ console.error(e); showToast('Error: '+e.message, true); setSyncDot('error'); }
 };
 
 // Guarda TODO el conocimiento, lo llame el botón del tono o el de los datos: los dos

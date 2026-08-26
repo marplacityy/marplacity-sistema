@@ -398,6 +398,27 @@ que **los precios de los ejemplos son inventados** y que los reales salen siempr
 stock y las listas. Sin ese aviso el modelo cotiza con el número del ejemplo, que es el
 error más caro que puede cometer.
 
+## El prompt entero, editable (`config/prompt`)
+
+Desde el 26/08/2026 las reglas del bot no viven solo en `prompt.js`: el dueño las ve y
+las reescribe enteras desde el sistema, en **Base de conocimiento → Prompt del bot**.
+Lo que guarda ahí va al doc `config/prompt`, campo `texto`, y el Worker lo lee en cada
+mensaje junto con el stock y las listas.
+
+**El que manda es Firestore.** `construirSystem({ base })` usa el texto del doc si no
+está vacío, y solo cae al `SYSTEM_PROMPT` de `prompt.js` cuando no hay ninguno. O sea
+que si hay una versión guardada desde el sistema, **editar `prompt.js` y desplegar no
+cambia nada en producción**. Antes de tocar el archivo, mirá la pantalla: dice cuál de
+los dos está corriendo, y cada respuesta loguea `prompt: editado desde el sistema` o
+`prompt: el de prompt.js`.
+
+Para volver atrás no hace falta reescribir el original: el botón *Volver al original*
+guarda `texto: ''` y con eso el Worker vuelve a usar el archivo.
+
+El editor lee el original de `workers/ig-bot/prompt.js` servido por GitHub Pages —el
+mismo repo publicado—, así que lo que muestra como "de fábrica" es siempre lo que está
+desplegado, sin copias del texto dentro de `index.html`.
+
 ## Una sola cuenta de Instagram
 
 Si hay más de una cuenta de Instagram conectada a la misma app de Meta, **el webhook

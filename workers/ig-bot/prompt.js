@@ -15,6 +15,13 @@
  *
  * 2. Los datos que cambian: stock, listas de precios y base de conocimiento. Los
  *    inyecta construirSystem() al final del prompt, leyéndolos de Firestore.
+ *
+ * OJO AL EDITAR ESTE ARCHIVO: desde el 26/08/2026 el dueño puede reescribir este mismo
+ * texto desde el sistema (Base de conocimiento → Prompt del bot), y esa versión se
+ * guarda en Firestore (config/prompt.texto) y PISA a esta. Si hay una versión editada,
+ * tocar acá no cambia nada en producción: el Worker usa la de Firestore y esta queda
+ * de respaldo, para cuando el doc no existe o está vacío. Antes de editar, mirá la
+ * pantalla del sistema para saber cuál está corriendo.
  */
 
 // El modelo escribe esta marca como un elemento del array `mensajes`; el Worker la
@@ -611,13 +618,15 @@ function bloqueLista(titulo, lista, vencida = false) {
 }
 
 /**
- * Arma el system prompt final: el texto fijo + los datos del momento.
+ * Arma el system prompt final: el texto de las reglas + los datos del momento.
  * Todos los campos son opcionales; si falta uno, el bloque correspondiente le dice al
  * modelo que no tiene el dato, en vez de dejarlo inventar.
  */
-export function construirSystem({ conocimiento, stock, accesorios, listaMdp, listaCaba, mdpVencida } = {}) {
+export function construirSystem({ base, conocimiento, stock, accesorios, listaMdp, listaCaba, mdpVencida } = {}) {
   return [
-    SYSTEM_PROMPT,
+    // `base` es la versión que el dueño editó desde el sistema. Si no editó nunca, o
+    // si borró todo el texto, se usa la de este archivo.
+    (base && String(base).trim()) ? String(base).trim() : SYSTEM_PROMPT,
     bloqueConocimiento(conocimiento),
     bloqueTono(conocimiento && conocimiento.tono),
     bloqueEntrenamiento(conocimiento && conocimiento.entrenamiento),

@@ -49,6 +49,16 @@ service cloud.firestore {
       allow update: if owns() && writesAsSelf();
     }
 
+    // Las reglas del bot, escritas por el dueño desde el sistema (Base de conocimiento
+    // → Prompt del bot). Un solo doc, con el texto completo en `texto`. Cuando existe,
+    // el Worker lo usa en lugar del prompt.js del repo; si esta vacio, cae al archivo.
+    // El dueño lo escribe; el bot solo lo lee, en cada mensaje.
+    match /config/prompt {
+      allow read:   if esBot() || owns();
+      allow create: if writesAsSelf();
+      allow update: if owns() && writesAsSelf();
+    }
+
     // El interruptor del bot. Un solo doc, con un solo campo que importa: `activo`.
     // Vive en Firestore y no en una variable de Cloudflare a proposito: apagarlo tiene
     // que ser un click desde el sistema, sin deploys, en el momento en que el bot esta
