@@ -104,6 +104,33 @@ export default {
       });
     }
 
+    // ── Conectividad con ARCA ─────────────────────────────────
+    // Es publico a proposito: no dice nada del negocio, solo si los dos servicios de
+    // ARCA contestan desde Cloudflare. Existe porque el servidor de PRODUCCION de ARCA
+    // negocia TLS con una clave Diffie-Hellman chica, y Node la rechaza de plano
+    // ("dh key too small") mientras que homologacion anda. Antes de prender produccion
+    // hay que saber si el stack de Cloudflare la acepta o no.
+    if (request.method === 'GET' && url.pathname === '/conectividad') {
+      const probar = async (nombre, u) => {
+        const t0 = Date.now();
+        try {
+          const r = await fetch(u, { method: 'GET' });
+          return { nombre, url: u, ok: r.ok, status: r.status, ms: Date.now() - t0 };
+        } catch (e) {
+          return { nombre, url: u, ok: false, error: e.message, ms: Date.now() - t0 };
+        }
+      };
+      return json({
+        ok: true,
+        resultados: await Promise.all([
+          probar('WSFEv1 homologacion', ENTORNOS.homo.wsfev1 + '?WSDL'),
+          probar('WSFEv1 produccion',   ENTORNOS.prod.wsfev1 + '?WSDL'),
+          probar('WSAA homologacion',   ENTORNOS.homo.wsaa + '?wsdl'),
+          probar('WSAA produccion',     ENTORNOS.prod.wsaa + '?wsdl'),
+        ]),
+      });
+    }
+
     // ── El certificado ────────────────────────────────────────
     // Las dos rutas son solo para el dueño, y el token se verifica de verdad (firma,
     // emisor, destinatario, vencimiento y uid). Sin eso, el que descubra esta URL sube
