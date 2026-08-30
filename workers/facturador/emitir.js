@@ -6,7 +6,8 @@
  */
 
 import { ultimoAutorizado, solicitarCae, consultarComprobante, parametros } from './wsfev1.js';
-import { letraPara, calcularTotales, detalleXml, validar, aFechaArca, hoyAr, CONCEPTO, TIPO, NOTA_CREDITO_DE } from './comprobante.js';
+import { letraPara, letraDeTipo, calcularTotales, detalleXml, validar, aFechaArca, hoyAr,
+         CONCEPTO, TIPO, NOTA_CREDITO_DE, TIPOS_VALIDOS } from './comprobante.js';
 import { conCandado } from './candado.js';
 import { escribirDoc, leerDoc } from './firestore.js';
 
@@ -38,16 +39,22 @@ export async function emitirComprobante(env, ent, cuit, idToken, ta, pedido, tab
   const ptoVta = Number(pedido.ptoVta);
   if (!Number.isInteger(ptoVta) || ptoVta < 1) throw new Error('falta el punto de venta');
 
-  // La letra sale de la condicion de IVA del cliente, no de lo que elija nadie.
-  const { cbteTipo: tipoPorCliente, letra, condicion } = letraPara(pedido.cliente?.condicionIvaId, tablas.condiciones);
+  // La condicion de IVA del cliente decide la letra POR DEFECTO, y ademas es un dato
+  // obligatorio del comprobante (RG 5616), asi que se resuelve siempre.
+  const { cbteTipo: tipoPorCliente, condicion } = letraPara(pedido.cliente?.condicionIvaId, tablas.condiciones);
 
-  // Una nota de credito lleva su propio tipo, que NO se deriva del cliente: es el que le
-  // corresponde a la factura que revierte. La letra sigue siendo la misma —una NC de una
-  // factura A es una NC A— asi que el control de arriba se mantiene igual de valido.
+  // El tipo se puede forzar, y hay dos motivos legitimos para hacerlo:
+  //   - una nota de credito, que lleva el tipo que le corresponde a la factura que
+  //     revierte y no el que sale del cliente;
+  //   - el facturador a mano, donde el usuario elige la letra.
+  // Lo que no se puede es mandar cualquier cosa: solo los tipos que sabemos emitir.
   const cbteTipo = pedido.cbteTipo || tipoPorCliente;
-  if (pedido.cbteTipo && pedido.cbteTipo !== NOTA_CREDITO_DE[tipoPorCliente]) {
-    throw new Error(`el tipo ${pedido.cbteTipo} no es la nota de credito que le corresponde a este cliente`);
+  if (!TIPOS_VALIDOS.includes(Number(cbteTipo))) {
+    throw new Error(`el tipo de comprobante ${cbteTipo} no esta contemplado`);
   }
+  // La letra sale del TIPO y no del cliente: si se forzo una B para un Responsable
+  // Inscripto, el comprobante es B y tiene que decir B en todos lados.
+  const letra = letraDeTipo(cbteTipo);
   const totales = calcularTotales(pedido.items, tablas.iva, { precioIncluyeIva: pedido.precioIncluyeIva !== false });
 
   const concepto = pedido.concepto || CONCEPTO.productos;
@@ -184,14 +191,21 @@ export async function emitirComprobante(env, ent, cuit, idToken, ta, pedido, tab
         observaciones: r.observaciones || [],
         recuperado: !!r.recuperado,
         ventaId: pedido.ventaId || null,
-        esNotaCredito: !!pedido.cbteTipo,
+        // Emitido a mano desde el Facturador, sin una venta detras. Se guarda para poder
+        // distinguirlo despues: no descuenta stock ni entra en los reportes de ventas.
+        manual: !!pedido.manual,
+        esNotaCredito: [TIPO.notaCreditoA, TIPO.notaCreditoB].includes(Number(cbteTipo)),
         revierte: pedido.asociados?.length
           ? { ptoVta: pedido.asociados[0].ptoVta, cbteTipo: pedido.asociados[0].tipo, cbteNro: pedido.asociados[0].nro }
           : null,
         emitidoEn: new Date().toISOString(),
       };
 
-      await escribirDoc(env, idToken, docComprobante(cuit, ent.clave, ptoVta, cbteTipo, guardado.cbteNro), guardado);
+      // El id se devuelve junto con el comprobante: el sistema lo necesita para pedir el
+      // PDF o la nota de credito sin tener que reconstruirlo por su cuenta.
+      const path = docComprobante(cuit, ent.clave, ptoVta, cbteTipo, guardado.cbteNro);
+      guardado.id = path.split('/')[1];
+      await escribirDoc(env, idToken, path, guardado);
 
       if (r.autorizado) {
         console.log(`CAE ${r.cae} para ${letra} ${ptoVta}-${guardado.cbteNro}` +

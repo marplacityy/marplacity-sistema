@@ -27,6 +27,13 @@ export const TIPO = {
   notaCreditoB: 8,
 };
 
+/**
+ * La letra de un tipo de comprobante. Existe porque la letra no siempre sale del
+ * cliente: en el facturador a mano el usuario puede elegirla, y entonces la fuente de
+ * verdad es el tipo elegido y no la condicion de IVA.
+ */
+export const letraDeTipo = tipo => esClaseA(tipo) ? 'A' : 'B';
+
 /** Comprobantes clase A: los que le discriminan el IVA a un Responsable Inscripto. */
 export const esClaseA = tipo => [TIPO.facturaA, TIPO.notaDebitoA, TIPO.notaCreditoA].includes(Number(tipo));
 
@@ -38,6 +45,9 @@ export const NOTA_CREDITO_DE = {
 
 /** Concepto: que se esta facturando. Define si hacen falta las fechas de servicio. */
 export const CONCEPTO = { productos: 1, servicios: 2, ambos: 3 };
+
+/** Los tipos que el sistema sabe emitir hoy. Cualquier otro se rechaza antes de salir. */
+export const TIPOS_VALIDOS = [TIPO.facturaA, TIPO.facturaB, TIPO.notaCreditoA, TIPO.notaCreditoB];
 
 const redondear = n => Math.round((n + Number.EPSILON) * 100) / 100;
 
