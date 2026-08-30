@@ -21,6 +21,8 @@ import { cifrar, descifrar } from './cripto.js';
 import { loginFacturador, esElDueño } from './identidad.js';
 import { leerDoc, escribirDoc } from './firestore.js';
 import { ticketDeAcceso } from './wsaa.js';
+import { emitirComprobante, tablasDe } from './emitir.js';
+import { verificarTablas } from './comprobante.js';
 
 // ── Entornos ──────────────────────────────────────────────────
 //
@@ -145,9 +147,72 @@ export default {
       }
     }
 
+    // ── Las tablas del servicio ───────────────────────────────
+    // El sistema las usa para armar los selectores (condicion de IVA, alicuotas) con lo
+    // que ARCA dice hoy, en vez de con una lista escrita a mano que se desactualiza.
+    if (url.pathname === '/tablas' && request.method === 'GET') {
+      if (!(await esElDueño(env, request))) return json({ ok: false, error: 'no autorizado' }, 401);
+      try {
+        const { ent, cuit, ta } = await contexto(env);
+        const tablas = await tablasDe(ent, ta, cuit);
+        return json({ ok: true, entorno: ent.nombre, ...tablas, avisos: verificarTablas(tablas.tipos) });
+      } catch (e) {
+        return json({ ok: false, error: e.message }, 502);
+      }
+    }
+
+    // ── Emitir ────────────────────────────────────────────────
+    if (url.pathname === '/emitir' && request.method === 'POST') {
+      if (!(await esElDueño(env, request))) return json({ ok: false, error: 'no autorizado' }, 401);
+
+      let pedido;
+      try { pedido = await request.json(); }
+      catch { return json({ ok: false, error: 'el cuerpo no es JSON' }, 400); }
+
+      const ent = entornoDe(env);
+      // En produccion no alcanza con que el entorno este puesto: cada emision tiene que
+      // decir que sabe que es real. Es la ultima red antes de un comprobante fiscal que
+      // no se puede anular, solo compensar con una nota de credito.
+      if (ent.clave === 'prod' && pedido.confirmoProduccion !== true) {
+        return json({
+          ok: false,
+          error: 'El Worker esta en PRODUCCION: este comprobante seria fiscal y real. ' +
+                 'Para emitirlo, el pedido tiene que traer confirmoProduccion: true.',
+        }, 400);
+      }
+
+      try {
+        const { cuit, ta, idToken } = await contexto(env);
+        const tablas = await tablasDe(ent, ta, cuit);
+        const comprobante = await emitirComprobante(env, ent, cuit, idToken, ta, pedido, tablas);
+        return json({ ok: comprobante.estado === 'emitida', entorno: ent.nombre, comprobante },
+          comprobante.estado === 'emitida' ? 200 : 422);
+      } catch (e) {
+        console.log('fallo la emision:', e.message);
+        return json({
+          ok: false,
+          error: e.message,
+          problemas: e.problemas,
+          estadoDesconocido: e.estadoDesconocido,
+        }, e.problemas ? 400 : 502);
+      }
+    }
+
     return json({ ok: false, error: 'ruta no encontrada' }, 404);
   },
 };
+
+/** Lo que hace falta para cualquier pedido a ARCA: entorno, CUIT, login y ticket. */
+async function contexto(env) {
+  const ent = entornoDe(env);
+  const cuit = env.ARCA_CUIT;
+  if (!/^\d{11}$/.test(String(cuit || ''))) throw new Error('falta la variable ARCA_CUIT');
+  const idToken = await loginFacturador(env);
+  if (!idToken) throw new Error('el Worker no pudo loguearse a Firestore');
+  const ta = await ticketDeAcceso(env, ent, cuit, 'wsfe', idToken,
+    () => certificadoDe(env, idToken, cuit, ent.clave));
+  return { ent, cuit, idToken, ta };
+}
 
 /**
  * El certificado y la clave, descifrados, para el momento exacto en que hay que firmar.

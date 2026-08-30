@@ -15,7 +15,7 @@ revés.
 | 1 | Worker separado, `keep_vars`, endpoint de salud | ✅ |
 | 2 | Cifrado del certificado y subida sin pasar por el browser | ✅ |
 | 3 | WSAA: login CMS y cache del ticket de 12 h | ✅ |
-| 4 | WSFEv1: `FECompUltimoAutorizado` + `FECAESolicitar` | ⏳ |
+| 4 | WSFEv1: `FECompUltimoAutorizado` + `FECAESolicitar` | ✅ |
 | 6 | Front: emitir desde una venta, ver CAE y estado | ⏳ |
 | 7 | PDF con el QR obligatorio | ⏳ |
 
@@ -100,6 +100,80 @@ token: 764 chars · sign: 172 chars · dura 12.0 horas
 
 Y el segundo pedido seguido devuelve el rechazo esperado, detectado y marcado para que
 el llamador reuse el guardado.
+
+## WSFEv1: la emisión (punto 4)
+
+`POST /emitir` recibe la venta y devuelve el comprobante con su CAE. El circuito es:
+ticket de acceso → tablas del servicio → letra y totales → candado → último autorizado →
+`FECAESolicitar` → guardar.
+
+### La letra no la elige nadie
+
+Sale de la condición frente al IVA del cliente, leyendo la **descripción** de la tabla
+oficial (`FEParamGetCondicionIvaReceptor`) en vez de comparar contra un número escrito a
+mano: si ARCA agrega una condición, esto sigue funcionando.
+
+| cliente | comprobante |
+|---|---|
+| IVA Responsable Inscripto | Factura **A** (tipo 1) |
+| Consumidor Final, Monotributo, Exento, … | Factura **B** (tipo 6) |
+
+Ese mismo dato es el `CondicionIVAReceptorId` que ARCA exige desde la RG 5616. Un dato,
+dos usos: no pueden quedar contradiciéndose.
+
+### IVA
+
+Las alícuotas salen de `FEParamGetTiposIva`, no hay un 21% escrito en el código. Los
+precios del sistema son finales al público, así que se desarma el precio para sacar el
+neto; con `precioIncluyeIva: false` entran precios sin IVA sin tocar nada más.
+
+El redondeo es **por alícuota y después se suma**, no al revés: ARCA valida que `ImpNeto`
+sea la suma de los `BaseImp` y `ImpIVA` la de los `Importe`, y redondeando el total por un
+lado y los renglones por otro se cae por un centavo.
+
+### Los tres lugares donde esto se rompe feo
+
+**Numeración y concurrencia.** Dos emisiones a la vez leen el mismo "último autorizado" y
+piden el mismo número. Hay un candado por (punto de venta, tipo) en `fiscal_locks`, hecho
+con escritura condicional de Firestore, que es un compare-and-set de verdad. Pero el
+candado es la comodidad, no la garantía: la garantía es ARCA, que rechaza el duplicado con
+el código **10016**. Si aparece, se vuelve a preguntar el último y se reintenta una vez.
+
+**Timeout con CAE ya otorgado.** Si ARCA no contesta, el comprobante puede haber quedado
+autorizado igual. El error de red sale marcado con `sinRespuesta`, y ante esa marca **no
+se reintenta**: se llama a `FECompConsultar` por ese número exacto. Si ya tenía CAE, se
+recupera; si no existe, recién ahí es seguro volver a emitir. Y si la consulta también
+falla, se corta con `estadoDesconocido` y el número a revisar, sin emitir nada.
+
+**Errores vs. observaciones.** No son lo mismo y se guardan en campos distintos: con
+`Errors` no hay CAE; con `Observaciones` **sí lo hay** y el comprobante está autorizado.
+Confundirlos lleva a re-emitir algo que ya salió.
+
+### Anulación
+
+No hay. Un comprobante con CAE no se anula: se compensa con una nota de crédito. Los
+tipos están en `NOTA_CREDITO_DE` y el detalle ya arma `CbtesAsoc`, que es lo que la nota
+de crédito necesita para apuntar a la factura que revierte.
+
+### Probado contra homologación
+
+```
+Factura B · Consumidor Final · PV 1 Nro 1 · neto 100000 + iva 21000 = 121000
+  → A (autorizado) · CAE 86350827380462 · vence 20260909 · sin errores ni observaciones
+
+Factura A · Responsable Inscripto · dos alícuotas (21% y 10,5%)
+  → A (autorizado) · CAE 86350827380475
+  → observación 10217: "El credito fiscal discriminado en el presente comprobante solo
+    podra ser computado a efectos del Procedimiento permanente de transicion..."
+
+FECompConsultar de la B nro 1 → existe, CAE 86350827380462, total 121000
+Pedir un número ya usado → R, error [10016] "El numero o fecha del comprobante no se
+    corresponde con el proximo a autorizar"
+```
+
+La factura A es el mejor ejemplo de por qué errores y observaciones van separados: salió
+**autorizada y con CAE**, y además con una observación. Tratarla como rechazada habría
+significado emitirla de nuevo.
 
 ## Reglas que no se negocian
 

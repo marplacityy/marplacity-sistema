@@ -36,11 +36,10 @@ service cloud.firestore {
     // habla con ARCA. Es un usuario aparte del bot a proposito: el que puede leer el
     // certificado fiscal no tiene por que poder leer los DM, ni al reves.
     //
-    // ⚠️ FALTA EL UID. Se completa cuando Juni cree el usuario en Firebase Auth. Hasta
-    // entonces esta funcion devuelve false para todos y las colecciones fiscales quedan
-    // cerradas a cualquiera, que es el lado correcto para equivocarse.
+    // Definido una sola vez, igual que esBot(): si algun dia se regenera el usuario, se
+    // cambia aca y en ningun otro lado.
     function esFacturador() {
-      return loggedIn() && request.auth.uid == 'PONER_UID_DEL_FACTURADOR';
+      return loggedIn() && request.auth.uid == 'zZo6qzqCZTSBbORkCOIxr3HU21s2';
     }
 
     // Certificado y clave privada fiscales, cifrados con AES-GCM por el Worker.
@@ -59,6 +58,13 @@ service cloud.firestore {
     // pedir uno nuevo en cada factura. Mientras vive es una credencial: el que lo tiene
     // factura sin necesitar el certificado. Va cifrado y con el mismo candado.
     match /fiscal_ta/{docId} {
+      allow read, write: if esFacturador();
+    }
+
+    // El candado de la numeracion: un doc corto y efimero por punto de venta y tipo, que
+    // evita que dos emisiones simultaneas pidan el mismo numero. Se toma y se suelta en
+    // la misma emision, y vence solo al minuto por si un Worker se muere con el tomado.
+    match /fiscal_locks/{docId} {
       allow read, write: if esFacturador();
     }
 
