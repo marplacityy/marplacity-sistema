@@ -20,6 +20,21 @@ service cloud.firestore {
       return loggedIn() && resource.data.userId == request.auth.uid;
     }
 
+    // Un doc singular (config/prompt, config/mensajes, config/bot) que TODAVIA NO EXISTE
+    // no puede pasar owns(): `resource` es null, no hay userId contra que comparar, y la
+    // lectura se niega. El sistema deja un onSnapshot vivo sobre cada uno de esos docs,
+    // asi que la primera vez —antes de que se guarde nada— el listener arranca en error
+    // y el indicador de sincronizacion queda en rojo.
+    //
+    // Paso el 30/08/2026 con config/prompt, que nunca se habia escrito.
+    //
+    // Permitirlo no filtra nada: leer un documento que no existe no devuelve datos de
+    // nadie. Y es importante para el multi-cliente: en una instalacion nueva NINGUNO de
+    // estos docs existe todavia.
+    function noExiste(ruta) {
+      return loggedIn() && !exists(ruta);
+    }
+
     // El doc que se está por escribir se atribuye al usuario que hace el pedido
     function writesAsSelf() {
       return loggedIn() && request.resource.data.userId == request.auth.uid;
@@ -88,7 +103,7 @@ service cloud.firestore {
     // OJO: la regla de config/{uid} de abajo NO alcanza para este doc, porque exige
     // que la clave del doc sea el uid del que pide.
     match /config/mensajes {
-      allow read:   if esBot() || owns();
+      allow read:   if esBot() || noExiste(/databases/$(database)/documents/config/mensajes) || owns();
       allow create: if writesAsSelf();
       allow update: if owns() && writesAsSelf();
     }
@@ -98,7 +113,7 @@ service cloud.firestore {
     // el Worker lo usa en lugar del prompt.js del repo; si esta vacio, cae al archivo.
     // El dueño lo escribe; el bot solo lo lee, en cada mensaje.
     match /config/prompt {
-      allow read:   if esBot() || owns();
+      allow read:   if esBot() || noExiste(/databases/$(database)/documents/config/prompt) || owns();
       allow create: if writesAsSelf();
       allow update: if owns() && writesAsSelf();
     }
@@ -109,7 +124,7 @@ service cloud.firestore {
     // diciendo algo que no corresponde.
     // El dueño lo escribe; el bot solo lo lee, en cada mensaje y en cada corrida del cron.
     match /config/bot {
-      allow read:   if esBot() || owns();
+      allow read:   if esBot() || noExiste(/databases/$(database)/documents/config/bot) || owns();
       allow create: if writesAsSelf();
       allow update: if owns() && writesAsSelf();
     }
