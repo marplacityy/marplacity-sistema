@@ -18,12 +18,13 @@ const docComprobante = (cuit, entorno, ptoVta, cbteTipo, nro) =>
 
 /** Las tablas del servicio que hacen falta para armar un comprobante. */
 export async function tablasDe(ent, ta, cuit) {
-  const [iva, condiciones, tipos] = await Promise.all([
+  const [iva, condiciones, tipos, documentos] = await Promise.all([
     parametros(ent, ta, cuit, 'FEParamGetTiposIva'),
     parametros(ent, ta, cuit, 'FEParamGetCondicionIvaReceptor'),
     parametros(ent, ta, cuit, 'FEParamGetTiposCbte'),
+    parametros(ent, ta, cuit, 'FEParamGetTiposDoc'),
   ]);
-  return { iva, condiciones, tipos };
+  return { iva, condiciones, tipos, documentos };
 }
 
 /**

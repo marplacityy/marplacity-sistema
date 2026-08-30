@@ -16,7 +16,7 @@ revés.
 | 2 | Cifrado del certificado y subida sin pasar por el browser | ✅ |
 | 3 | WSAA: login CMS y cache del ticket de 12 h | ✅ |
 | 4 | WSFEv1: `FECompUltimoAutorizado` + `FECAESolicitar` | ✅ |
-| 6 | Front: emitir desde una venta, ver CAE y estado | ⏳ |
+| 6 | Front: emitir desde una venta, ver CAE y estado | ✅ |
 | 7 | PDF con el QR obligatorio | ⏳ |
 
 ## El certificado (punto 0)
@@ -174,6 +174,29 @@ Pedir un número ya usado → R, error [10016] "El numero o fecha del comprobant
 La factura A es el mejor ejemplo de por qué errores y observaciones van separados: salió
 **autorizada y con CAE**, y además con una observación. Tratarla como rechazada habría
 significado emitirla de nuevo.
+
+## El front (punto 6)
+
+En la sección **Facturas** del sistema, cada venta tiene un botón 🧾:
+
+- Abre un modal con **todo precargado desde la venta**: renglones, cantidades, precios y
+  cliente. Lo único que hay que completar es la condición frente al IVA y el documento, y
+  eso queda guardado en la ficha del cliente para la próxima.
+- Los selectores (condición de IVA, alícuotas, tipos de documento) se llenan con las
+  **tablas vivas de ARCA**, no con listas escritas en el HTML.
+- Muestra la letra que va a salir **antes** de emitir, y avisa si la combinación no va a
+  pasar (Responsable Inscripto sin CUIT, por ejemplo).
+- Los totales se calculan igual que en el Worker, para que no haya sorpresas.
+- Ya emitida, la fila de la venta muestra `🧾 Factura B 0001-00000012` en verde, y el
+  modal muestra CAE, vencimiento, tipo, número, y las observaciones de ARCA si las hubo.
+- Si ARCA rechazó, muestra el motivo con su código y ofrece corregir y reintentar.
+
+El cartel de entorno está arriba de todo en la pantalla de Facturas, y otra vez adentro
+del modal antes de emitir. En homologación dice que los comprobantes **no tienen validez
+fiscal**; en producción, que son reales y que no se anulan.
+
+El sistema **no habla con ARCA**: habla con el Worker, que es el único que tiene el
+certificado. El punto de venta se configura en Configuración → `arcaPtoVta`.
 
 ## Reglas que no se negocian
 
