@@ -17,6 +17,10 @@
  *    explicitamente Y que el pedido lo confirme; ver `entornoDe()`.
  */
 
+import { cifrar } from './cripto.js';
+import { loginFacturador, esElDueño } from './identidad.js';
+import { leerDoc, escribirDoc } from './firestore.js';
+
 // ── Entornos ──────────────────────────────────────────────────
 //
 // Las URLs salen del manual del desarrollador de WSFEv1 (v4.7) y del WSDL publicado.
@@ -43,6 +47,12 @@ const CORS = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-Firebase-Token',
 };
+
+/**
+ * Donde vive el material fiscal de un CUIT. Un doc por CUIT y entorno: el certificado de
+ * homologacion y el de produccion son distintos y no se pisan.
+ */
+const docCert = (cuit, entorno) => `fiscal_certs/${cuit}_${entorno}`;
 
 /**
  * En que entorno esta parado el Worker. Sin variable, homologacion: el default nunca
@@ -91,8 +101,119 @@ export default {
       });
     }
 
+    // ── El certificado ────────────────────────────────────────
+    // Las dos rutas son solo para el dueño, y el token se verifica de verdad (firma,
+    // emisor, destinatario, vencimiento y uid). Sin eso, el que descubra esta URL sube
+    // su propio certificado y factura a nombre nuestro.
+    if (url.pathname === '/certificado') {
+      if (!(await esElDueño(env, request))) {
+        return json({ ok: false, error: 'no autorizado' }, 401);
+      }
+      if (request.method === 'POST') return guardarCertificado(request, env);
+      if (request.method === 'GET')  return estadoCertificado(url, env);
+      return json({ ok: false, error: 'usa GET o POST' }, 405);
+    }
+
     return json({ ok: false, error: 'ruta no encontrada' }, 404);
   },
 };
+
+/**
+ * Recibe el certificado y la clave privada, los valida, los cifra y los guarda.
+ *
+ * La clave llega en PKCS#8 (`BEGIN PRIVATE KEY`), no en el PKCS#1 que escupe `openssl
+ * genrsa`: WebCrypto solo importa PKCS#8, y el que convierte es el script de subida.
+ * Se rechaza el PKCS#1 con el comando exacto para convertirlo, en vez de guardarlo y
+ * fallar recien cuando haya que firmar.
+ */
+async function guardarCertificado(request, env) {
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ ok: false, error: 'el cuerpo no es JSON' }, 400); }
+
+  const { cuit, entorno, alias, certPem, keyPem, meta } = body || {};
+
+  if (!/^\d{11}$/.test(String(cuit || ''))) return json({ ok: false, error: 'cuit invalido: son 11 digitos' }, 400);
+  if (!ENTORNOS[entorno]) return json({ ok: false, error: "entorno tiene que ser 'homo' o 'prod'" }, 400);
+  if (!certPem?.includes('BEGIN CERTIFICATE')) return json({ ok: false, error: 'el certificado no parece un PEM' }, 400);
+  if (keyPem?.includes('BEGIN RSA PRIVATE KEY')) {
+    return json({
+      ok: false,
+      error: 'la clave esta en PKCS#1 y hace falta PKCS#8',
+      comoConvertir: 'openssl pkcs8 -topk8 -nocrypt -in tu.key',
+    }, 400);
+  }
+  if (!keyPem?.includes('BEGIN PRIVATE KEY')) return json({ ok: false, error: 'la clave no parece un PEM PKCS#8' }, 400);
+
+  // Que importe con WebCrypto es la prueba de que sirve para firmar. Mejor que se caiga
+  // aca, subiendo, que en la primera factura.
+  try { await importarClave(keyPem); }
+  catch (e) { return json({ ok: false, error: 'la clave no se pudo importar: ' + e.message }, 400); }
+
+  const idToken = await loginFacturador(env);
+  if (!idToken) return json({ ok: false, error: 'el Worker no pudo loguearse a Firestore' }, 500);
+
+  try {
+    const [cert, clave] = await Promise.all([
+      cifrar(env, cuit, entorno, certPem),
+      cifrar(env, cuit, entorno, keyPem),
+    ]);
+    await escribirDoc(env, idToken, docCert(cuit, entorno), {
+      cuit: String(cuit),
+      entorno,
+      alias: alias || '',
+      // Metadatos publicos del certificado, para poder avisar que vence sin descifrar
+      // nada. Los manda el script, que ya los leyo con openssl.
+      subject:    meta?.subject    || '',
+      notBefore:  meta?.notBefore  || '',
+      notAfter:   meta?.notAfter   || '',
+      cert,
+      clave,
+      subidoEn: new Date().toISOString(),
+    });
+    console.log(`certificado guardado: ${cuit} ${entorno} (vence ${meta?.notAfter || 'sin dato'})`);
+    return json({ ok: true, guardado: { cuit: String(cuit), entorno, alias, notAfter: meta?.notAfter || null } });
+  } catch (e) {
+    console.log('no se pudo guardar el certificado:', e.message);
+    return json({ ok: false, error: e.message }, 500);
+  }
+}
+
+/** Que hay guardado, sin devolver jamas el material: solo los datos publicos. */
+async function estadoCertificado(url, env) {
+  const cuit = url.searchParams.get('cuit') || env.ARCA_CUIT;
+  const entorno = url.searchParams.get('entorno') || entornoDe(env).clave;
+  if (!/^\d{11}$/.test(String(cuit || ''))) return json({ ok: false, error: 'falta el cuit' }, 400);
+
+  const idToken = await loginFacturador(env);
+  if (!idToken) return json({ ok: false, error: 'el Worker no pudo loguearse a Firestore' }, 500);
+
+  const d = await leerDoc(env, idToken, docCert(cuit, entorno));
+  if (!d) return json({ ok: true, hay: false, cuit, entorno });
+
+  const dias = d.notAfter ? Math.floor((new Date(d.notAfter) - Date.now()) / 86400000) : null;
+  return json({
+    ok: true,
+    hay: true,
+    cuit: d.cuit,
+    entorno: d.entorno,
+    alias: d.alias,
+    subject: d.subject,
+    notAfter: d.notAfter,
+    diasParaVencer: dias,
+    vencido: dias != null && dias < 0,
+    subidoEn: d.subidoEn,
+  });
+}
+
+const B64_PEM = pem => pem.replace(/-----(BEGIN|END)[^-]+-----/g, '').replace(/\s+/g, '');
+
+/** Importa una clave privada PKCS#8 para firmar con RSA (lo que pide el CMS del WSAA). */
+export async function importarClave(keyPem) {
+  const der = Uint8Array.from(atob(B64_PEM(keyPem)), c => c.charCodeAt(0));
+  return crypto.subtle.importKey(
+    'pkcs8', der, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
+  );
+}
 
 export { ENTORNOS, QR_URL, entornoDe };

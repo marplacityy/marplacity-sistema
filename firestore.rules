@@ -32,6 +32,44 @@ service cloud.firestore {
       return loggedIn() && request.auth.uid == 's8mcf3uMoBc0S3G2HMR9htqLU403';
     }
 
+    // El usuario de servicio del facturador (facturador@marplacity.com): el Worker que
+    // habla con ARCA. Es un usuario aparte del bot a proposito: el que puede leer el
+    // certificado fiscal no tiene por que poder leer los DM, ni al reves.
+    //
+    // ⚠️ FALTA EL UID. Se completa cuando Juni cree el usuario en Firebase Auth. Hasta
+    // entonces esta funcion devuelve false para todos y las colecciones fiscales quedan
+    // cerradas a cualquiera, que es el lado correcto para equivocarse.
+    function esFacturador() {
+      return loggedIn() && request.auth.uid == 'PONER_UID_DEL_FACTURADOR';
+    }
+
+    // Certificado y clave privada fiscales, cifrados con AES-GCM por el Worker.
+    // Un doc por CUIT y entorno: fiscal_certs/{cuit}_{homo|prod}.
+    //
+    // NADIE los lee desde el navegador, ni siquiera el dueño: con la clave privada se
+    // emiten comprobantes a nombre del CUIT, y el browser es el lugar menos controlado
+    // del sistema. El unico que los necesita es el Worker, para firmar el login de WSAA.
+    // El sistema pregunta si hay certificado cargado por el endpoint del Worker, que
+    // devuelve solo datos publicos (alias, vencimiento), nunca el material.
+    match /fiscal_certs/{docId} {
+      allow read, write: if esFacturador();
+    }
+
+    // El ticket de acceso de WSAA (token + sign), que dura 12 h y se cachea para no
+    // pedir uno nuevo en cada factura. Mientras vive es una credencial: el que lo tiene
+    // factura sin necesitar el certificado. Va cifrado y con el mismo candado.
+    match /fiscal_ta/{docId} {
+      allow read, write: if esFacturador();
+    }
+
+    // Comprobantes emitidos, con su CAE. Los escribe SOLO el Worker: un comprobante
+    // fiscal no se edita ni se borra desde el sistema —para revertir uno se emite una
+    // nota de credito— asi que el dueño lee y nada mas.
+    match /comprobantes/{docId} {
+      allow read:        if owns();
+      allow create, update: if esFacturador();
+    }
+
     // Config del usuario: un doc por uid, la clave del doc ES el uid.
     match /config/{uid} {
       allow read, write: if loggedIn() && request.auth.uid == uid;
