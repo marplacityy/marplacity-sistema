@@ -4,3 +4,14 @@
 .dev.vars.*
 .env
 .env.*
+
+# Certificados fiscales de ARCA. Nunca, por ningún motivo, a un commit: con el .key
+# cualquiera emite comprobantes a nombre del CUIT. Viven fuera del repo (~/arca-certs)
+# y se suben cifrados con workers/facturador/subir-certificado.mjs.
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.pem
+.wrangler/

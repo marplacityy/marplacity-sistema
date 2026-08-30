@@ -1,0 +1,28 @@
+# Config de despliegue del Worker facturador (ARCA — WSAA + WSFEv1).
+#
+# Es un Worker SEPARADO de ig-bot a propósito: acá se manejan el certificado y la clave
+# privada fiscales, y un deploy del bot no tiene por qué poder tocar esto ni al revés.
+#
+#   npx wrangler deploy            (parado en workers/facturador/)
+#
+# Los valores de las variables NO van acá: este repo es publico. Las Text viven en el
+# panel de Cloudflare y los Secret se cargan con `wrangler secret put`.
+#
+# keep_vars, por lo mismo que en ig-bot: sin ese flag wrangler BORRA del Worker toda
+# variable que no encuentre en este archivo, y un deploy se lleva puestas las Text del
+# panel. Los Secret no se tocan.
+#
+# Despues de cada deploy, abrir https://facturador.fiwind702050.workers.dev/ y confirmar
+# que la lista de `vars` este toda en true y que `entorno` diga lo que corresponde.
+
+name = "facturador"
+main = "worker.js"
+compatibility_date = "2026-08-30"
+keep_vars = true
+
+# Los logs son la unica forma de ver por que ARCA rechazo un comprobante: el codigo y el
+# mensaje de error vienen en la respuesta SOAP y se loguean enteros.
+[observability]
+enabled = true
+[observability.logs]
+enabled = true
