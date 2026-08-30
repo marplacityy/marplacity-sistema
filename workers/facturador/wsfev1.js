@@ -127,6 +127,7 @@ export async function consultarComprobante(ent, ta, cuit, ptoVta, cbteTipo, nro)
     caeVto: uno(r, 'FchVto'),
     resultado: uno(r, 'Resultado'),
     cbteNro: num(uno(r, 'CbteDesde')),
+    cbteFch: uno(r, 'CbteFch'),
     impTotal: num(uno(r, 'ImpTotal')),
     observaciones: todos(uno(r, 'Observaciones') || '', 'Obs').map(o => ({ code: num(uno(o, 'Code')), msg: uno(o, 'Msg') })),
   };

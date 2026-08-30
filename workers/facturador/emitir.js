@@ -54,6 +54,25 @@ export async function emitirComprobante(env, ent, cuit, idToken, ta, pedido, tab
       const ultimo = await ultimoAutorizado(ent, ta, cuit, ptoVta, cbteTipo);
       const cbteNro = ultimo + 1;
 
+      // ARCA exige correlatividad de numero Y DE FECHA: un comprobante no puede llevar
+      // fecha anterior a la del ultimo autorizado. Preguntarlo aca cuesta una llamada y
+      // convierte el 10016 —que dice "el numero o fecha", sin aclarar cual— en un
+      // mensaje que dice que hacer. Sin esto, facturar una venta de la semana pasada
+      // despues de haber emitido una de hoy falla sin explicacion util.
+      if (ultimo > 0) {
+        const previo = await consultarComprobante(ent, ta, cuit, ptoVta, cbteTipo, ultimo);
+        if (previo.hay && previo.cbteFch && cbteFch < previo.cbteFch) {
+          const f = d => `${d.slice(6,8)}/${d.slice(4,6)}/${d.slice(0,4)}`;
+          const e = new Error(
+            `ARCA no acepta un comprobante con fecha anterior a la del ultimo emitido. ` +
+            `El ultimo en este punto de venta es el ${ptoVta}-${ultimo}, del ${f(previo.cbteFch)}, ` +
+            `y esta factura tiene fecha ${f(cbteFch)}. Emitila con una fecha igual o posterior.`
+          );
+          e.problemas = [`la fecha ${f(cbteFch)} es anterior al ultimo comprobante autorizado (${f(previo.cbteFch)})`];
+          throw e;
+        }
+      }
+
       const c = {
         cbteTipo, ptoVta, cbteNro, cbteFch, concepto,
         docTipo: pedido.cliente?.docTipo,
@@ -112,11 +131,18 @@ export async function emitirComprobante(env, ent, cuit, idToken, ta, pedido, tab
         }
       }
 
-      // Otro proceso se llevo el numero entre la consulta y el pedido. Se vuelve a
-      // preguntar cual es el ultimo y se reintenta una vez.
+      // El 10016 puede ser por el numero o por la fecha. Solo tiene sentido reintentar
+      // si otro proceso se llevo el numero mientras tanto, y eso se sabe de una manera:
+      // volviendo a preguntar cual es el ultimo. Si no cambio, reintentar da exactamente
+      // el mismo rechazo, que es lo que pasaba antes y ademas loguabamos como si fuera
+      // una carrera entre emisiones.
       if (!r.autorizado && r.errores.some(e => e.code === NO_CORRELATIVO) && intento < 2) {
-        console.log(`numero ${cbteNro} tomado por otra emision; reintentando con el siguiente`);
-        continue;
+        const ahora = await ultimoAutorizado(ent, ta, cuit, ptoVta, cbteTipo);
+        if (ahora !== ultimo) {
+          console.log(`numero ${cbteNro} tomado por otra emision (ahora el ultimo es ${ahora}); reintentando`);
+          continue;
+        }
+        console.log(`10016 con el numero correcto (${cbteNro}): es por la fecha, no se reintenta`);
       }
 
       const guardado = {
