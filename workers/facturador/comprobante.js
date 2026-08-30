@@ -27,6 +27,9 @@ export const TIPO = {
   notaCreditoB: 8,
 };
 
+/** Comprobantes clase A: los que le discriminan el IVA a un Responsable Inscripto. */
+export const esClaseA = tipo => [TIPO.facturaA, TIPO.notaDebitoA, TIPO.notaCreditoA].includes(Number(tipo));
+
 /** Para revertir un comprobante se emite la nota de credito de su misma letra. */
 export const NOTA_CREDITO_DE = {
   [TIPO.facturaA]: TIPO.notaCreditoA,
@@ -188,9 +191,10 @@ export function validar(c) {
   if (Math.abs(sumaBases - c.impNeto) > 0.01) problemas.push(`ImpNeto (${c.impNeto}) no es la suma de las bases (${sumaBases})`);
   if (Math.abs(sumaIva - c.impIVA) > 0.01) problemas.push(`ImpIVA (${c.impIVA}) no es la suma de las alicuotas (${sumaIva})`);
 
-  // A un Responsable Inscripto se le factura con CUIT: la A no admite otro documento.
-  if (c.cbteTipo === TIPO.facturaA && Number(c.docTipo) !== 80) {
-    problemas.push('la factura A necesita el CUIT del cliente (DocTipo 80)');
+  // A un Responsable Inscripto se le factura con CUIT: la clase A no admite otro
+  // documento, y eso vale para la factura y para su nota de credito (manual, 10013).
+  if (esClaseA(c.cbteTipo) && Number(c.docTipo) !== 80) {
+    problemas.push('los comprobantes clase A necesitan el CUIT del cliente (DocTipo 80)');
   }
   if (Number(c.docTipo) !== 99 && !c.docNro) problemas.push('falta el numero de documento del cliente');
 

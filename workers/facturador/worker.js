@@ -21,7 +21,7 @@ import { cifrar, descifrar } from './cripto.js';
 import { loginFacturador, esElDueño } from './identidad.js';
 import { leerDoc, escribirDoc } from './firestore.js';
 import { ticketDeAcceso } from './wsaa.js';
-import { emitirComprobante, tablasDe } from './emitir.js';
+import { emitirComprobante, emitirNotaCredito, tablasDe } from './emitir.js';
 import { verificarTablas } from './comprobante.js';
 
 // ── Entornos ──────────────────────────────────────────────────
@@ -195,6 +195,33 @@ export default {
           problemas: e.problemas,
           estadoDesconocido: e.estadoDesconocido,
         }, e.problemas ? 400 : 502);
+      }
+    }
+
+    // ── Nota de credito ───────────────────────────────────────
+    // El unico camino para dejar sin efecto una factura: ARCA no anula, compensa.
+    if (url.pathname === '/nota-credito' && request.method === 'POST') {
+      if (!(await esElDueño(env, request))) return json({ ok: false, error: 'no autorizado' }, 401);
+
+      let pedido;
+      try { pedido = await request.json(); }
+      catch { return json({ ok: false, error: 'el cuerpo no es JSON' }, 400); }
+
+      const ent = entornoDe(env);
+      if (ent.clave === 'prod' && pedido.confirmoProduccion !== true) {
+        return json({ ok: false, error: 'El Worker esta en PRODUCCION: la nota de credito seria un comprobante fiscal real. Mandá confirmoProduccion: true.' }, 400);
+      }
+
+      try {
+        const { cuit, ta, idToken } = await contexto(env);
+        const tablas = await tablasDe(ent, ta, cuit);
+        const comprobante = await emitirNotaCredito(env, ent, cuit, idToken, ta, pedido, tablas);
+        return json({ ok: comprobante.estado === 'emitida', entorno: ent.nombre, comprobante },
+          comprobante.estado === 'emitida' ? 200 : 422);
+      } catch (e) {
+        console.log('fallo la nota de credito:', e.message);
+        return json({ ok: false, error: e.message, problemas: e.problemas, estadoDesconocido: e.estadoDesconocido },
+          e.problemas ? 400 : 502);
       }
     }
 

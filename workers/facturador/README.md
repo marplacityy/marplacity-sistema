@@ -149,11 +149,23 @@ falla, se corta con `estadoDesconocido` y el número a revisar, sin emitir nada.
 `Errors` no hay CAE; con `Observaciones` **sí lo hay** y el comprobante está autorizado.
 Confundirlos lleva a re-emitir algo que ya salió.
 
-### Anulación
+### Anulación: no existe
 
-No hay. Un comprobante con CAE no se anula: se compensa con una nota de crédito. Los
-tipos están en `NOTA_CREDITO_DE` y el detalle ya arma `CbtesAsoc`, que es lo que la nota
-de crédito necesita para apuntar a la factura que revierte.
+Un comprobante con CAE **no se anula**. Lo único que ARCA acepta para dejarlo sin efecto
+es otro comprobante que lo compense: una nota de crédito de la misma letra, que apunta a
+la factura con `CbtesAsoc`.
+
+`POST /nota-credito` con `{comprobanteId}` lo hace: lee la factura original, deriva el
+tipo (`NOTA_CREDITO_DE`), y emite por el total con **el mismo cliente y los mismos
+renglones** — una nota de crédito que no coincide con lo que revierte no sirve para nada.
+La factura original no se toca: queda marcada con `notaCredito` para que no se pueda
+revertir dos veces y para que el sistema lo muestre sin salir a buscar.
+
+Va con fecha de hoy, no con la de la factura: la fecha tiene que ser correlativa con el
+último comprobante de **ese** tipo, que lleva su propia numeración.
+
+Probado en homologación: NC B (tipo 8) nro 1, CAE 86350827392446, revirtiendo la factura
+B 0001-00000001.
 
 ### Probado contra homologación
 

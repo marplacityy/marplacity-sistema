@@ -6,7 +6,7 @@
  */
 
 import { ultimoAutorizado, solicitarCae, consultarComprobante, parametros } from './wsfev1.js';
-import { letraPara, calcularTotales, detalleXml, validar, aFechaArca, hoyAr, CONCEPTO, TIPO } from './comprobante.js';
+import { letraPara, calcularTotales, detalleXml, validar, aFechaArca, hoyAr, CONCEPTO, TIPO, NOTA_CREDITO_DE } from './comprobante.js';
 import { conCandado } from './candado.js';
 import { escribirDoc, leerDoc } from './firestore.js';
 
@@ -39,7 +39,15 @@ export async function emitirComprobante(env, ent, cuit, idToken, ta, pedido, tab
   if (!Number.isInteger(ptoVta) || ptoVta < 1) throw new Error('falta el punto de venta');
 
   // La letra sale de la condicion de IVA del cliente, no de lo que elija nadie.
-  const { cbteTipo, letra, condicion } = letraPara(pedido.cliente?.condicionIvaId, tablas.condiciones);
+  const { cbteTipo: tipoPorCliente, letra, condicion } = letraPara(pedido.cliente?.condicionIvaId, tablas.condiciones);
+
+  // Una nota de credito lleva su propio tipo, que NO se deriva del cliente: es el que le
+  // corresponde a la factura que revierte. La letra sigue siendo la misma —una NC de una
+  // factura A es una NC A— asi que el control de arriba se mantiene igual de valido.
+  const cbteTipo = pedido.cbteTipo || tipoPorCliente;
+  if (pedido.cbteTipo && pedido.cbteTipo !== NOTA_CREDITO_DE[tipoPorCliente]) {
+    throw new Error(`el tipo ${pedido.cbteTipo} no es la nota de credito que le corresponde a este cliente`);
+  }
   const totales = calcularTotales(pedido.items, tablas.iva, { precioIncluyeIva: pedido.precioIncluyeIva !== false });
 
   const concepto = pedido.concepto || CONCEPTO.productos;
@@ -176,6 +184,10 @@ export async function emitirComprobante(env, ent, cuit, idToken, ta, pedido, tab
         observaciones: r.observaciones || [],
         recuperado: !!r.recuperado,
         ventaId: pedido.ventaId || null,
+        esNotaCredito: !!pedido.cbteTipo,
+        revierte: pedido.asociados?.length
+          ? { ptoVta: pedido.asociados[0].ptoVta, cbteTipo: pedido.asociados[0].tipo, cbteNro: pedido.asociados[0].nro }
+          : null,
         emitidoEn: new Date().toISOString(),
       };
 
@@ -192,6 +204,55 @@ export async function emitirComprobante(env, ent, cuit, idToken, ta, pedido, tab
       return guardado;
     }
   });
+}
+
+/**
+ * Emite la nota de credito que revierte una factura.
+ *
+ * UNA FACTURA CON CAE NO SE ANULA. Lo unico que ARCA acepta para dejarla sin efecto es
+ * otro comprobante que la compense, de la misma letra, apuntando a ella. Por eso esto no
+ * borra ni toca la factura original: emite un comprobante nuevo y los deja vinculados en
+ * las dos direcciones.
+ *
+ * El cliente, los renglones y los importes salen de la factura original: una nota de
+ * credito que no coincide con lo que revierte no sirve para nada.
+ */
+export async function emitirNotaCredito(env, ent, cuit, idToken, ta, { comprobanteId, motivo }, tablas) {
+  if (!comprobanteId) throw new Error('falta el comprobante a revertir');
+
+  const orig = await leerDoc(env, idToken, `comprobantes/${comprobanteId}`);
+  if (!orig) throw new Error('no encontre esa factura');
+  if (orig.estado !== 'emitida') throw new Error('esa factura no llego a autorizarse: no hay nada que revertir');
+  if (orig.esNotaCredito) throw new Error('eso ya es una nota de credito');
+  if (orig.entorno !== ent.clave) throw new Error(`esa factura es de ${orig.entorno} y el facturador esta en ${ent.clave}`);
+  if (orig.notaCredito) {
+    throw new Error(`esa factura ya fue revertida con la nota de credito ${orig.notaCredito.ptoVta}-${orig.notaCredito.cbteNro}`);
+  }
+
+  const cbteTipo = NOTA_CREDITO_DE[orig.cbteTipo];
+  if (!cbteTipo) throw new Error(`no se que nota de credito le corresponde al tipo ${orig.cbteTipo}`);
+
+  const nc = await emitirComprobante(env, ent, cuit, idToken, ta, {
+    ptoVta: orig.ptoVta,
+    cbteTipo,
+    cliente: orig.cliente,
+    items: orig.items,
+    ventaId: orig.ventaId,
+    // Va con fecha de hoy y no con la de la factura: la fecha tiene que ser correlativa
+    // con el ultimo comprobante de ESTE tipo, y ademas la reversion pasa hoy.
+    fecha: hoyAr(),
+    asociados: [{ tipo: orig.cbteTipo, ptoVta: orig.ptoVta, nro: orig.cbteNro, cuit: String(cuit) }],
+    motivo: motivo || '',
+  }, tablas);
+
+  // La factura queda marcada, para que no se pueda revertir dos veces y para que el
+  // sistema lo muestre sin tener que salir a buscar.
+  if (nc.estado === 'emitida') {
+    await escribirDoc(env, idToken, `comprobantes/${comprobanteId}`, {
+      notaCredito: { ptoVta: nc.ptoVta, cbteTipo: nc.cbteTipo, cbteNro: nc.cbteNro, cae: nc.cae, emitidaEn: nc.emitidoEn },
+    });
+  }
+  return nc;
 }
 
 export { docComprobante };

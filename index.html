@@ -1195,7 +1195,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.30-C</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.30-D</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -3956,8 +3956,9 @@ function renderIngresos(){
           <span class="inc-pill">${g.origen==='pos'?'Factura':'Ingreso'}</span>
           ${(()=>{const c=comprobanteDe(g.id); if(!c) return '';
             const num=`${String(c.ptoVta).padStart(4,'0')}-${String(c.cbteNro).padStart(8,'0')}`;
+            const nc = notaCreditoDe(g.id);
             return c.estado==='emitida'
-              ? `<span class="inc-pill" style="background:#237A4B;color:#fff;" title="CAE ${esc(c.cae||'')}">🧾 Factura ${c.letra} ${num}</span>`
+              ? `<span class="inc-pill" style="background:${nc?'#854F0B':'#237A4B'};color:#fff;" title="CAE ${esc(c.cae||'')}">🧾 Factura ${c.letra} ${num}${nc?' · ↩️ NC '+String(nc.cbteNro).padStart(8,'0'):''}</span>`
               : `<span class="inc-pill" style="background:var(--neg);color:#fff;" title="${esc((c.errores||[]).map(e=>e.msg).join(' · '))}">🧾 rechazada</span>`;
           })()}
           ${g.clienteNombre?`<span style="font-weight:500;">${esc(g.clienteNombre)}</span>`:''}
@@ -11720,8 +11721,11 @@ let arcaSalud  = null;   // en qué entorno está parado el facturador
 let arcaTablas = null;   // condiciones de IVA, alícuotas y tipos de documento, de ARCA
 let feaVenta   = null;   // la venta que se está facturando en este momento
 
-/** El comprobante fiscal de una venta, si ya se emitió. */
-const comprobanteDe = ventaId => comprobantes.find(c => c.ventaId === ventaId);
+/** La FACTURA de una venta. La nota de crédito lleva el mismo ventaId, así que se
+    filtra: si no, al revertir una venta el sistema mostraría la NC como si fuera la
+    factura y el botón de emitir volvería a aparecer. */
+const comprobanteDe = ventaId => comprobantes.find(c => c.ventaId === ventaId && !c.esNotaCredito);
+const notaCreditoDe = ventaId => comprobantes.find(c => c.ventaId === ventaId && c.esNotaCredito && c.estado === 'emitida');
 
 async function arcaPedir(ruta, opciones = {}){
   const r = await fetch(FACTURADOR_URL + ruta, {
@@ -11935,13 +11939,14 @@ function feaMostrarComprobante(c){
   const num = `${String(c.ptoVta).padStart(4,'0')}-${String(c.cbteNro).padStart(8,'0')}`;
   const vto = c.caeVto ? `${c.caeVto.slice(6,8)}/${c.caeVto.slice(4,6)}/${c.caeVto.slice(0,4)}` : '—';
   const emitida = c.estado === 'emitida';
+  const nombreTipo = c.esNotaCredito ? 'Nota de crédito' : 'Factura';
   document.getElementById('fea-resultado').innerHTML = `
     <div class="proveedor-alerta ${emitida?'':'alerta-urgente'}" style="margin-bottom:12px;">
-      ${emitida ? `✅ <b>Factura ${c.letra} ${num}</b> autorizada por ARCA.` : `❌ <b>Rechazada</b> — no tiene CAE y no es un comprobante válido.`}
+      ${emitida ? `✅ <b>${nombreTipo} ${c.letra} ${num}</b> autorizada por ARCA.${c.revierte ? ` Revierte la factura ${String(c.revierte.ptoVta).padStart(4,'0')}-${String(c.revierte.cbteNro).padStart(8,'0')}.` : ''}` : `❌ <b>Rechazada</b> — no tiene CAE y no es un comprobante válido.`}
       ${c.entorno === 'homo' ? ' <span style="opacity:.8">(homologación: sin validez fiscal)</span>' : ''}
     </div>
     <div class="permuta-box">
-      <div class="profit-row"><span class="profit-label">Comprobante</span><span class="profit-val">Factura ${c.letra} ${num}</span></div>
+      <div class="profit-row"><span class="profit-label">Comprobante</span><span class="profit-val">${nombreTipo} ${c.letra} ${num}</span></div>
       <div class="profit-row"><span class="profit-label">Cliente</span><span class="profit-val">${esc(c.cliente?.nombre||'')}${c.cliente?.condicion?` · ${esc(c.cliente.condicion)}`:''}</span></div>
       <div class="profit-row"><span class="profit-label">Neto / IVA</span><span class="profit-val">${fmtARS(c.impNeto||0)} + ${fmtARS(c.impIVA||0)}</span></div>
       <div class="profit-row"><span class="profit-label" style="font-weight:700">TOTAL</span><span class="profit-val tk-b">${fmtARS(c.impTotal||0)}</span></div>
@@ -11952,8 +11957,15 @@ function feaMostrarComprobante(c){
     ${c.errores?.length ? `<div class="proveedor-alerta alerta-urgente" style="margin-top:10px;"><b>Por qué lo rechazó ARCA:</b><ul style="margin:6px 0 0 18px;">${c.errores.map(e=>`<li>[${e.code}] ${esc(e.msg||'')}</li>`).join('')}</ul></div>` : ''}
     ${c.observaciones?.length ? `<div class="proveedor-alerta alerta-atencion" style="margin-top:10px;"><b>Observaciones de ARCA</b> — la factura está autorizada igual:<ul style="margin:6px 0 0 18px;">${c.observaciones.map(o=>`<li>[${o.code}] ${esc(o.msg||'')}</li>`).join('')}</ul></div>` : ''}
     ${c.recuperado ? `<div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Se recuperó de ARCA: la conexión se había cortado, pero el comprobante ya estaba autorizado. No se emitió dos veces.</div>` : ''}
+    ${c.notaCredito ? `<div class="proveedor-alerta alerta-atencion" style="margin-top:10px;">
+      ↩️ Esta factura fue revertida con la <b>nota de crédito ${String(c.notaCredito.ptoVta).padStart(4,'0')}-${String(c.notaCredito.cbteNro).padStart(8,'0')}</b>.
+      La factura sigue existiendo y sigue siendo válida: lo que la deja sin efecto es la nota de crédito.
+    </div>` : ''}
     ${emitida
-      ? `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" onclick="pdfComprobanteArca('${escJs(c.ventaId||'')}')">📄 Descargar el PDF con el QR</button></div>`
+      ? `<div class="pos-actions" style="margin-top:12px;">
+           ${c.notaCredito || c.esNotaCredito ? '' : `<button class="pos-btn-cancel" onclick="emitirNotaCreditoArca('${escJs(c.id||'')}')">↩️ Nota de crédito</button>`}
+           <button class="pos-btn-checkout" onclick="pdfComprobanteArca('${escJs(c.ventaId||'')}')">📄 Descargar el PDF con el QR</button>
+         </div>`
       : `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" onclick="reintentarFacturaArca()">Corregir y volver a intentar</button></div>`}`;
 }
 
@@ -12077,6 +12089,36 @@ window.pdfComprobanteArca = function(ventaId){
   }
 
   d.save(`Factura_${c.letra}_${num}.pdf`);
+};
+
+/**
+ * Revertir una factura. No la borra ni la edita: ARCA no anula comprobantes, los compensa
+ * con otro que apunta al primero. Los dos quedan y los dos son válidos.
+ */
+window.emitirNotaCreditoArca = async function(comprobanteId){
+  const c = comprobantes.find(x => x.id === comprobanteId);
+  if(!c) return;
+  const num = `${String(c.ptoVta).padStart(4,'0')}-${String(c.cbteNro).padStart(8,'0')}`;
+  if(!confirm(`Emitir una nota de crédito que revierte la factura ${c.letra} ${num} por ${fmtARS(c.impTotal||0)}.\n\n` +
+              `La factura NO se borra ni se edita: ARCA no anula comprobantes. Lo que la deja sin efecto es este comprobante nuevo, que queda apuntando a ella.\n\n` +
+              `Se emite por el total, con los mismos renglones y el mismo cliente.\n\n¿Seguimos?`)) return;
+
+  const res = document.getElementById('fea-resultado');
+  res.insertAdjacentHTML('beforeend', '<div class="home-empty" id="fea-nc-esperando">Emitiendo la nota de crédito…</div>');
+  try{
+    const r = await arcaPedir('/nota-credito', { method:'POST', body: JSON.stringify({ comprobanteId }) });
+    document.getElementById('fea-nc-esperando')?.remove();
+    if(r.comprobante){
+      feaMostrarComprobante(r.comprobante);
+      showToast(r.ok ? 'Nota de crédito emitida ✓' : 'ARCA rechazó la nota de crédito', !r.ok);
+    }else{
+      res.insertAdjacentHTML('beforeend',
+        `<div class="proveedor-alerta alerta-urgente" style="margin-top:10px;"><b>No se pudo emitir la nota de crédito.</b><br>${esc(r.error||'error desconocido')}</div>`);
+    }
+  }catch(e){
+    document.getElementById('fea-nc-esperando')?.remove();
+    res.insertAdjacentHTML('beforeend', `<div class="proveedor-alerta alerta-urgente" style="margin-top:10px;">${esc(e.message)}</div>`);
+  }
 };
 
 window.reintentarFacturaArca = function(){
