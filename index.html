@@ -1195,7 +1195,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.30-B</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.30-C</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2709,6 +2709,9 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<!-- QR de los comprobantes fiscales. Es obligatorio en la factura (RG 4892), asi que
+     tiene que estar en la pagina y no solo adentro de las etiquetas generadas. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { initializeFirestore, persistentLocalCache, collection, doc, addDoc, deleteDoc, getDocs, setDoc, getDoc, updateDoc, onSnapshot, writeBatch, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
@@ -11949,8 +11952,132 @@ function feaMostrarComprobante(c){
     ${c.errores?.length ? `<div class="proveedor-alerta alerta-urgente" style="margin-top:10px;"><b>Por qué lo rechazó ARCA:</b><ul style="margin:6px 0 0 18px;">${c.errores.map(e=>`<li>[${e.code}] ${esc(e.msg||'')}</li>`).join('')}</ul></div>` : ''}
     ${c.observaciones?.length ? `<div class="proveedor-alerta alerta-atencion" style="margin-top:10px;"><b>Observaciones de ARCA</b> — la factura está autorizada igual:<ul style="margin:6px 0 0 18px;">${c.observaciones.map(o=>`<li>[${o.code}] ${esc(o.msg||'')}</li>`).join('')}</ul></div>` : ''}
     ${c.recuperado ? `<div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Se recuperó de ARCA: la conexión se había cortado, pero el comprobante ya estaba autorizado. No se emitió dos veces.</div>` : ''}
-    ${!emitida ? `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" onclick="reintentarFacturaArca()">Corregir y volver a intentar</button></div>` : ''}`;
+    ${emitida
+      ? `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" onclick="pdfComprobanteArca('${escJs(c.ventaId||'')}')">📄 Descargar el PDF con el QR</button></div>`
+      : `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" onclick="reintentarFacturaArca()">Corregir y volver a intentar</button></div>`}`;
 }
+
+/**
+ * El contenido del QR obligatorio (RG 4892). El formato lo define ARCA y no se inventa:
+ * la URL fija, y como parametro `p` el JSON del comprobante en Base64. Los nombres de
+ * los campos son los de la especificacion oficial, tal cual.
+ */
+function qrDeComprobante(c){
+  const datos = {
+    ver: 1,
+    fecha: `${c.cbteFch.slice(0,4)}-${c.cbteFch.slice(4,6)}-${c.cbteFch.slice(6,8)}`,
+    cuit: Number(c.cuit),
+    ptoVta: Number(c.ptoVta),
+    tipoCmp: Number(c.cbteTipo),
+    nroCmp: Number(c.cbteNro),
+    importe: Number(c.impTotal),
+    moneda: 'PES',
+    ctz: 1,
+    tipoDocRec: Number(c.cliente?.docTipo ?? 99),
+    nroDocRec: Number(c.cliente?.docNro || 0),
+    tipoCodAut: 'E',            // E = CAE. La A es para CAEA, que no usamos.
+    codAut: Number(c.cae),
+  };
+  return 'https://www.arca.gob.ar/fe/qr/?p=' + btoa(JSON.stringify(datos));
+}
+
+/**
+ * El PDF del comprobante fiscal. No reemplaza a generarFacturaPDF, que es el remito
+ * interno del local: este es el que tiene CAE y QR y vale ante ARCA.
+ */
+window.pdfComprobanteArca = function(ventaId){
+  const c = comprobanteDe(ventaId);
+  if(!c || c.estado !== 'emitida'){ showToast('Esa venta no tiene una factura autorizada.', true); return; }
+
+  const { jsPDF } = window.jspdf;
+  const d = new jsPDF({unit:'mm', format:'a4'});
+  const pesos = n => '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2, maximumFractionDigits:2});
+  const fecha = f => `${f.slice(6,8)}/${f.slice(4,6)}/${f.slice(0,4)}`;
+  const num = `${String(c.ptoVta).padStart(4,'0')}-${String(c.cbteNro).padStart(8,'0')}`;
+
+  // ── Cabecera, con el recuadro de la letra en el medio, como manda el formato ──
+  d.setDrawColor(0); d.setLineWidth(0.4);
+  d.rect(10, 10, 190, 32);
+  d.line(105, 10, 105, 42);
+  d.rect(98, 10, 14, 14);
+  d.setFontSize(22); d.setFont(undefined,'bold');
+  d.text(c.letra, 105, 21, {align:'center'});
+  d.setFontSize(7); d.setFont(undefined,'normal');
+  d.text('COD. ' + String(c.cbteTipo).padStart(2,'0'), 105, 27, {align:'center'});
+
+  d.setFontSize(14); d.setFont(undefined,'bold');
+  d.text(cfg.localNombre || 'MarplaCity', 14, 19);
+  d.setFontSize(8); d.setFont(undefined,'normal');
+  let y = 25;
+  if(cfg.localDir){ d.text(cfg.localDir, 14, y); y += 4; }
+  if(cfg.localTel){ d.text('Tel: ' + cfg.localTel, 14, y); y += 4; }
+  d.text('IVA Responsable Inscripto', 14, y);
+
+  d.setFontSize(13); d.setFont(undefined,'bold');
+  d.text('FACTURA ' + c.letra, 196, 19, {align:'right'});
+  d.setFontSize(9); d.setFont(undefined,'normal');
+  d.text('Nro. ' + num, 196, 25, {align:'right'});
+  d.text('Fecha: ' + fecha(c.cbteFch), 196, 30, {align:'right'});
+  d.text('CUIT: ' + c.cuit, 196, 35, {align:'right'});
+
+  // ── Cliente ──
+  d.rect(10, 45, 190, 16);
+  d.setFontSize(8);
+  const docTipoDesc = (arcaTablas?.documentos || []).find(f => f.id === Number(c.cliente?.docTipo))?.desc || 'Doc';
+  d.text(`${docTipoDesc}: ${c.cliente?.docNro || '—'}`, 14, 51);
+  d.text(`Nombre: ${c.cliente?.nombre || 'Consumidor Final'}`, 14, 56);
+  d.text(`Condición frente al IVA: ${c.cliente?.condicion || '—'}`, 105, 51);
+
+  // ── Renglones ──
+  d.autoTable({
+    startY: 65,
+    head: [['Detalle','Cant.','Precio unit.','Subtotal']],
+    body: (c.items||[]).map(i => [
+      i.descripcion || '',
+      String(i.cantidad || 1),
+      pesos(i.precioUnitario),
+      pesos((i.precioUnitario||0) * (i.cantidad||1)),
+    ]),
+    theme: 'plain',
+    styles: {fontSize:8.5, cellPadding:2.5, lineColor:[200,200,200], lineWidth:{bottom:0.2}},
+    headStyles: {fontStyle:'bold', fillColor:[240,240,240]},
+    columnStyles: {1:{halign:'center',cellWidth:18}, 2:{halign:'right',cellWidth:32}, 3:{halign:'right',cellWidth:32}},
+    margin: {left:10, right:10},
+  });
+
+  // ── Totales. En la B el IVA no se discrimina al cliente, pero el neto y el total si ──
+  let ty = d.lastAutoTable.finalY + 6;
+  const fila = (etq, val, negrita) => {
+    d.setFont(undefined, negrita ? 'bold' : 'normal');
+    d.text(etq, 150, ty, {align:'right'});
+    d.text(val, 196, ty, {align:'right'});
+    ty += 5;
+  };
+  d.setFontSize(9);
+  if(c.letra === 'A'){
+    fila('Neto gravado:', pesos(c.impNeto));
+    (c.iva||[]).forEach(i => fila(`IVA ${i.alicuota}%:`, pesos(i.importe)));
+  }
+  fila('TOTAL:', pesos(c.impTotal), true);
+
+  // ── CAE y QR: sin esto no es un comprobante ──
+  const qy = Math.max(ty + 6, 235);
+  const canvas = document.createElement('canvas');
+  new QRious({ element: canvas, value: qrDeComprobante(c), size: 300, level: 'M' });
+  d.addImage(canvas.toDataURL('image/png'), 'PNG', 12, qy, 32, 32);
+
+  d.setFontSize(9); d.setFont(undefined,'bold');
+  d.text('CAE Nº: ' + c.cae, 196, qy + 10, {align:'right'});
+  d.text('Fecha de Vto. de CAE: ' + fecha(c.caeVto), 196, qy + 16, {align:'right'});
+  d.setFontSize(7); d.setFont(undefined,'normal');
+  if(c.entorno === 'homo'){
+    d.setTextColor(180,0,0);
+    d.text('COMPROBANTE DE PRUEBA (HOMOLOGACIÓN) — SIN VALIDEZ FISCAL', 105, qy + 36, {align:'center'});
+    d.setTextColor(0,0,0);
+  }
+
+  d.save(`Factura_${c.letra}_${num}.pdf`);
+};
 
 window.reintentarFacturaArca = function(){
   const v = feaVenta; if(!v) return;

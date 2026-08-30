@@ -17,7 +17,7 @@ revés.
 | 3 | WSAA: login CMS y cache del ticket de 12 h | ✅ |
 | 4 | WSFEv1: `FECompUltimoAutorizado` + `FECAESolicitar` | ✅ |
 | 6 | Front: emitir desde una venta, ver CAE y estado | ✅ |
-| 7 | PDF con el QR obligatorio | ⏳ |
+| 7 | PDF con el QR obligatorio | ✅ |
 
 ## El certificado (punto 0)
 
@@ -197,6 +197,31 @@ fiscal**; en producción, que son reales y que no se anulan.
 
 El sistema **no habla con ARCA**: habla con el Worker, que es el único que tiene el
 certificado. El punto de venta se configura en Configuración → `arcaPtoVta`.
+
+## El PDF con QR (punto 7)
+
+`pdfComprobanteArca()` genera el comprobante fiscal: recuadro con la letra y el código de
+tipo, datos del emisor, del receptor y su condición frente al IVA, renglones, totales
+—con el IVA discriminado por alícuota solo en la **A**, que es donde corresponde—, el
+**CAE con su vencimiento** y el **QR obligatorio** (RG 4892).
+
+No reemplaza a `generarFacturaPDF`, que es el remito interno del local. Este es el que
+tiene CAE y vale ante ARCA.
+
+El contenido del QR sale de la especificación oficial, no se inventa: la URL fija
+`https://www.arca.gob.ar/fe/qr/` y como parámetro `p` el JSON del comprobante en Base64,
+con estos campos y en este orden:
+
+```json
+{"ver":1,"fecha":"2026-08-30","cuit":23943597669,"ptoVta":1,"tipoCmp":6,"nroCmp":2,
+ "importe":9000,"moneda":"PES","ctz":1,"tipoDocRec":99,"nroDocRec":0,
+ "tipoCodAut":"E","codAut":86350827386997}
+```
+
+`tipoCodAut` es `"E"` porque autorizamos con CAE; la `"A"` es para CAEA, que no se usa.
+
+Los comprobantes de homologación salen con una leyenda roja al pie que dice que **no
+tienen validez fiscal**, para que un PDF de prueba no se confunda nunca con uno real.
 
 ## Reglas que no se negocian
 
