@@ -86,8 +86,17 @@ service cloud.firestore {
     // Comprobantes emitidos, con su CAE. Los escribe SOLO el Worker: un comprobante
     // fiscal no se edita ni se borra desde el sistema —para revertir uno se emite una
     // nota de credito— asi que el dueño lee y nada mas.
+    //
+    // El Worker tambien LEE, y no es un permiso de mas: para emitir la nota de credito
+    // necesita la factura que va a revertir (cliente, renglones, importes y numero). Al
+    // escribir esta regla la primera vez quedo solo con create y update, y la primera
+    // nota de credito fallo con un 403 que el sistema mostraba como "no encontre esa
+    // factura". Paso el 30/08/2026.
+    //
+    // Nadie tiene delete: un comprobante con CAE no se borra, ni desde el sistema ni
+    // desde el Worker.
     match /comprobantes/{docId} {
-      allow read:        if owns();
+      allow read:           if owns() || esFacturador();
       allow create, update: if esFacturador();
     }
 

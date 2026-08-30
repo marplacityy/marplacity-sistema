@@ -45,17 +45,30 @@ export function aCampos(obj) {
   return f;
 }
 
+/**
+ * Devuelve null cuando el documento NO EXISTE, y explota cuando no se pudo leer por otro
+ * motivo. La distincion importa: un 403 es siempre un error de reglas, y devolverlo como
+ * null hace que el llamador diga "no lo encontre" y mande a buscar donde no hay nada.
+ * Paso con la primera nota de credito, que fallo con "no encontre esa factura" cuando en
+ * realidad al Worker le faltaba permiso de lectura.
+ */
 export async function leerDoc(env, idToken, path) {
+  let r;
   try {
-    const r = await fetch(`${base(env)}/${path}`, { headers: { Authorization: `Bearer ${idToken}` } });
-    if (r.status === 404) return null;
-    if (!r.ok) { console.log('no se pudo leer', path, r.status); return null; }
-    const d = await r.json();
-    return campos(d.fields);
+    r = await fetch(`${base(env)}/${path}`, { headers: { Authorization: `Bearer ${idToken}` } });
   } catch (e) {
-    console.log('error leyendo', path, e.message);
-    return null;
+    throw new Error(`no se pudo consultar ${path}: ${e.message}`);
   }
+  if (r.status === 404) return null;
+  if (r.status === 403) {
+    console.log('SIN PERMISO para leer', path);
+    throw new Error(`el Worker no tiene permiso para leer ${path} — revisar firestore.rules`);
+  }
+  if (!r.ok) {
+    console.log('no se pudo leer', path, r.status);
+    throw new Error(`Firestore devolvio ${r.status} al leer ${path}`);
+  }
+  return campos((await r.json()).fields);
 }
 
 /**
