@@ -17,9 +17,10 @@
  *    explicitamente Y que el pedido lo confirme; ver `entornoDe()`.
  */
 
-import { cifrar } from './cripto.js';
+import { cifrar, descifrar } from './cripto.js';
 import { loginFacturador, esElDueño } from './identidad.js';
 import { leerDoc, escribirDoc } from './firestore.js';
+import { ticketDeAcceso } from './wsaa.js';
 
 // ── Entornos ──────────────────────────────────────────────────
 //
@@ -114,9 +115,52 @@ export default {
       return json({ ok: false, error: 'usa GET o POST' }, 405);
     }
 
+    // ── El ticket de acceso de ARCA ───────────────────────────
+    // Sirve para probar el login de punta a punta y para ver cuando vence el que esta
+    // guardado. Devuelve el token recortado: entero es una credencial que factura.
+    if (url.pathname === '/ta' && request.method === 'GET') {
+      if (!(await esElDueño(env, request))) return json({ ok: false, error: 'no autorizado' }, 401);
+      const ent = entornoDe(env);
+      const cuit = url.searchParams.get('cuit') || env.ARCA_CUIT;
+      const servicio = url.searchParams.get('servicio') || 'wsfe';
+      if (!/^\d{11}$/.test(String(cuit || ''))) return json({ ok: false, error: 'falta el cuit' }, 400);
+
+      const idToken = await loginFacturador(env);
+      if (!idToken) return json({ ok: false, error: 'el Worker no pudo loguearse a Firestore' }, 500);
+
+      try {
+        const ta = await ticketDeAcceso(env, ent, cuit, servicio, idToken,
+          () => certificadoDe(env, idToken, cuit, ent.clave));
+        return json({
+          ok: true,
+          entorno: ent.nombre,
+          servicio,
+          vence: ta.expira,
+          vieneDelCache: ta.delCache,
+          token: ta.token.slice(0, 10) + '…(recortado)',
+        });
+      } catch (e) {
+        console.log('no se pudo obtener el TA:', e.message);
+        return json({ ok: false, error: e.message }, 502);
+      }
+    }
+
     return json({ ok: false, error: 'ruta no encontrada' }, 404);
   },
 };
+
+/**
+ * El certificado y la clave, descifrados, para el momento exacto en que hay que firmar.
+ * Nunca se devuelven por HTTP ni se loguean: solo salen de aca hacia el firmador.
+ */
+async function certificadoDe(env, idToken, cuit, entorno) {
+  const d = await leerDoc(env, idToken, docCert(cuit, entorno));
+  if (!d) throw new Error(`no hay certificado cargado para el CUIT ${cuit} en ${entorno}`);
+  return {
+    certPem:  await descifrar(env, cuit, entorno, d.cert),
+    clavePem: await descifrar(env, cuit, entorno, d.clave),
+  };
+}
 
 /**
  * Recibe el certificado y la clave privada, los valida, los cifra y los guarda.

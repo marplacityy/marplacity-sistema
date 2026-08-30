@@ -13,8 +13,8 @@ revés.
 |---|---|---|
 | 0 | Certificado de homologación, punto de venta y asociación al servicio | ✅ hecho por Juni |
 | 1 | Worker separado, `keep_vars`, endpoint de salud | ✅ |
-| 2 | Cifrado del certificado y subida sin pasar por el browser | ⏳ |
-| 3 | WSAA: login CMS y cache del ticket de 12 h | ⏳ |
+| 2 | Cifrado del certificado y subida sin pasar por el browser | ✅ |
+| 3 | WSAA: login CMS y cache del ticket de 12 h | ✅ |
 | 4 | WSFEv1: `FECompUltimoAutorizado` + `FECAESolicitar` | ⏳ |
 | 6 | Front: emitir desde una venta, ver CAE y estado | ⏳ |
 | 7 | PDF con el QR obligatorio | ⏳ |
@@ -43,6 +43,63 @@ openssl rsa  -in ~/arca-certs/marplacity.key -noout -modulus | openssl md5
 
 Dejá la clave en `chmod 600`: por defecto `openssl` la escribe en `644`, legible por
 cualquier usuario de la máquina.
+
+## WSAA: el login (punto 3)
+
+Para hablar con WSFEv1 hace falta un **ticket de acceso**: un `token` y un `sign` que
+van en cada pedido. Se sacan del WSAA firmando un XML con el certificado, y **duran
+12 horas**.
+
+### El CMS, escrito a mano
+
+WSAA no acepta el pedido en limpio: tiene que ir adentro de un CMS (PKCS#7) firmado, que
+es lo que produce `openssl cms -sign`. Adentro de un Worker no hay OpenSSL, y WebCrypto
+firma pero no sabe armar un PKCS#7.
+
+Está escrito a mano en `asn1.js` (codificador DER) y `cms.js` (SignedData), sin traer
+`pkijs`: el repo no tiene una sola dependencia npm y no íbamos a empezar por la que
+maneja material fiscal. Se puede hacer porque es verificable de verdad — el CMS que sale
+de acá se valida con un tercero que no comparte una línea de código con nosotros:
+
+```bash
+openssl cms -verify -inform DER -in cms.der -noverify -out contenido.txt
+# Verification successful
+```
+
+Va con **atributos firmados** (`contentType`, `signingTime`, `messageDigest`), que es lo
+que produce openssl por defecto y por lo tanto lo que ARCA viene recibiendo de todo el
+mundo desde siempre. Cuando hay atributos firmados **la firma no va sobre el contenido**:
+va sobre el DER del conjunto de atributos, y uno de esos atributos es el hash del
+contenido. Confundir eso da un CMS que parece bien armado y no valida.
+
+### Las 12 horas no son una optimización
+
+Si se pide un TA nuevo por cada factura, WSAA contesta con un 500 y este texto:
+
+```
+El CEE ya posee un TA valido para el acceso al WSN solicitado
+```
+
+O sea que **el segundo comprobante del día ya falla**. Por eso el TA se guarda cifrado en
+`fiscal_ta/{cuit}_{entorno}_{servicio}` y se reusa hasta 10 minutos antes de vencer.
+
+Ese error además tiene un uso: si dos pedidos salen al mismo tiempo, el que pierde lo
+recibe, vuelve a leer el documento —que el otro ya escribió— y sigue con ese ticket en
+vez de darse por vencido.
+
+El `generationTime` del pedido va 10 minutos **para atrás**, no en la hora exacta: cubre
+que el reloj del Worker y el de ARCA no sean el mismo, que es un rechazo clásico y
+difícil de diagnosticar.
+
+### Probado contra homologación
+
+```
+TA nuevo para wsfe (HOMOLOGACION), vence 2026-08-31T01:05:20.613-03:00
+token: 764 chars · sign: 172 chars · dura 12.0 horas
+```
+
+Y el segundo pedido seguido devuelve el rechazo esperado, detectado y marcado para que
+el llamador reuse el guardado.
 
 ## Reglas que no se negocian
 
