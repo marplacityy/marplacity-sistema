@@ -21,6 +21,11 @@
  *
  *   MC_EMAIL=... MC_PASSWORD=... node workers/facturador/subir-certificado.mjs --ver
  *
+ * Y para probar el circuito completo —que el Worker descifre el certificado, firme el
+ * CMS y consiga el ticket de ARCA— sin emitir ningun comprobante:
+ *
+ *   MC_EMAIL=... MC_PASSWORD=... node workers/facturador/subir-certificado.mjs --ta
+ *
  * Las credenciales son las tuyas del sistema y van por variable de entorno a proposito:
  * no quedan en este archivo ni en el repo. Necesita Node 18+ y openssl. No instala nada.
  *
@@ -44,6 +49,7 @@ const arg = n => {
   return i > -1 ? process.argv[i + 1] : null;
 };
 const SOLO_VER = process.argv.includes('--ver');
+const PROBAR_TA = process.argv.includes('--ta');
 
 const salir = msg => { console.error('\n✗ ' + msg + '\n'); process.exit(1); };
 
@@ -96,6 +102,16 @@ function clavePkcs8(ruta) {
 
 // ── Main ─────────────────────────────────────────────────────
 const token = await idTokenDelDueño();
+
+if (PROBAR_TA) {
+  // Toca todo lo sensible sin emitir nada: descifra el certificado, arma el CMS, lo
+  // firma y se lo manda a WSAA. Si esto anda, lo unico que falta para facturar es el
+  // comprobante en si.
+  const entorno = arg('entorno') || 'homo';
+  const r = await fetch(`${WORKER}/ta?entorno=${entorno}`, { headers: { 'X-Firebase-Token': token } });
+  console.log(JSON.stringify(await r.json(), null, 2));
+  process.exit(r.ok ? 0 : 1);
+}
 
 if (SOLO_VER) {
   const entorno = arg('entorno') || 'homo';
