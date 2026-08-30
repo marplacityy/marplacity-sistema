@@ -1195,7 +1195,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.30-D</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.30-E</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -11721,6 +11721,24 @@ let arcaSalud  = null;   // en qué entorno está parado el facturador
 let arcaTablas = null;   // condiciones de IVA, alícuotas y tipos de documento, de ARCA
 let feaVenta   = null;   // la venta que se está facturando en este momento
 
+/**
+ * ¿El facturador está en producción? De esto depende que el comprobante sea real.
+ * Ante la duda devuelve true: si no sabemos en qué entorno estamos, que pida confirmación
+ * de más y no de menos.
+ */
+const arcaEnProduccion = () => (arcaTablas?.entorno || arcaSalud?.entorno || 'PRODUCCION') === 'PRODUCCION';
+
+/**
+ * El freno de producción. El Worker no emite un comprobante real si el pedido no dice
+ * explícitamente que sabe que lo es; acá esa confirmación la da el usuario, factura por
+ * factura. Es a propósito que no sea un `true` fijo en el código: así el freno sigue
+ * existiendo el día número cien y no solo el día que lo prendimos.
+ */
+function confirmarProduccion(que, detalle){
+  if(!arcaEnProduccion()) return true;
+  return confirm(`⚠️ ESTÁS EN PRODUCCIÓN.\n\n${que} va a ser un comprobante FISCAL Y REAL ante ARCA.\n\n${detalle}\n\nNo se puede anular: si está mal, hay que emitir una nota de crédito.\n\n¿Emitir?`);
+}
+
 /** La FACTURA de una venta. La nota de crédito lleva el mismo ventaId, así que se
     filtra: si no, al revertir una venta el sistema mostraría la NC como si fuera la
     factura y el botón de emitir volvería a aparecer. */
@@ -11901,11 +11919,17 @@ window.emitirFacturaArca = async function(){
     docNro: (document.getElementById('fea-docnro').value || '').replace(/\D/g,'') || 0,
   };
 
+  const total = items.reduce((s,i)=>s+i.precioUnitario*i.cantidad,0);
+  if(!confirmarProduccion('Esta factura', `Cliente: ${cliente.nombre}\nTotal: ${fmtARS(total)}`)) return;
+
   btn.disabled = true; btn.textContent = 'Pidiendo el CAE…';
   try{
     const r = await arcaPedir('/emitir', {
       method: 'POST',
-      body: JSON.stringify({ ptoVta: Number(cfg.arcaPtoVta) || 1, cliente, items, ventaId: v.id, fecha: v.fecha }),
+      body: JSON.stringify({
+        ptoVta: Number(cfg.arcaPtoVta) || 1, cliente, items, ventaId: v.id, fecha: v.fecha,
+        confirmoProduccion: arcaEnProduccion(),
+      }),
     });
     if(r.comprobante){
       feaMostrarComprobante(r.comprobante);
@@ -12102,11 +12126,15 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
   if(!confirm(`Emitir una nota de crédito que revierte la factura ${c.letra} ${num} por ${fmtARS(c.impTotal||0)}.\n\n` +
               `La factura NO se borra ni se edita: ARCA no anula comprobantes. Lo que la deja sin efecto es este comprobante nuevo, que queda apuntando a ella.\n\n` +
               `Se emite por el total, con los mismos renglones y el mismo cliente.\n\n¿Seguimos?`)) return;
+  if(!confirmarProduccion('Esta nota de crédito', `Revierte la factura ${c.letra} ${num} por ${fmtARS(c.impTotal||0)}`)) return;
 
   const res = document.getElementById('fea-resultado');
   res.insertAdjacentHTML('beforeend', '<div class="home-empty" id="fea-nc-esperando">Emitiendo la nota de crédito…</div>');
   try{
-    const r = await arcaPedir('/nota-credito', { method:'POST', body: JSON.stringify({ comprobanteId }) });
+    const r = await arcaPedir('/nota-credito', {
+      method:'POST',
+      body: JSON.stringify({ comprobanteId, confirmoProduccion: arcaEnProduccion() }),
+    });
     document.getElementById('fea-nc-esperando')?.remove();
     if(r.comprobante){
       feaMostrarComprobante(r.comprobante);
