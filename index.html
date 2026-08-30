@@ -1248,6 +1248,9 @@
       <a onclick="goTo('conocimiento')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Base de conocimiento
       </a>
+      <a onclick="goTo('facturador')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> Facturador
+      </a>
       <a onclick="goTo('caja')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="13" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="15"/></svg>Caja
       </a>
@@ -1302,6 +1305,9 @@
       </button>
       <button class="mobile-tab" onclick="goTo('conocimiento')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Bot
+      </button>
+      <button class="mobile-tab" onclick="goTo('facturador')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> Facturar
       </button>
       <button class="mobile-tab" onclick="goTo('amort')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>Bienes
@@ -2668,6 +2674,7 @@
         </div>
       </div>
 
+      <!-- (la pagina del Facturador se inserta mas abajo, fuera de conocimiento) -->
       <!-- TAB: Prompt del bot -->
       <div id="kb-sec-prompt" style="display:none;">
         <div class="card">
@@ -2687,6 +2694,69 @@
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- FACTURADOR — factura suelta, sin venta detras -->
+    <div id="page-facturador" class="page">
+      <div class="page-header">
+        <h1>Facturador</h1>
+        <p>Emitir una factura a mano, sin que haya una venta cargada. No toca el stock, no genera una venta y no entra en los reportes: es solo el comprobante.</p>
+      </div>
+
+      <div id="fac-banner"></div>
+
+      <div class="card">
+        <div class="card-title">Cliente</div>
+        <div class="grid2">
+          <div class="field"><label>Razón social o nombre</label><input type="text" id="fac-nombre" placeholder="Consumidor Final"></div>
+          <div class="field"><label>Condición frente al IVA</label><select id="fac-cond" onchange="facCondCambio()"></select></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Tipo de documento</label><select id="fac-doctipo" onchange="facPintarAviso()"></select></div>
+          <div class="field"><label>Número de documento</label><input type="text" id="fac-docnro" placeholder="Sin guiones" oninput="facPintarAviso()"></div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label>Tipo de comprobante</label>
+            <select id="fac-tipo" onchange="facPintarAviso()">
+              <option value="1">Factura A</option>
+              <option value="6">Factura B</option>
+            </select>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Se sugiere según la condición de IVA, pero la podés cambiar.</div>
+          </div>
+          <div class="field"><label>Punto de venta</label><input type="number" id="fac-ptovta" step="1" min="1"></div>
+        </div>
+        <div id="fac-aviso"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Renglones</div>
+        <div class="field" style="max-width:340px;">
+          <label>Los precios que cargo son…</label>
+          <select id="fac-modo" onchange="facTotales()">
+            <option value="final">Precio final — lo que le cobro (con IVA adentro)</option>
+            <option value="neto">Neto — el sistema le suma el IVA</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto;"><table class="tkh-table">
+          <thead><tr>
+            <th>Descripción</th>
+            <th style="width:80px;text-align:right;">Cant.</th>
+            <th style="width:130px;text-align:right;">Precio unit.</th>
+            <th style="width:110px;">IVA</th>
+            <th style="width:40px;"></th>
+          </tr></thead>
+          <tbody id="fac-items"></tbody>
+        </table></div>
+        <button class="btn-secondary" style="margin-top:10px;" onclick="facAgregarRenglon()">＋ Agregar renglón</button>
+        <div id="fac-totales" class="permuta-box" style="margin-top:14px;"></div>
+        <div class="pos-actions" style="margin-top:14px;">
+          <button class="pos-btn-cancel" onclick="facLimpiar()">✕ Limpiar</button>
+          <button class="pos-btn-checkout" id="btn-fac-emitir" onclick="facEmitir()">🧾 Emitir y pedir el CAE</button>
+        </div>
+      </div>
+
+      <div id="fac-resultado"></div>
     </div>
   </main>
 </div>
@@ -3315,6 +3385,7 @@ window.goTo = function(page) {
     if(!window._incInit){ window._incInit=true; const r=fechasPreset('hoy'); document.getElementById('inc-fl-desde').value=r.d; document.getElementById('inc-fl-hasta').value=r.h; }
   }
   if(page==='facturas'){ populateIncCatFilter(); renderIngresos(); renderArcaBanner(); }
+  if(page==='facturador') initFacturador();
   if(page==='consig'){ populateProveedoresDL(); populateConsigFilters(); renderConsig(); renderProveedores(); renderPagos(); }
   if(page==='reportes') renderReporte();
   if(page==='amort') renderAmort();
@@ -11763,8 +11834,8 @@ async function arcaPedir(ruta, opciones = {}){
  * la diferencia entre una prueba y un comprobante fiscal real no puede depender de que
  * alguien se acuerde.
  */
-async function renderArcaBanner(){
-  const el = document.getElementById('arca-banner');
+async function renderArcaBanner(destino = 'arca-banner'){
+  const el = document.getElementById(destino);
   if(!el) return;
   try{
     if(!arcaSalud) arcaSalud = await (await fetch(FACTURADOR_URL + '/salud')).json();
@@ -11957,14 +12028,25 @@ window.emitirFacturaArca = async function(){
 };
 
 /** El comprobante ya emitido: CAE, vencimiento, tipo y número, y lo que ARCA observó. */
-function feaMostrarComprobante(c){
-  document.getElementById('fea-form').style.display = 'none';
-  document.getElementById('fea-entorno').innerHTML = '';
+/**
+ * El último comprobante que se está mostrando en pantalla, sea en el modal de una venta
+ * o en el Facturador. El PDF se pide desde un onclick del HTML, que no ve el scope del
+ * módulo, así que el handler lo lee de acá en vez de recibirlo por parámetro.
+ */
+let comprobanteMostrado = null;
+
+/**
+ * El comprobante, pintado. Es UNO solo para las dos pantallas: el modal de la venta y el
+ * Facturador muestran exactamente lo mismo, y los tres estados —emitida, rechazada con
+ * el motivo de ARCA, y observada pero autorizada— se leen igual en los dos lados.
+ */
+function htmlComprobante(c, { conNotaCredito = true, conReintento = false } = {}){
+  comprobanteMostrado = c;
   const num = `${String(c.ptoVta).padStart(4,'0')}-${String(c.cbteNro).padStart(8,'0')}`;
   const vto = c.caeVto ? `${c.caeVto.slice(6,8)}/${c.caeVto.slice(4,6)}/${c.caeVto.slice(0,4)}` : '—';
   const emitida = c.estado === 'emitida';
   const nombreTipo = c.esNotaCredito ? 'Nota de crédito' : 'Factura';
-  document.getElementById('fea-resultado').innerHTML = `
+  return `
     <div class="proveedor-alerta ${emitida?'':'alerta-urgente'}" style="margin-bottom:12px;">
       ${emitida ? `✅ <b>${nombreTipo} ${c.letra} ${num}</b> autorizada por ARCA.${c.revierte ? ` Revierte la factura ${String(c.revierte.ptoVta).padStart(4,'0')}-${String(c.revierte.cbteNro).padStart(8,'0')}.` : ''}` : `❌ <b>Rechazada</b> — no tiene CAE y no es un comprobante válido.`}
       ${c.entorno === 'homo' ? ' <span style="opacity:.8">(homologación: sin validez fiscal)</span>' : ''}
@@ -11985,12 +12067,22 @@ function feaMostrarComprobante(c){
       ↩️ Esta factura fue revertida con la <b>nota de crédito ${String(c.notaCredito.ptoVta).padStart(4,'0')}-${String(c.notaCredito.cbteNro).padStart(8,'0')}</b>.
       La factura sigue existiendo y sigue siendo válida: lo que la deja sin efecto es la nota de crédito.
     </div>` : ''}
+    ${c.manual ? `<div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Emitido a mano desde el Facturador, sin una venta asociada.</div>` : ''}
     ${emitida
       ? `<div class="pos-actions" style="margin-top:12px;">
-           ${c.notaCredito || c.esNotaCredito ? '' : `<button class="pos-btn-cancel" onclick="emitirNotaCreditoArca('${escJs(c.id||'')}')">↩️ Nota de crédito</button>`}
-           <button class="pos-btn-checkout" onclick="pdfComprobanteArca('${escJs(c.ventaId||'')}')">📄 Descargar el PDF con el QR</button>
+           ${conNotaCredito && !c.notaCredito && !c.esNotaCredito ? `<button class="pos-btn-cancel" onclick="emitirNotaCreditoArca('${escJs(c.id||'')}')">↩️ Nota de crédito</button>` : ''}
+           <button class="pos-btn-checkout" onclick="pdfComprobanteArcaActual()">📄 Descargar el PDF con el QR</button>
          </div>`
-      : `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" onclick="reintentarFacturaArca()">Corregir y volver a intentar</button></div>`}`;
+      : conReintento
+        ? `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" onclick="reintentarFacturaArca()">Corregir y volver a intentar</button></div>`
+        : ''}`;
+}
+
+/** El comprobante de una venta, adentro de su modal. */
+function feaMostrarComprobante(c){
+  document.getElementById('fea-form').style.display = 'none';
+  document.getElementById('fea-entorno').innerHTML = '';
+  document.getElementById('fea-resultado').innerHTML = htmlComprobante(c, { conReintento: true });
 }
 
 /**
@@ -12021,9 +12113,9 @@ function qrDeComprobante(c){
  * El PDF del comprobante fiscal. No reemplaza a generarFacturaPDF, que es el remito
  * interno del local: este es el que tiene CAE y QR y vale ante ARCA.
  */
-window.pdfComprobanteArca = function(ventaId){
-  const c = comprobanteDe(ventaId);
-  if(!c || c.estado !== 'emitida'){ showToast('Esa venta no tiene una factura autorizada.', true); return; }
+window.pdfComprobanteArcaActual = function(){
+  const c = comprobanteMostrado;
+  if(!c || c.estado !== 'emitida'){ showToast('No hay un comprobante autorizado para imprimir.', true); return; }
 
   const { jsPDF } = window.jspdf;
   const d = new jsPDF({unit:'mm', format:'a4'});
@@ -12147,6 +12239,200 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
     document.getElementById('fea-nc-esperando')?.remove();
     res.insertAdjacentHTML('beforeend', `<div class="proveedor-alerta alerta-urgente" style="margin-top:10px;">${esc(e.message)}</div>`);
   }
+};
+
+// ══ Facturador: una factura suelta, sin venta detrás ═════════
+//
+// Comparte TODO con la factura de una venta: el mismo Worker, las mismas tablas de ARCA,
+// las mismas reglas de letra y alícuotas, el mismo render del resultado y el mismo PDF.
+// Lo único propio de esta pantalla es el formulario. Las reglas de negocio no se
+// duplican: el día que ARCA cambie algo, se toca en un solo lugar.
+
+let facRenglones = [];   // [{descripcion, cantidad, precioUnitario, alicuotaIva}]
+
+const facRenglonVacio = () => ({ descripcion:'', cantidad:1, precioUnitario:null, alicuotaIva:21 });
+
+async function initFacturador(){
+  renderArcaBanner('fac-banner');
+  document.getElementById('fac-ptovta').value = cfg.arcaPtoVta || '';
+  if(!facRenglones.length) facRenglones = [facRenglonVacio()];
+
+  try{
+    if(!arcaTablas || !arcaTablas.condiciones){
+      const t = await arcaPedir('/tablas');
+      if(t.error) throw new Error(t.error);
+      arcaTablas = t;
+    }
+  }catch(e){
+    document.getElementById('fac-aviso').innerHTML =
+      `<div class="proveedor-alerta alerta-urgente">No se pudieron leer las tablas de ARCA: ${esc(e.message)}</div>`;
+    return;
+  }
+
+  const sel = (id, filas, valor) => {
+    const el = document.getElementById(id);
+    if(el.options.length && el.value) return false;        // no pisar lo que ya eligió
+    el.innerHTML = filas.map(f => `<option value="${f.id}" ${String(f.id)===String(valor)?'selected':''}>${esc(f.desc)}</option>`).join('');
+    return true;
+  };
+  const primeraVez = sel('fac-cond', arcaTablas.condiciones, 5);
+  sel('fac-doctipo', arcaTablas.documentos, 99);
+  // La letra se sugiere al llenar los selectores, no cada vez que se entra a la pantalla:
+  // si el usuario la cambió a mano y salió a mirar otra cosa, al volver sigue la suya.
+  if(primeraVez) facCondCambio(); else facPintarAviso();
+  facRenderRenglones();
+}
+
+/** La condición de IVA sugiere la letra. Sugiere: no la impone. */
+window.facCondCambio = function(){
+  const fila = (arcaTablas?.condiciones || []).find(f => f.id === Number(document.getElementById('fac-cond').value));
+  const esRI = /responsable\s+inscripto/i.test(fila?.desc || '');
+  document.getElementById('fac-tipo').value = esRI ? '1' : '6';
+  // A un Responsable Inscripto hay que facturarle con CUIT, así que se adelanta el
+  // tipo de documento en vez de esperar el rechazo de ARCA.
+  if(esRI){
+    const cuit = (arcaTablas?.documentos || []).find(f => f.id === 80);
+    if(cuit) document.getElementById('fac-doctipo').value = '80';
+  }
+  facPintarAviso();
+};
+
+/** Lo que ARCA va a rechazar, dicho antes de emitir. */
+window.facPintarAviso = function(){
+  const tipo = Number(document.getElementById('fac-tipo').value);
+  const docTipo = Number(document.getElementById('fac-doctipo').value);
+  const docNro = (document.getElementById('fac-docnro').value||'').replace(/\D/g,'');
+  const cond = (arcaTablas?.condiciones || []).find(f => f.id === Number(document.getElementById('fac-cond').value));
+  const esRI = /responsable\s+inscripto/i.test(cond?.desc || '');
+
+  const problemas = [];
+  if(tipo === 1 && docTipo !== 80) problemas.push('La factura A necesita el <b>CUIT</b> del cliente. Con otro documento, ARCA la rechaza.');
+  if(tipo === 1 && docTipo === 80 && docNro.length !== 11) problemas.push('El CUIT tiene que tener 11 dígitos.');
+  if(docTipo !== 99 && !docNro) problemas.push('Falta el número de documento.');
+  if(esRI && tipo === 6) problemas.push('Le estás por hacer una <b>B</b> a un Responsable Inscripto: es válido, pero no va a poder computar el IVA.');
+
+  document.getElementById('fac-aviso').innerHTML = problemas.length
+    ? `<div class="proveedor-alerta ${tipo===1&&docTipo!==80?'alerta-urgente':'alerta-atencion'}">${problemas.join('<br>')}</div>`
+    : `<div class="proveedor-alerta">Va a salir una <b>Factura ${tipo===1?'A':'B'}</b>.</div>`;
+};
+
+// ── Renglones ──
+function facRenderRenglones(){
+  const alics = arcaTablas?.iva || [{id:5,desc:'21%'}];
+  document.getElementById('fac-items').innerHTML = facRenglones.map((r,i)=>`
+    <tr>
+      <td><input type="text" value="${esc(r.descripcion||'')}" placeholder="Ej: Service de iPhone" oninput="facSet(${i},'descripcion',this.value)"
+            style="width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;color:var(--text);"></td>
+      <td><input type="number" value="${r.cantidad}" min="1" step="1" oninput="facSet(${i},'cantidad',this.value)"
+            style="width:100%;text-align:right;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
+      <td><input type="number" value="${r.precioUnitario ?? ''}" step="0.01" min="0" placeholder="0" oninput="facSet(${i},'precioUnitario',this.value)"
+            style="width:100%;text-align:right;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
+      <td><select onchange="facSet(${i},'alicuotaIva',this.value)"
+            style="width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text);">
+            ${alics.map(a=>{const v=parseFloat(a.desc); return `<option value="${v}" ${v===Number(r.alicuotaIva)?'selected':''}>${esc(a.desc)}</option>`;}).join('')}
+          </select></td>
+      <td>${facRenglones.length>1?`<button class="ei-btn del" onclick="facQuitarRenglon(${i})" title="Quitar">×</button>`:''}</td>
+    </tr>`).join('');
+  facTotales();
+}
+
+window.facSet = function(i, campo, valor){
+  facRenglones[i][campo] = campo==='descripcion' ? valor : (valor===''? null : Number(valor));
+  facTotales();
+};
+window.facAgregarRenglon = function(){ facRenglones.push(facRenglonVacio()); facRenderRenglones(); };
+window.facQuitarRenglon = function(i){ facRenglones.splice(i,1); facRenderRenglones(); };
+
+window.facLimpiar = function(){
+  if(!confirm('¿Vaciar el formulario?')) return;
+  facRenglones = [facRenglonVacio()];
+  ['fac-nombre','fac-docnro'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('fac-resultado').innerHTML = '';
+  facRenderRenglones();
+};
+
+/**
+ * Los tres números, siempre a la vista. Se calculan igual que en el Worker —redondeando
+ * POR ALÍCUOTA y sumando después— así que lo que ves acá es exactamente lo que se le
+ * manda a ARCA.
+ */
+window.facTotales = function(){
+  const finales = document.getElementById('fac-modo').value === 'final';
+  const porAlic = new Map();
+  for(const r of facRenglones){
+    const bruto = (Number(r.precioUnitario)||0) * (Number(r.cantidad)||0);
+    const a = Number(r.alicuotaIva)||0;
+    porAlic.set(a, (porAlic.get(a)||0) + (finales ? bruto/(1+a/100) : bruto));
+  }
+  let neto = 0, iva = 0, detalle = '';
+  for(const [a,n] of [...porAlic.entries()].sort((x,y)=>x[0]-y[0])){
+    const base = Math.round(n*100)/100, imp = Math.round(base*a)/100;
+    neto += base; iva += imp;
+    if(base) detalle += `<div class="profit-row"><span class="profit-label">IVA ${a}% sobre ${fmtARS(base)}</span><span class="profit-val">${fmtARS(imp)}</span></div>`;
+  }
+  neto = Math.round(neto*100)/100; iva = Math.round(iva*100)/100;
+  document.getElementById('fac-totales').innerHTML = `
+    <div class="profit-row"><span class="profit-label">Neto gravado</span><span class="profit-val">${fmtARS(neto)}</span></div>
+    ${detalle}
+    <div class="profit-row"><span class="profit-label" style="font-weight:700">TOTAL</span><span class="profit-val tk-b">${fmtARS(neto+iva)}</span></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:6px;">${finales
+      ? 'Los precios que cargaste son finales: el neto sale de desagregarles el IVA.'
+      : 'Los precios que cargaste son netos: el IVA se suma encima.'}</div>`;
+};
+
+window.facEmitir = async function(){
+  const items = facRenglones
+    .filter(r => (r.descripcion||'').trim() && Number(r.precioUnitario) > 0)
+    .map(r => ({ descripcion:r.descripcion.trim(), cantidad:Number(r.cantidad)||1,
+                 precioUnitario:Number(r.precioUnitario), alicuotaIva:Number(r.alicuotaIva) }));
+  if(!items.length){ showToast('Cargá al menos un renglón con descripción y precio.', true); return; }
+
+  const ptoVta = parseInt(document.getElementById('fac-ptovta').value);
+  if(!ptoVta){ showToast('Falta el punto de venta.', true); return; }
+
+  const cliente = {
+    nombre: document.getElementById('fac-nombre').value.trim() || 'Consumidor Final',
+    condicionIvaId: Number(document.getElementById('fac-cond').value),
+    docTipo: Number(document.getElementById('fac-doctipo').value),
+    docNro: (document.getElementById('fac-docnro').value||'').replace(/\D/g,'') || 0,
+  };
+  const finales = document.getElementById('fac-modo').value === 'final';
+  const cbteTipo = Number(document.getElementById('fac-tipo').value);
+  const total = items.reduce((s,i)=>{
+    const b = i.precioUnitario*i.cantidad;
+    return s + (finales ? b : b*(1+i.alicuotaIva/100));
+  },0);
+
+  if(!confirmarProduccion(`Esta factura ${cbteTipo===1?'A':'B'}`,
+     `Cliente: ${cliente.nombre}\nTotal: ${fmtARS(Math.round(total*100)/100)}`)) return;
+
+  const btn = document.getElementById('btn-fac-emitir');
+  btn.disabled = true; btn.textContent = 'Pidiendo el CAE…';
+  const res = document.getElementById('fac-resultado');
+  res.innerHTML = '<div class="home-empty">Emitiendo…</div>';
+  try{
+    const r = await arcaPedir('/emitir', {
+      method:'POST',
+      body: JSON.stringify({
+        ptoVta, cbteTipo, cliente, items,
+        precioIncluyeIva: finales,
+        manual: true,                       // sin venta detrás
+        confirmoProduccion: arcaEnProduccion(),
+      }),
+    });
+    if(r.comprobante){
+      res.innerHTML = htmlComprobante(r.comprobante, { conNotaCredito:false });
+      showToast(r.ok ? 'Factura emitida ✓' : 'ARCA rechazó el comprobante', !r.ok);
+      if(r.ok){ facRenglones = [facRenglonVacio()]; facRenderRenglones(); }
+    }else{
+      res.innerHTML = `<div class="proveedor-alerta alerta-urgente"><b>No se pudo emitir.</b><br>${esc(r.error||'error desconocido')}
+        ${r.problemas?.length ? '<ul style="margin:6px 0 0 18px;">'+r.problemas.map(p=>`<li>${esc(p)}</li>`).join('')+'</ul>' : ''}
+        ${r.estadoDesconocido ? `<div style="margin-top:6px;">⚠️ Revisá a mano el comprobante ${r.estadoDesconocido.ptoVta}-${r.estadoDesconocido.cbteNro} antes de volver a intentar.</div>` : ''}</div>`;
+    }
+  }catch(e){
+    res.innerHTML = `<div class="proveedor-alerta alerta-urgente">${esc(e.message)}</div>`;
+  }
+  btn.disabled = false; btn.textContent = '🧾 Emitir y pedir el CAE';
 };
 
 window.reintentarFacturaArca = function(){
