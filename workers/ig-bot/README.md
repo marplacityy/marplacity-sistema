@@ -307,11 +307,20 @@ clasificación, porque nadie la hizo.
 | cron de seguimiento | `activo` y `modo` | la corrida entera |
 | `/reanudar` | `activo` | la llamada a Anthropic |
 
-**`modo: 'prueba'` es la excepción, y cuesta plata.** Le contesta solo a las cuentas de
-`cuentasPrueba`, pero al resto **lo sigue clasificando**: llama a la IA, guarda el
-resumen y lo sube a la bandeja sin contestarle. Es deliberado —así se afina el bot sin
-perder de vista lo que entra— pero cada mensaje de un desconocido se paga igual. Si lo
-que se quiere es no gastar, el que corta de verdad es `activo: false`.
+**`modo: 'prueba'` tampoco llama a la IA** para las cuentas que no están en
+`cuentasPrueba`. Hasta el 31/08/2026 sí lo hacía: las clasificaba igual, para no perder
+de vista lo que entraba mientras se afinaba el bot. Pero la respuesta no iba a salir y la
+clasificación se pagaba, y en modo prueba los no autorizados son casi todos. Ahora el
+mensaje entra, se guarda y sube a la bandeja con motivo `modo_prueba`, sin clasificar.
+
+Los cuatro casos, medidos con el webhook simulado:
+
+| estado | llamadas a la IA | DM enviados |
+|---|---|---|
+| apagado | 0 | 0 |
+| prueba, cuenta no autorizada | 0 | 0 |
+| prueba, cuenta autorizada | 1 | 1 |
+| prendido para todos | 1 | 1 |
 
 ## El semáforo de cada chat (`botPausado`)
 

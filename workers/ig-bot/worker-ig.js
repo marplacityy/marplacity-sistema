@@ -190,12 +190,18 @@ async function procesarMensaje(ev, env) {
   // creditos. Apagado es apagado: no se llama a la IA.
   const cfg = await configDelBot(env);
   const apagado = !cfg.activo;
+  // En prueba solo se atiende a las cuentas autorizadas. Al resto tampoco se lo
+  // clasifica: la respuesta no iba a salir igual, y la clasificacion se paga.
+  const fueraDePrueba = cfg.modo === 'prueba' && !cfg.cuentasPrueba.includes(String(senderId));
 
   // La IA lee el mensaje EN CONTEXTO de la charla, lo clasifica y redacta la respuesta
   let ia = { ...SIN_RESPUESTA };
   if (apagado) {
     ia = { ...APAGADO };
     console.log('bot APAGADO desde el sistema — no se llama a la IA, el mensaje va a la bandeja');
+  } else if (fueraDePrueba) {
+    ia = { ...FUERA_DE_PRUEBA };
+    console.log('modo prueba y', senderId, 'no esta autorizada — no se llama a la IA, va a la bandeja');
   } else if (pausado) {
     ia = { ...EN_MANO };
     console.log('bot PAUSADO en el chat de', senderId, '— no contesta, va a la bandeja');
@@ -1202,6 +1208,21 @@ const APAGADO = {
   confianza: null,
   necesitaAtencion: true,
   motivo: 'bot_apagado',
+  prioridad: 2,
+  resumen: null,
+  producto: null,
+  mensajes: [],
+};
+
+// Modo prueba y este no es de los autorizados. Igual que `APAGADO`: entra, se guarda y
+// sube a la bandeja, pero sin clasificar. Antes se lo clasificaba igual —era a
+// proposito, para no perder de vista lo que entraba mientras se afinaba el bot— pero
+// cada mensaje de un desconocido se pagaba, y en modo prueba son casi todos.
+const FUERA_DE_PRUEBA = {
+  categoria: null,
+  confianza: null,
+  necesitaAtencion: true,
+  motivo: 'modo_prueba',
   prioridad: 2,
   resumen: null,
   producto: null,
