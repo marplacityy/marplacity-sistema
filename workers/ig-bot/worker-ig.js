@@ -181,9 +181,22 @@ async function procesarMensaje(ev, env) {
   // sube a la bandeja, que es donde ella lo va a ver.
   const pausado = previo ? previo.botPausado === true : false;
 
+  // EL INTERRUPTOR SE LEE ACA, ANTES DE LA IA, Y ESA ES TODA LA GRACIA.
+  //
+  // Hasta el 31/08/2026 el `activo` se miraba recien en mandarAutomatico, o sea a la
+  // hora de mandar. El bot apagado entonces cortaba la boca pero no el cerebro: por cada
+  // DM que entraba se le seguia pagando a Anthropic una respuesta que despues se tiraba.
+  // Apagarlo no bajaba el gasto, y de eso uno se entera cuando se le acabaron los
+  // creditos. Apagado es apagado: no se llama a la IA.
+  const cfg = await configDelBot(env);
+  const apagado = !cfg.activo;
+
   // La IA lee el mensaje EN CONTEXTO de la charla, lo clasifica y redacta la respuesta
   let ia = { ...SIN_RESPUESTA };
-  if (pausado) {
+  if (apagado) {
+    ia = { ...APAGADO };
+    console.log('bot APAGADO desde el sistema — no se llama a la IA, el mensaje va a la bandeja');
+  } else if (pausado) {
     ia = { ...EN_MANO };
     console.log('bot PAUSADO en el chat de', senderId, '— no contesta, va a la bandeja');
   } else if (env.ANTHROPIC_KEY && (texto || adjuntos.length)) {
@@ -209,7 +222,7 @@ async function procesarMensaje(ev, env) {
   if (idToken) await anotarEnHistorial(env, idToken, senderId, nuevas);
 
   // Cada elemento del array sale como un DM aparte, en orden.
-  const enviados = await mandarAutomatico(env, senderId, ia.mensajes, { pausado });
+  const enviados = await mandarAutomatico(env, senderId, ia.mensajes, { pausado, cfg });
 
   // Lo que no llegó a salir queda para Juni: sin IG_TOKEN (modo lee y sugiere) no sale
   // ninguno, y si un envío falla se corta ahí. En los dos casos la conversación sube a
@@ -760,10 +773,17 @@ async function reanudar(request, env) {
   const desde = Date.parse(previo.ultimoMensajeCliente);
   if (!desde || Date.now() - desde >= VENTANA_META) return json({ error: 'pasaron las 24 h', vencida: true }, 409);
 
+  // Con el bot apagado no hay nada que redactar: mandarAutomatico no lo iba a mandar, y
+  // la llamada a la IA se pagaba igual. Es el mismo agujero que tenia el webhook.
+  const cfg = await configDelBot(env);
+  if (!cfg.activo) {
+    return json({ error: 'el bot esta apagado desde el sistema: prendelo antes de retomar el chat' }, 409);
+  }
+
   // El ultimo mensaje del cliente va como "el mensaje de ahora"; todo lo anterior, de
   // contexto. Es el mismo reparto que hace el webhook.
   const ia = await pensarRespuesta(String(ultima.texto || ''), [], env, historial.slice(0, -1));
-  const enviados = await mandarAutomatico(env, igUserId, ia.mensajes);
+  const enviados = await mandarAutomatico(env, igUserId, ia.mensajes, { cfg });
   const quedoSinMandar = enviados < ia.mensajes.length;
 
   const doc = {
@@ -807,7 +827,10 @@ async function reanudar(request, env) {
 async function mandarAutomatico(env, igUserId, mensajes, opciones = {}) {
   if (opciones.pausado) { console.log('chat pausado:', igUserId, '— no se manda nada'); return 0; }
 
-  const cfg = await configDelBot(env);
+  // El que ya leyo la config la pasa y se ahorra una lectura de Firestore en el camino
+  // caliente del webhook. El chequeo se hace igual: es el ultimo cierre antes de que
+  // salga un DM, y no depende de que el llamador se haya acordado.
+  const cfg = opciones.cfg || await configDelBot(env);
 
   if (!cfg.activo) { console.log('bot APAGADO desde el sistema: no se manda nada'); return 0; }
 
@@ -1171,6 +1194,20 @@ const SIN_RESPUESTA = {
 // Lo que se guarda cuando el bot está pausado en ese chat. No es una falla: nadie se
 // equivocó, la conversación la está llevando Juni. Por eso motivo propio y no
 // `no_supe_responder`, que la mandaría al fondo de la cola con prioridad 8.
+// Lo que se guarda cuando el bot esta APAGADO desde el sistema. Igual que `EN_MANO`, con
+// su propio motivo: el mensaje entra, se guarda y sube a la bandeja, pero nadie lo
+// clasifico porque no se llamo a la IA.
+const APAGADO = {
+  categoria: null,
+  confianza: null,
+  necesitaAtencion: true,
+  motivo: 'bot_apagado',
+  prioridad: 2,
+  resumen: null,
+  producto: null,
+  mensajes: [],
+};
+
 const EN_MANO = {
   categoria: null,
   confianza: null,

@@ -284,41 +284,34 @@ texto.
 
 ## El interruptor (`config/bot`)
 
-Arriba de la bandeja, en el sistema, hay un control con tres posiciones. El estado vive
-en Firestore, en `config/bot`, y no en una variable de Cloudflare: cambiarlo tiene que
-ser un click, sin deploys, en el momento en que el bot está diciendo algo que no
-corresponde.
+Un solo doc, con un campo que importa: `activo`. Vive en Firestore y no en una variable
+de Cloudflare a propósito: apagarlo tiene que ser un click desde el sistema, sin deploys,
+en el momento en que el bot está diciendo algo que no corresponde.
 
-| posición | `config/bot` | qué hace |
+**Apagado corta la IA, no solo el envío.** Hasta el 31/08/2026 el `activo` se miraba
+recién en `mandarAutomatico()`, o sea a la hora de mandar el DM. El bot apagado cortaba
+la boca pero no el cerebro: por cada mensaje que entraba se le seguía pagando a Anthropic
+una respuesta que después se tiraba a la basura. Apagarlo no bajaba el gasto, y de eso
+uno se entera cuando se le acabaron los créditos. Ahora el interruptor se lee **antes** de
+llamar a la IA, en el webhook y en `/reanudar`.
+
+Con el bot apagado, el mensaje entrante **igual se guarda** y sube a la bandeja con
+motivo `bot_apagado`: perder DM sería peor que gastar. Lo único que no pasa es la
+clasificación, porque nadie la hizo.
+
+| dónde | qué mira | qué corta |
 |---|---|---|
-| ⏸ Apagado | `activo: false` | no manda nada solo |
-| 🧪 Prueba | `modo: 'prueba'` + `cuentasPrueba: [ids]` | solo le contesta a esas cuentas; el cron no corre |
-| ▶ Todos | `modo: 'todos'` | le contesta a cualquiera |
+| webhook, antes de la IA | `activo` | la llamada a Anthropic y el DM |
+| webhook, antes de la IA | `botPausado` de ese chat | la llamada a Anthropic y el DM |
+| `mandarAutomatico()` | `activo` y `modo` | el DM, como último cierre |
+| cron de seguimiento | `activo` y `modo` | la corrida entera |
+| `/reanudar` | `activo` | la llamada a Anthropic |
 
-**Modo prueba** es para afinar el prompt y la base de conocimiento sin que el bot le
-hable a un cliente real. Las cuentas se autorizan desde la propia bandeja, con el botón
-*"Probar con esta cuenta"* de una conversación: el id de Instagram no es algo que se
-pueda tipear de memoria. Mientras está en prueba el cron de seguimiento **no corre**, para
-que no se dispare nada de fondo mientras estás tocando.
-
-**Ninguna de las tres es sorda.** El Worker sigue recibiendo, clasificando y guardando
-todo en `conversaciones`. Lo único que cambia es a quién le sale un DM solo. Como los
-mensajes que no se mandan quedan sin mandar, cada conversación sube a la bandeja y se
-contesta a mano desde el sistema — así no se pierde ningún cliente.
-
-Lo que **no** apaga es el botón *Aprobar y mandar* de la bandeja: ahí el que manda es el
-dueño, no el bot. Un interruptor que también bloqueara eso dejaría a la bandeja sin
-salida, que es justo lo que hace falta cuando el bot está apagado.
-
-Todo envío automático pasa por `mandarAutomatico()` en `worker-ig.js`, que es donde
-viven el apagado y el filtro de cuentas — los dos caminos, el del webhook y el del cron,
-llaman ahí y a ningún otro lado. Hay un test que lo verifica leyendo el código, porque
-ya se coló una vez: el chequeo estaba adentro de `mandarMensajes()` y el cron se lo
-salteaba llamando a `mandarDM()` directo.
-
-Si el doc no existe o no se puede leer, el bot queda **encendido y para todos**: es el
-estado inicial de cualquier instalación. El respaldo duro, si hiciera falta cortar de raíz sin depender
-de Firestore, sigue siendo sacar `IG_TOKEN` del panel de Cloudflare.
+**`modo: 'prueba'` es la excepción, y cuesta plata.** Le contesta solo a las cuentas de
+`cuentasPrueba`, pero al resto **lo sigue clasificando**: llama a la IA, guarda el
+resumen y lo sube a la bandeja sin contestarle. Es deliberado —así se afina el bot sin
+perder de vista lo que entra— pero cada mensaje de un desconocido se paga igual. Si lo
+que se quiere es no gastar, el que corta de verdad es `activo: false`.
 
 ## El semáforo de cada chat (`botPausado`)
 
