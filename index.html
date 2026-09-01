@@ -1195,7 +1195,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.08.31-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.01-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -11836,6 +11836,32 @@ async function arcaPedir(ruta, opciones = {}){
  * la diferencia entre una prueba y un comprobante fiscal real no puede depender de que
  * alguien se acuerde.
  */
+/**
+ * El certificado fiscal vence, y el día que vence el local deja de poder facturar sin
+ * que nadie lo haya avisado. El Worker ya sabe cuántos días faltan; esto lo pone donde
+ * se mira. Se consulta una vez por sesión: no cambia de un minuto al otro.
+ */
+let arcaCert = null;
+
+async function avisoCertificado(){
+  try{
+    if(!arcaCert) arcaCert = await arcaPedir('/certificado');
+  }catch(e){ return ''; }
+  if(!arcaCert || !arcaCert.hay) return '';
+
+  const d = arcaCert.diasParaVencer;
+  if(d == null) return '';
+  const vto = arcaCert.notAfter ? new Date(arcaCert.notAfter).toLocaleDateString('es-AR') : '';
+
+  if(arcaCert.vencido) return `<div class="proveedor-alerta alerta-urgente" style="margin-bottom:12px;">
+    ⛔ <b>El certificado fiscal venció</b> el ${vto}. No se puede emitir hasta que saques uno nuevo desde la clave fiscal y lo subas.</div>`;
+  if(d <= 30) return `<div class="proveedor-alerta alerta-urgente" style="margin-bottom:12px;">
+    ⚠️ <b>El certificado fiscal vence en ${d} día${d===1?'':'s'}</b> (${vto}). Sacá uno nuevo desde la clave fiscal antes de esa fecha: cuando venza, el sistema deja de poder facturar.</div>`;
+  if(d <= 60) return `<div class="proveedor-alerta alerta-atencion" style="margin-bottom:12px;">
+    🔔 El certificado fiscal vence en ${d} días (${vto}). Conviene ir renovándolo.</div>`;
+  return '';
+}
+
 async function renderArcaBanner(destino = 'arca-banner'){
   const el = document.getElementById(destino);
   if(!el) return;
@@ -11851,6 +11877,9 @@ async function renderArcaBanner(destino = 'arca-banner'){
       ? '🔴 <b>PRODUCCIÓN</b> — las facturas que emitas acá son fiscales y reales. No se anulan: se compensan con una nota de crédito.'
       : '🧪 <b>HOMOLOGACIÓN (pruebas)</b> — los comprobantes que salgan de acá <b>no tienen validez fiscal</b>. Sirven para probar.'}
   </div>`;
+  // El aviso del certificado va después y por su cuenta: si el endpoint no contesta, el
+  // cartel de entorno tiene que estar igual.
+  el.insertAdjacentHTML('beforeend', await avisoCertificado());
 }
 
 /** Un renglón de la venta, en pesos: ARCA factura en moneda local. */

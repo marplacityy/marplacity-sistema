@@ -235,6 +235,36 @@ con estos campos y en este orden:
 Los comprobantes de homologación salen con una leyenda roja al pie que dice que **no
 tienen validez fiscal**, para que un PDF de prueba no se confunda nunca con uno real.
 
+## El punto de venta (y por qué es el 5)
+
+Se configura en el sistema, en **Configuración → Punto de venta de ARCA**, y hoy vale
+**5**. La elección no fue obvia y conviene no repetir el camino:
+
+| P.VTA | Sistema declarado en ARCA | Sirve | |
+|---|---|---|---|
+| 1 | Factura Electrónica – **Monotributo** – Web Services | ❌ | Juni es Responsable Inscripto. Quedó de cuando era monotributista |
+| 4 | RECE para aplicativo y web services | ✅ | **El del posnet viejo**: 1.321 facturas B y 287 A, manejado por un tercero |
+| 5 | RECE para aplicativo y web services | ✅ | **El que usamos.** Tenía 3 A y 83 B; la primera nuestra fue la B 0005-00000084 |
+| 9 | RECE para aplicativo y web services | ❌ | Figura en la constancia pero **ARCA lo rechaza** |
+
+**RECE es el sistema que corresponde** a la factura electrónica por webservice para un
+Responsable Inscripto. Si el punto de venta no está dado de alta con ese sistema, ARCA
+contesta:
+
+```
+[10005] NO AUTORIZADO A EMITIR COMPROBANTES - EL PUNTO DE VENTA INFORMADO
+        DEBE ESTAR DADO DE ALTA Y SER DEL TIPO RECE
+```
+
+**El 9 enseñó algo que vale la pena recordar:** figuraba en la constancia como RECE y
+`FECompUltimoAutorizado` devolvía `0`, así que parecía virgen y listo para usar. No lo
+era — ese método **contesta 0 sin validar si el punto de venta está habilitado**, así que
+un 0 no prueba nada. Lo único que prueba que un punto de venta sirve es que tenga
+comprobantes emitidos por RECE, o emitir uno y que salga.
+
+**Nada de esto se puede verificar en homologación**, donde ARCA acepta cualquier número.
+El primer intento real fue en producción y salió rechazado.
+
 ## Reglas que no se negocian
 
 1. **El certificado y la clave privada nunca pasan por el navegador.** El front no los
