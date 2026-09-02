@@ -1248,6 +1248,9 @@
       <a onclick="goTo('conocimiento')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Base de conocimiento
       </a>
+      <a onclick="goTo('asistente')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Asistente
+      </a>
       <a onclick="goTo('facturador')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> Facturador
       </a>
@@ -1305,6 +1308,9 @@
       </button>
       <button class="mobile-tab" onclick="goTo('conocimiento')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Bot
+      </button>
+      <button class="mobile-tab" onclick="goTo('asistente')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Asistente
       </button>
       <button class="mobile-tab" onclick="goTo('facturador')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg> Facturar
@@ -2753,6 +2759,31 @@
       </div>
     </div>
 
+    <!-- ASISTENTE — habla en castellano y prepara el trabajo -->
+    <div id="page-asistente" class="page">
+      <div class="page-header">
+        <h1>Asistente</h1>
+        <p>Contale lo que pasó como se lo contarías a alguien. Busca, arma reportes y te prepara las cargas — pero <b>no guarda nada sin que vos lo confirmes</b>.</p>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div id="ag-chat" style="height:52vh;min-height:320px;overflow-y:auto;padding:16px;background:var(--bg);"></div>
+        <div style="display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:var(--surface);">
+          <input type="text" id="ag-input" placeholder="Gasté 15 dólares en cosas de limpieza…" autocomplete="off"
+                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();mandarAlAgente();}"
+                 style="flex:1;padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;">
+          <button class="btn-save" id="btn-ag-enviar" style="width:auto;padding:11px 20px;" onclick="mandarAlAgente()">Enviar</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <button class="btn-secondary" onclick="ejemploAgente('¿Cómo me fue esta semana?')">¿Cómo me fue esta semana?</button>
+        <button class="btn-secondary" onclick="ejemploAgente('Gasté 15 dólares en cosas de limpieza para el local')">Anotar un gasto</button>
+        <button class="btn-secondary" onclick="ejemploAgente('¿Qué iPhone 15 tengo en stock?')">Buscar en el stock</button>
+        <button class="btn-secondary" style="color:var(--text3);" onclick="limpiarAgente()">Empezar de nuevo</button>
+      </div>
+    </div>
+
     <!-- FACTURADOR — factura suelta, sin venta detras -->
     <div id="page-facturador" class="page">
       <div class="page-header">
@@ -3443,6 +3474,7 @@ window.goTo = function(page) {
   }
   if(page==='facturas'){ populateIncCatFilter(); renderIngresos(); renderArcaBanner(); }
   if(page==='facturador') initFacturador();
+  if(page==='asistente'){ agPintar(); agPintarFichas(); document.getElementById('ag-input')?.focus(); }
   if(page==='consig'){ populateProveedoresDL(); populateConsigFilters(); renderConsig(); renderProveedores(); renderPagos(); }
   if(page==='reportes') renderReporte();
   if(page==='amort') renderAmort();
@@ -12467,6 +12499,280 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
     document.getElementById('fea-nc-esperando')?.remove();
     res.insertAdjacentHTML('beforeend', `<div class="proveedor-alerta alerta-urgente" style="margin-top:10px;">${esc(e.message)}</div>`);
   }
+};
+
+// ══ Asistente ════════════════════════════════════════════════
+//
+// Un chat que entiende lo que le contás y prepara el trabajo. La regla de oro está en el
+// diseño y no en el prompt: LAS HERRAMIENTAS QUE ESCRIBEN NO EXISTEN. El modelo solo
+// puede buscar, resumir y PROPONER; lo que propone se dibuja como una ficha que hay que
+// confirmar a mano. Aunque el modelo se equivoque o alguien le meta una instrucción rara
+// en el texto de una conversación, no hay forma de que un dato entre solo.
+//
+// Las herramientas corren en este navegador, con los permisos que ya tenés: el asistente
+// no accede a nada a lo que vos no accedas.
+
+let agHistorial = [];   // los mensajes tal cual se los mandamos a la API
+let agFichas = [];      // las propuestas pendientes de confirmar
+
+const AG_HERRAMIENTAS = [
+  {
+    name: 'buscar',
+    description: 'Busca productos en el stock propio, en consignación o en el inventario de accesorios. Usalo cuando el usuario nombre un producto ("el iPhone 15 negro") para saber si existe y cuál es.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        texto: { type: 'string', description: 'Lo que se busca: modelo, color, IMEI o parte del nombre.' },
+      },
+      required: ['texto'],
+    },
+  },
+  {
+    name: 'resumen_del_periodo',
+    description: 'Los números de un período: ventas, ingresos, gastos y ganancia. Para preguntas como "cómo me fue esta semana" o "cuánto vendí en agosto". Calculá vos las fechas del rango que pidió el usuario.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        desde: { type: 'string', description: 'Fecha de inicio, AAAA-MM-DD.' },
+        hasta: { type: 'string', description: 'Fecha de fin, AAAA-MM-DD.' },
+      },
+      required: ['desde', 'hasta'],
+    },
+  },
+  {
+    name: 'proponer_gasto',
+    description: 'Muestra en pantalla una ficha de gasto para que el usuario la revise y confirme. NO guarda nada: el usuario tiene que apretar el botón. Usalo cuando cuente que gastó algo.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        concepto: { type: 'string', description: 'Qué se compró o pagó, en pocas palabras.' },
+        monto: { type: 'number', description: 'El importe, solo el número.' },
+        moneda: { type: 'string', enum: ['ARS', 'USD'], description: 'La moneda del importe.' },
+        categoria: { type: 'string', description: 'Una de las categorías existentes del sistema.' },
+        fecha: { type: 'string', description: 'AAAA-MM-DD. Si no lo aclaró, poné la de hoy.' },
+        notas: { type: 'string', description: 'Detalle extra, si lo dijo.' },
+      },
+      required: ['concepto', 'monto', 'moneda'],
+    },
+  },
+  {
+    name: 'preparar_venta',
+    description: 'Deja el punto de venta cargado con un producto, listo para cobrar. NO vende: el usuario cierra la venta con el botón de siempre. Antes de usarlo, buscá el producto y asegurate de cuál es; si hay más de uno posible, preguntale al usuario cuál.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        tipo: { type: 'string', description: 'El tipo que devolvió la búsqueda: eq, consig o inv.' },
+        refId: { type: 'string', description: 'El id que devolvió la búsqueda.' },
+      },
+      required: ['tipo', 'refId'],
+    },
+  },
+];
+
+/** El sistema no le cuenta al modelo lo que puede averiguar solo: para eso están las herramientas. */
+function agSystem(){
+  return `Sos el asistente del sistema de gestión de ${cfg.localNombre || 'MarplaCity'}, un local de celulares en Mar del Plata.
+
+Hablás en castellano rioplatense, directo y breve. Nada de "¡Claro! Con gusto te ayudo".
+
+Hoy es ${today()}. Las categorías de gasto que existen son: ${(cats||[]).join(', ')}.
+
+QUÉ PODÉS Y QUÉ NO
+- Podés buscar, resumir y proponer. NO podés guardar nada: las fichas que proponés las
+  confirma el usuario a mano. Nunca digas que anotaste, guardaste o registraste algo:
+  decí que se lo dejaste preparado para confirmar.
+- Si algo es ambiguo —"el iPhone 15 negro" y hay tres— preguntá cuál antes de proponer.
+  Preguntar es barato; proponer la ficha equivocada hace que el usuario cargue mal un dato.
+- Si te falta un dato para armar la ficha, pedilo. No lo inventes.
+
+Los importes en dólares se escriben "u$s 500" y en pesos "$ 500.000".`;
+}
+
+function agPintar(){
+  const c = document.getElementById('ag-chat'); if(!c) return;
+  c.innerHTML = agHistorial.map((m,i)=>agBurbuja(m,i)).filter(Boolean).join('') || `
+    <div class="home-empty">Contame qué pasó y te lo preparo.</div>`;
+  c.scrollTop = c.scrollHeight;
+}
+
+function agBurbuja(m){
+  const texto = typeof m.content === 'string' ? m.content
+    : (m.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('\n').trim();
+  if(!texto) return '';
+  const mio = m.role === 'user';
+  return `<div style="display:flex;justify-content:${mio?'flex-end':'flex-start'};margin-bottom:10px;">
+    <div style="max-width:82%;padding:10px 13px;border-radius:14px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;
+      ${mio ? 'background:var(--accent);color:#fff;border-bottom-right-radius:4px;'
+            : 'background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px;'}">${esc(texto)}</div>
+  </div>`;
+}
+
+// ── Las herramientas, ejecutadas acá ──
+const agEjecutar = {
+  buscar({ texto }){
+    const q = String(texto||'').toLowerCase().trim();
+    if(!q) return { resultados: [] };
+    const coincide = t => String(t||'').toLowerCase().includes(q);
+    const r = posCatalog()
+      .filter(p => coincide(p.nombre) || coincide(p.imei) || coincide(p.color) || coincide(p.gb))
+      .slice(0, 25)
+      .map(p => ({ tipo:p.tipo, refId:p.refId, nombre:p.nombre, gb:p.gb||null, color:p.color||null,
+                   imei:p.imei||null, bateria:p.bateria??null, precioSugerido:p.sugerido||null, moneda:p.moneda }));
+    return { encontrados: r.length, resultados: r };
+  },
+
+  resumen_del_periodo({ desde, hasta }){
+    const d = buildDataContext(desde, hasta);
+    return { desde, hasta, datos: d };
+  },
+
+  proponer_gasto(campos){
+    agFichas.push({ tipo:'gasto', datos:{ ...campos, fecha: campos.fecha || today() }, estado:'pendiente' });
+    return { mostrada: true, aviso: 'La ficha está en pantalla. El usuario tiene que revisarla y confirmarla; todavía no se guardó nada.' };
+  },
+
+  preparar_venta({ tipo, refId }){
+    const p = posCatalog().find(x => x.tipo===tipo && String(x.refId)===String(refId));
+    if(!p) return { error: 'No encontré ese producto. Volvé a buscarlo.' };
+    agFichas.push({ tipo:'venta', datos:{ tipo, refId, nombre:p.nombre, precio:p.sugerido||0, moneda:p.moneda }, estado:'pendiente' });
+    return { mostrada: true, producto: p.nombre, aviso: 'Le ofrecí al usuario abrir el punto de venta con ese producto cargado. La venta la cierra él.' };
+  },
+};
+
+/** Las fichas pendientes, dibujadas abajo del chat. */
+function agPintarFichas(){
+  const c = document.getElementById('ag-chat'); if(!c) return;
+  const pend = agFichas.map((f,i)=>({f,i})).filter(({f})=>f.estado==='pendiente');
+  if(!pend.length) return;
+  c.insertAdjacentHTML('beforeend', pend.map(({f,i}) => f.tipo==='gasto' ? `
+    <div class="card" style="margin:4px 0 10px;border-color:var(--accent);">
+      <div class="card-title" style="margin-bottom:10px;">Gasto para confirmar</div>
+      <div class="grid2">
+        <div class="field"><label>Concepto</label><input type="text" id="ag-f${i}-concepto" value="${esc(f.datos.concepto||'')}"></div>
+        <div class="field"><label>Categoría</label><select id="ag-f${i}-categoria">${(cats||[]).map(x=>`<option ${x===f.datos.categoria?'selected':''}>${esc(x)}</option>`).join('')}</select></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Monto</label><input type="number" step="0.01" id="ag-f${i}-monto" value="${f.datos.monto??''}"></div>
+        <div class="field"><label>Moneda</label><select id="ag-f${i}-moneda"><option value="ARS" ${f.datos.moneda!=='USD'?'selected':''}>ARS $</option><option value="USD" ${f.datos.moneda==='USD'?'selected':''}>USD u$s</option></select></div>
+      </div>
+      <div class="field"><label>Fecha</label><input type="date" id="ag-f${i}-fecha" value="${esc(f.datos.fecha||today())}"></div>
+      <div class="pos-actions" style="margin-top:8px;">
+        <button class="pos-btn-cancel" onclick="descartarFichaAgente(${i})">✕ Descartar</button>
+        <button class="pos-btn-checkout" onclick="confirmarGastoAgente(${i})">Anotar el gasto</button>
+      </div>
+    </div>` : `
+    <div class="card" style="margin:4px 0 10px;border-color:var(--accent);">
+      <div class="card-title" style="margin-bottom:6px;">Listo para cobrar</div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">${esc(f.datos.nombre)} — te abro el punto de venta con esto cargado. La venta la cerrás vos con el botón de siempre.</p>
+      <div class="pos-actions">
+        <button class="pos-btn-cancel" onclick="descartarFichaAgente(${i})">✕ Descartar</button>
+        <button class="pos-btn-checkout" onclick="abrirVentaAgente(${i})">Abrir el punto de venta</button>
+      </div>
+    </div>`).join(''));
+  c.scrollTop = c.scrollHeight;
+}
+
+window.confirmarGastoAgente = async function(i){
+  const f = agFichas[i]; if(!f || f.estado!=='pendiente') return;
+  const v = id => document.getElementById(`ag-f${i}-${id}`)?.value;
+  const monto = parseFloat(v('monto'));
+  if(!monto || monto<=0){ showToast('Falta el monto.', true); return; }
+  const moneda = v('moneda') || 'ARS';
+  const tc = parseFloat(cfg.tc) || null;
+  setSyncDot('syncing');
+  try{
+    await addDoc(gastosCol, withUser({
+      fecha: v('fecha') || today(),
+      tipo: 'negocio',
+      concepto: (v('concepto')||'').trim(),
+      categoria: v('categoria') || '',
+      monto, moneda,
+      tc: moneda==='ARS' ? tc : null,
+      usd: moneda==='USD' ? monto : (tc ? Math.round(monto/tc*100)/100 : null),
+      medio: '',
+      notas: f.datos.notas || '',
+      createdAt: serverTimestamp(),
+    }));
+    f.estado = 'confirmada';
+    showToast('Gasto anotado ✓');
+    agPintar(); agPintarFichas();
+  }catch(e){ showToast('Error al guardar: '+e.message, true); setSyncDot('error'); }
+};
+
+window.abrirVentaAgente = function(i){
+  const f = agFichas[i]; if(!f) return;
+  f.estado = 'confirmada';
+  addToCart(f.datos.tipo, f.datos.refId);
+  goTo('ingresos');
+  showToast('Cargado en el punto de venta ✓');
+};
+
+window.descartarFichaAgente = function(i){
+  if(agFichas[i]) agFichas[i].estado = 'descartada';
+  agPintar(); agPintarFichas();
+};
+
+window.ejemploAgente = function(t){ document.getElementById('ag-input').value = t; mandarAlAgente(); };
+window.limpiarAgente = function(){ agHistorial = []; agFichas = []; agPintar(); };
+
+window.mandarAlAgente = async function(){
+  const inp = document.getElementById('ag-input');
+  const texto = (inp.value||'').trim();
+  if(!texto) return;
+  inp.value = '';
+  agHistorial.push({ role:'user', content: texto });
+  agPintar(); agPintarFichas();
+
+  const btn = document.getElementById('btn-ag-enviar');
+  btn.disabled = true; btn.textContent = 'Pensando…';
+  const chat = document.getElementById('ag-chat');
+  chat.insertAdjacentHTML('beforeend', '<div id="ag-pensando" class="home-empty">Pensando…</div>');
+  chat.scrollTop = chat.scrollHeight;
+
+  try{
+    // El bucle: mientras el modelo pida herramientas, se ejecutan y se le devuelve el
+    // resultado. Se corta por vueltas por las dudas: un bucle infinito acá se paga.
+    for(let vuelta = 0; vuelta < 6; vuelta++){
+      const r = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: await workerHeaders(),
+        body: JSON.stringify({
+          model: 'claude-opus-5',
+          max_tokens: 8000,
+          output_config: { effort: 'medium' },
+          system: agSystem(),
+          tools: AG_HERRAMIENTAS,
+          messages: agHistorial,
+        }),
+      });
+      const data = await r.json();
+      if(data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+
+      // El turno del modelo se guarda ENTERO, con sus bloques de razonamiento: si se
+      // guardara solo el texto, la próxima vuelta perdería el hilo de lo que pensó.
+      agHistorial.push({ role:'assistant', content: data.content });
+
+      if(data.stop_reason !== 'tool_use') break;
+
+      const usos = (data.content||[]).filter(b => b.type === 'tool_use');
+      const resultados = [];
+      for(const u of usos){
+        let salida;
+        try{ salida = agEjecutar[u.name] ? agEjecutar[u.name](u.input||{}) : { error:'no existe esa herramienta' }; }
+        catch(e){ salida = { error: e.message }; }
+        resultados.push({ type:'tool_result', tool_use_id: u.id, content: JSON.stringify(salida) });
+      }
+      // Todos los resultados van juntos en UN mensaje: partirlos hace que el modelo deje
+      // de pedir herramientas en paralelo.
+      agHistorial.push({ role:'user', content: resultados });
+    }
+  }catch(e){
+    agHistorial.push({ role:'assistant', content:[{type:'text', text:'⚠️ '+e.message}] });
+  }
+
+  document.getElementById('ag-pensando')?.remove();
+  btn.disabled = false; btn.textContent = 'Enviar';
+  agPintar(); agPintarFichas();
 };
 
 // ══ Facturador: una factura suelta, sin venta detrás ═════════
