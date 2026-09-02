@@ -383,6 +383,27 @@ Dos cortes más, los dos a propósito:
 - **la ventana de 24 h de Meta vale igual.** Esto lo redacta el bot, no vos: pasadas las
   24 h devuelve `409` y hay que contestar a mano desde Instagram.
 
+## La lista del proveedor
+
+Un tercer origen de precios, además de Mar del Plata y CABA. Sale de un proveedor que
+publica su stock en una app web, y llega al sistema pegándola a mano (Base de
+conocimiento → Lista del proveedor): esa app no se puede consultar desde afuera.
+
+Tiene su propio bloque en el prompt, separado de las otras dos listas, porque **no está
+en el local**. Si el modelo la mezclara con el stock propio prometería entrega inmediata
+de algo que hay que ir a buscar. El bloque le dice tres cosas:
+
+- ofrecerla solo si no hay algo equivalente en el local;
+- decir siempre que se consigue en 24/48 hs y que se pide con seña;
+- no inventar lo que no está ni en el local ni ahí.
+
+**Los precios llegan con el margen ya sumado.** El proveedor lista costos; el sistema le
+aplica los escalones al pegar la lista, antes de guardarla. De este lado el costo no
+existe, y no puede filtrarse a un cliente por más que el modelo se equivoque.
+
+Lo que no tiene stock se descarta al pegar, así que todo lo que el bot ve está
+disponible en el momento en que se cargó.
+
 ## Lo que se afina desde el sistema
 
 Tres campos de la Base de conocimiento entran al prompt y se leen en cada mensaje, así

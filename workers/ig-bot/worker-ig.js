@@ -1246,12 +1246,13 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
 
   // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
   // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
-  const [stock, accesorios, conocimiento, listaMdp, listaCaba, mensajesFijos, promptDoc] = await Promise.all([
+  const [stock, accesorios, conocimiento, listaMdp, listaCaba, listaProv, mensajesFijos, promptDoc] = await Promise.all([
     equiposDisponibles(env, idToken),
     accesoriosDisponibles(env, idToken),
     leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`),
     ultimaLista(env, idToken, 'mdp'),
     ultimaLista(env, idToken, 'caba'),
+    ultimaLista(env, idToken, 'prov'),
     leerDoc(env, idToken, 'config/mensajes'),
     leerDoc(env, idToken, 'config/prompt'),
   ]);
@@ -1263,7 +1264,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
   // Las reglas del bot: las que el dueño escribió desde el sistema si las hay, y si no
   // las del archivo prompt.js. Se lee en cada mensaje a propósito: cambiar una regla
   // tiene que ser guardar en el sistema, sin deploy de por medio.
-  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock, accesorios, listaMdp, listaCaba, mdpVencida });
+  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock, accesorios, listaMdp, listaCaba, listaProv, mdpVencida });
   console.log('prompt:', promptDoc?.texto ? 'editado desde el sistema' : 'el de prompt.js');
   const textoCanal = mensajesFijos?.invitacionCanal || null;
 

@@ -618,11 +618,37 @@ function bloqueLista(titulo, lista, vencida = false) {
 }
 
 /**
+ * La lista del proveedor. Es distinta de las otras dos y por eso tiene su propio bloque:
+ * son equipos que NO estan en el local. Si el modelo los ofreciera como stock propio,
+ * prometeria entrega inmediata de algo que hay que ir a buscar.
+ *
+ * Los precios que llegan aca YA tienen el margen sumado: el sistema se lo aplica antes
+ * de guardar la lista, asi que el costo del proveedor no existe de este lado.
+ */
+function bloqueProveedor(lista) {
+  if (!lista || !Array.isArray(lista.items) || !lista.items.length) return '';
+  const moneda = lista.moneda || 'USD';
+  return `## LISTA DE UN PROVEEDOR — A PEDIDO (${lista.fecha}, precios al público en ${moneda})
+
+Esto NO esta en el local: son equipos de un proveedor, que se traen a pedido.
+
+- Ofrecelos solo si no hay algo equivalente en el local. Lo que esta acá se entrega en el
+  momento; esto no.
+- Cuando ofrezcas algo de esta lista, decilo: que se consigue en 24/48 hs y que se pide
+  con una seña. Nunca lo presentes como disponible para retirar hoy.
+- Si preguntan por algo que no está ni en el local ni acá, no lo inventes.
+
+${NOMBRES_BIEN}
+
+${JSON.stringify(lista.items)}`;
+}
+
+/**
  * Arma el system prompt final: el texto de las reglas + los datos del momento.
  * Todos los campos son opcionales; si falta uno, el bloque correspondiente le dice al
  * modelo que no tiene el dato, en vez de dejarlo inventar.
  */
-export function construirSystem({ base, conocimiento, stock, accesorios, listaMdp, listaCaba, mdpVencida } = {}) {
+export function construirSystem({ base, conocimiento, stock, accesorios, listaMdp, listaCaba, listaProv, mdpVencida } = {}) {
   return [
     // `base` es la versión que el dueño editó desde el sistema. Si no editó nunca, o
     // si borró todo el texto, se usa la de este archivo.
@@ -634,5 +660,6 @@ export function construirSystem({ base, conocimiento, stock, accesorios, listaMd
     bloqueAccesorios(accesorios),
     bloqueLista('MAR DEL PLATA', listaMdp, mdpVencida),
     bloqueLista('CABA', listaCaba),
+    bloqueProveedor(listaProv),
   ].filter(Boolean).join('\n\n');
 }
