@@ -2548,6 +2548,7 @@
         <button class="tab-btn active" id="kb-tab-datos" onclick="setKbTab('datos',this)">🏪 Datos del local</button>
         <button class="tab-btn" id="kb-tab-mdp" onclick="setKbTab('mdp',this)">📋 Lista Mar del Plata</button>
         <button class="tab-btn" id="kb-tab-caba" onclick="setKbTab('caba',this)">🚚 Lista CABA</button>
+        <button class="tab-btn" id="kb-tab-prov" onclick="setKbTab('prov',this)">🏭 Lista del proveedor</button>
         <button class="tab-btn" id="kb-tab-prompt" onclick="setKbTab('prompt',this)">🧠 Prompt del bot</button>
       </div>
 
@@ -2675,6 +2676,62 @@
       </div>
 
       <!-- (la pagina del Facturador se inserta mas abajo, fuera de conocimiento) -->
+      <!-- TAB: Lista del proveedor -->
+      <div id="kb-sec-prov" style="display:none;">
+        <div id="kb-prov-estado"></div>
+
+        <div class="card">
+          <div class="card-title">Tu margen sobre el costo</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Los precios del proveedor son <b>tu costo</b>. Acá definís cuánto le sumás según cuánto te cueste. Se aplica al pegar la lista, así que lo que se guarda —y lo que el bot cotiza— ya es el precio final al cliente.</p>
+          <div style="overflow-x:auto;"><table class="tkh-table">
+            <thead><tr><th>Si el costo es…</th><th style="width:150px;text-align:right;">le sumo (u$s)</th><th style="width:40px;"></th></tr></thead>
+            <tbody id="kb-prov-tramos"></tbody>
+          </table></div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn-secondary" onclick="agregarTramoProv()">＋ Agregar escalón</button>
+            <button class="btn-save" style="width:auto;padding:9px 16px;" onclick="guardarTramosProv()">Guardar el margen</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Pegar la lista</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Abrí la lista del proveedor, tocá dentro de la tabla y hacé <b>Ctrl+A</b> (o <b>Cmd+A</b>): copia todo lo visible. Volvé acá y pegá con <b>Ctrl+V</b>. No hace falta que borres nada ni que la ordenes.</p>
+          <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">Los productos <b>sin stock</b> se descartan solos: el bot no puede ofrecer lo que el proveedor no tiene.</p>
+          <div class="field">
+            <textarea id="kb-prov-texto" style="height:200px;font-family:'DM Mono',monospace;font-size:12.5px;" placeholder="Pegá acá con Ctrl+V…" oninput="procesarListaProv()"></textarea>
+          </div>
+          <div class="field" style="max-width:220px;display:none;">
+            <select id="kb-prov-moneda"><option value="USD">USD u$s</option></select>
+          </div>
+          <div id="kb-prov-resumen"></div>
+        </div>
+
+        <div id="kb-prov-preview" style="display:none;">
+          <div class="card">
+            <div class="card-title">Vista previa — confirmá antes de guardar</div>
+            <div id="kb-prov-preview-items"></div>
+            <div style="display:flex;gap:8px;margin-top:1rem;">
+              <button class="btn-secondary" onclick="cancelarListaKb('prov')">Cancelar</button>
+              <button class="btn-save" id="btn-kb-prov-guardar" style="width:auto;padding:11px 18px;" onclick="guardarListaKb('prov','reemplazar')">Reemplazar la lista del proveedor</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="filters-bar" style="margin:12px 0;">
+          <input type="text" id="kb-prov-buscar" placeholder="🔎 Buscar producto, GB, color..." oninput="deb('kbProvB',function(){renderKbLista('prov')})" style="flex:2;">
+          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="borrarListaKb('prov')" title="Borrar la lista mostrada">🗑 Borrar lista</button>
+        </div>
+        <div id="kb-prov-cambios"></div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table class="rp-table">
+              <thead><tr><th>Producto</th><th style="width:90px;">GB</th><th style="width:150px;">Color</th><th style="text-align:right;width:130px;">Precio público</th><th style="width:40px;"></th></tr></thead>
+              <tbody id="kb-prov-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- TAB: Prompt del bot -->
       <div id="kb-sec-prompt" style="display:none;">
         <div class="card">
@@ -11221,20 +11278,21 @@ window.resolverBandeja = async function(id){
 // público — no se le aplica margen en ningún punto del flujo.
 
 const KB_CAMPOS = ['tono','entrenamiento','horarios','direccion','mediosPago','garantia','politicaSena','comoLlegar','notasExtra'];
-const KB_ORIGENES = { mdp: 'Mar del Plata', caba: 'CABA' };
+const KB_ORIGENES = { mdp: 'Mar del Plata', caba: 'CABA', prov: 'Proveedor' };
 
-let kbParseada = { mdp: [], caba: [] };
+let kbParseada = { mdp: [], caba: [], prov: [] };
 
 window.setKbTab = function(tab, btn){
   try{
     document.querySelectorAll('#page-conocimiento .tab-btn').forEach(b=>b.classList.remove('active'));
     if(btn) btn.classList.add('active');
-    ['datos','mdp','caba','prompt'].forEach(t=>{
+    ['datos','mdp','caba','prov','prompt'].forEach(t=>{
       const el = document.getElementById('kb-sec-'+t);
       if(el) el.style.display = t===tab?'block':'none';
     });
     if(tab==='datos') pintarConocimiento();
     else if(tab==='prompt') pintarPromptBot();
+    else if(tab==='prov'){ pintarTramosProv(); renderKbLista('prov'); }
     else renderKbLista(tab);
   }catch(e){ console.error('setKbTab', e); showToast('Error: '+e.message, true); }
 };
@@ -11468,7 +11526,7 @@ window.restaurarListaKb = async function(origen, id){
 // no se tocó nada y se muestra lo que hay en Firestore. En cuanto se edita un precio o
 // se borra un ítem, se trabaja sobre esta copia hasta que se guarde o se cancele: así
 // se pueden hacer diez cambios y que sea UN guardado, no diez versiones de la lista.
-const kbEdicion = { mdp: null, caba: null };
+const kbEdicion = { mdp: null, caba: null, prov: null };
 
 // Lo que se está mostrando: la copia en edición si hay, lo guardado si no.
 function kbItemsVista(origen){
@@ -11709,6 +11767,145 @@ const condicionKb = v => {
   if(/nuev|sellad|0 ?km/.test(t)) return 'nuevo';
   if(/usad|impecab|refurb|reacond/.test(t)) return 'usado';
   return '';
+};
+
+// ══ Lista del proveedor ══════════════════════════════════════
+//
+// El proveedor publica su stock en una app web que NO deja consultarla desde afuera: la
+// página se arma sola en el navegador y no hay URL que devuelva los datos. Lo que sí
+// tiene es un "Ctrl+A copia todo", y copia en formato tabla. Así que el camino es pegar.
+//
+// Dos cosas que este flujo hace y el de las otras listas no:
+//   - los precios del proveedor son COSTO, y hay que sumarles el margen antes de que
+//     nadie los vea. Un descuido acá se traduce en vender al costo;
+//   - la lista trae disponibilidad, y lo que no tiene stock se descarta: el bot no puede
+//     ofrecer lo que el proveedor no tiene.
+
+const TRAMOS_POR_DEFECTO = [
+  { hasta: 200,  suma: 45 },
+  { hasta: 500,  suma: 65 },
+  { hasta: null, suma: 115 },
+];
+
+const tramosProv = () => Array.isArray(cfg.margenProveedor) && cfg.margenProveedor.length
+  ? cfg.margenProveedor : TRAMOS_POR_DEFECTO;
+
+/** El precio final de un costo, según el escalón que le toque. */
+function conMargenProv(costo, tramos){
+  for(const t of tramos){
+    if(t.hasta == null || costo <= Number(t.hasta)) return { suma: Number(t.suma)||0, precio: costo + (Number(t.suma)||0) };
+  }
+  return { suma: 0, precio: costo };
+}
+
+function pintarTramosProv(){
+  const tb = document.getElementById('kb-prov-tramos'); if(!tb) return;
+  const t = tramosProv();
+  tb.innerHTML = t.map((x,i)=>`
+    <tr>
+      <td>${x.hasta==null
+        ? 'de ahí en adelante'
+        : `hasta <input type="number" value="${x.hasta}" step="1" min="0" oninput="setTramoProv(${i},'hasta',this.value)"
+             style="width:110px;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"> u$s de costo`}</td>
+      <td style="text-align:right;"><input type="number" value="${x.suma}" step="1" min="0" oninput="setTramoProv(${i},'suma',this.value)"
+            style="width:90px;text-align:right;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
+      <td>${t.length>1 && x.hasta!=null ? `<button class="ei-btn del" onclick="quitarTramoProv(${i})" title="Quitar">×</button>` : ''}</td>
+    </tr>`).join('');
+}
+
+let tramosEditando = null;
+window.setTramoProv = function(i, campo, valor){
+  tramosEditando = tramosEditando || JSON.parse(JSON.stringify(tramosProv()));
+  tramosEditando[i][campo] = valor===''? null : Number(valor);
+  procesarListaProv();   // el precio final cambia en vivo
+};
+window.agregarTramoProv = function(){
+  tramosEditando = tramosEditando || JSON.parse(JSON.stringify(tramosProv()));
+  tramosEditando.splice(tramosEditando.length-1, 0, { hasta: 300, suma: 55 });
+  cfg.margenProveedor = tramosEditando; pintarTramosProv();
+};
+window.quitarTramoProv = function(i){
+  tramosEditando = tramosEditando || JSON.parse(JSON.stringify(tramosProv()));
+  tramosEditando.splice(i,1);
+  cfg.margenProveedor = tramosEditando; pintarTramosProv(); procesarListaProv();
+};
+window.guardarTramosProv = async function(){
+  const t = (tramosEditando || tramosProv())
+    .map(x=>({hasta: x.hasta==null?null:Number(x.hasta), suma: Number(x.suma)||0}))
+    .sort((a,b)=>(a.hasta==null?Infinity:a.hasta)-(b.hasta==null?Infinity:b.hasta));
+  setSyncDot('syncing');
+  try{
+    cfg.margenProveedor = t; tramosEditando = null;
+    await setDoc(cfgDoc, withUser({ margenProveedor: t }), {merge:true});
+    showToast('Margen guardado ✓'); pintarTramosProv();
+  }catch(e){ showToast('Error al guardar', true); setSyncDot('error'); }
+};
+
+const precioProv = txt => {
+  const s = String(txt||'').replace(/US\$|u\$s|usd|\$/gi,'').trim();
+  if(!s) return null;
+  const n = parseFloat(s.replace(/\./g,'').replace(',','.'));   // es-AR: el punto es de miles
+  return Number.isFinite(n) ? n : null;
+};
+const hayStockProv = t => { const v = String(t||'').trim(); return !!v && !/^(no|sin|0|agotado)\b/i.test(v); };
+
+/**
+ * Lee lo pegado. La app del proveedor copia cinco columnas separadas por tabulación
+ * —categoría, código, producto, precio, stock— y la celda de categoría viene VACÍA salvo
+ * en la primera fila de cada grupo, así que se arrastra la última que se vio.
+ */
+window.procesarListaProv = function(){
+  const texto = document.getElementById('kb-prov-texto').value || '';
+  const tramos = tramosEditando || tramosProv();
+  let categoria = '', descartadas = 0, sinStock = 0;
+  const items = [];
+  for(const linea of texto.split(/\r?\n/)){
+    if(!linea.trim()) continue;
+    const c = linea.split('\t');
+    if(c.length < 4){ descartadas++; continue; }
+    if(c[0] && c[0].trim()) categoria = c[0].trim();
+    const producto = (c[2]||'').trim();
+    const costo = precioProv(c[3]);
+    if(!producto || costo == null){ descartadas++; continue; }
+    if(!hayStockProv(c[4])){ sinStock++; continue; }
+    const m = conMargenProv(costo, tramos);
+    const gb = (producto.match(/(\d+)\s?(GB|TB)\b/i)||[])[0] || '';
+    items.push({
+      producto: producto.replace(/\s*\d+\s?(GB|TB)\b/i,' ').replace(/\s+/g,' ').trim(),
+      gb, color: '', condicion: '',
+      precioPublico: Math.round(m.precio),
+      _costo: costo, _suma: m.suma, _cat: categoria,
+    });
+  }
+  kbParseada.prov = items;
+
+  const res = document.getElementById('kb-prov-resumen');
+  if(!texto.trim()){ res.innerHTML=''; document.getElementById('kb-prov-preview').style.display='none'; return; }
+
+  // La red: si el margen es una parte desproporcionada del costo, algo barato se coló y
+  // el precio va a quedar ridículo. Se muestra, no se bloquea.
+  const raros = items.filter(i => i._costo > 0 && i._suma / i._costo > 0.6);
+  res.innerHTML = `<div class="proveedor-alerta" style="margin-top:10px;">
+      <b>${items.length}</b> producto${items.length===1?'':'s'} con stock, ya con tu margen aplicado.
+      ${sinStock?`<br>${sinStock} sin stock, descartado${sinStock===1?'':'s'}.`:''}
+      ${descartadas?`<br>${descartadas} línea${descartadas===1?'':'s'} que no pude leer (encabezados o filas incompletas).`:''}
+    </div>
+    ${raros.length?`<div class="proveedor-alerta alerta-urgente" style="margin-top:8px;">
+      ⚠️ <b>${raros.length} producto${raros.length===1?'':'s'} con margen desproporcionado</b> — el recargo es más de la mitad del costo. Revisalos antes de guardar:
+      <ul style="margin:6px 0 0 18px;">${raros.slice(0,6).map(i=>`<li>${esc(i.producto)} ${esc(i.gb)}: costo u$s ${i._costo} + ${i._suma} = <b>u$s ${i.precioPublico}</b></li>`).join('')}</ul>
+      ${raros.length>6?`<div style="margin-top:4px;">…y ${raros.length-6} más.</div>`:''}
+    </div>`:''}`;
+
+  const prev = document.getElementById('kb-prov-preview-items');
+  prev.innerHTML = `<div style="overflow-x:auto;"><table class="tkh-table">
+    <thead><tr><th>Categoría</th><th>Producto</th><th style="width:70px;">GB</th><th style="text-align:right;width:80px;">Costo</th><th style="text-align:right;width:80px;">Margen</th><th style="text-align:right;width:100px;">Al cliente</th></tr></thead>
+    <tbody>${items.slice(0,60).map(i=>`<tr${i._suma/i._costo>0.6?' style="background:#FDECEA;"':''}>
+      <td style="color:var(--text3);">${esc(i._cat)}</td><td>${esc(i.producto)}</td><td>${esc(i.gb)}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--text3);">u$s ${i._costo}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;">+${i._suma}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;">u$s ${i.precioPublico}</td></tr>`).join('')}</tbody></table></div>
+    ${items.length>60?`<div style="font-size:11.5px;color:var(--text3);margin-top:6px;">Mostrando 60 de ${items.length}. Se guardan todos.</div>`:''}`;
+  document.getElementById('kb-prov-preview').style.display = items.length ? 'block' : 'none';
 };
 
 const itemKbLimpio = it => ({
