@@ -644,22 +644,47 @@ ${JSON.stringify(lista.items)}`;
 }
 
 /**
- * Arma el system prompt final: el texto de las reglas + los datos del momento.
- * Todos los campos son opcionales; si falta uno, el bloque correspondiente le dice al
- * modelo que no tiene el dato, en vez de dejarlo inventar.
+ * Arma el system prompt final, EN DOS BLOQUES, y el orden no es estetico.
+ *
+ * El prompt entero viaja en cada mensaje que contesta el bot, y es lo que mas se paga:
+ * unos 9.000 tokens de entrada por DM, contra 400 de respuesta. La API cobra a una
+ * decima parte lo que ya vio, siempre que sea un PREFIJO identico byte a byte, asi que
+ * el reparto es:
+ *
+ *   bloque 1 — lo que casi nunca cambia: las reglas, los datos del local, el tono y el
+ *              entrenamiento. Va marcado para cachear.
+ *   bloque 2 — lo que cambia todo el tiempo: stock, accesorios y listas de precios. Va
+ *              despues y sin marcar, porque una venta invalidaria el cache entero si
+ *              estuviera antes.
+ *
+ * Si algun dia se agrega un bloque, lo que decide donde va es una sola pregunta: ¿cambia
+ * entre un DM y el siguiente? Si cambia, va en el segundo. Meter algo variable en el
+ * primero no rompe nada, pero hace que el cache no sirva nunca y nadie se entera.
  */
 export function construirSystem({ base, conocimiento, stock, accesorios, listaMdp, listaCaba, listaProv, mdpVencida } = {}) {
-  return [
+  const fijo = [
     // `base` es la versión que el dueño editó desde el sistema. Si no editó nunca, o
     // si borró todo el texto, se usa la de este archivo.
     (base && String(base).trim()) ? String(base).trim() : SYSTEM_PROMPT,
     bloqueConocimiento(conocimiento),
     bloqueTono(conocimiento && conocimiento.tono),
     bloqueEntrenamiento(conocimiento && conocimiento.entrenamiento),
+  ].filter(Boolean).join('\n\n');
+
+  const variable = [
     bloqueStock(stock),
     bloqueAccesorios(accesorios),
     bloqueLista('MAR DEL PLATA', listaMdp, mdpVencida),
     bloqueLista('CABA', listaCaba),
     bloqueProveedor(listaProv),
   ].filter(Boolean).join('\n\n');
+
+  // Cache de una hora y no de cinco minutos: los DM del local llegan salteados. Con la
+  // ventana corta, cada mensaje aislado pagaria la escritura (1,25x) sin llegar a
+  // aprovecharla, y saldria MAS caro que no cachear. Con una hora la escritura cuesta 2x
+  // pero alcanza con tres mensajes en esa hora para que convenga, y en un dia normal eso
+  // pasa varias veces.
+  const bloques = [{ type: 'text', text: fijo, cache_control: { type: 'ephemeral', ttl: '1h' } }];
+  if (variable) bloques.push({ type: 'text', text: variable });
+  return bloques;
 }

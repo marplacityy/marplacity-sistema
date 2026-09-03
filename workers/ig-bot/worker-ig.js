@@ -1314,6 +1314,14 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
 
     const d = await r.json();
 
+    // Sin esto no hay forma de saber si el cache del prompt esta sirviendo. Con `cache
+    // leido` alto, pego y el mensaje sale a una decima parte; con `cache escrito` en
+    // todos los mensajes y `leido` siempre en cero, algo del bloque fijo esta cambiando
+    // entre llamadas y estamos pagando MAS que sin cache, en silencio.
+    const u = d.usage || {};
+    console.log(`tokens: entrada ${u.input_tokens ?? '?'} · cache leido ${u.cache_read_input_tokens ?? 0}` +
+                ` · cache escrito ${u.cache_creation_input_tokens ?? 0} · salida ${u.output_tokens ?? '?'}`);
+
     // Con el esquema puesto, lo unico que puede volver mal formado es una respuesta
     // cortada por max_tokens o un rechazo del modelo. Las dos se ven en stop_reason y
     // no en el texto, asi que sin esto se diagnostican a ciegas.
