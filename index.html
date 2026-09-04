@@ -1195,7 +1195,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.03-B</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.03-C</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -12633,7 +12633,14 @@ const agEjecutar = {
   },
 
   proponer_gasto(campos){
-    agFichas.push({ tipo:'gasto', datos:{ ...campos, fecha: campos.fecha || today() }, estado:'pendiente' });
+    const datos = { ...campos, fecha: campos.fecha || today() };
+    // Si el modelo propone dos veces lo mismo —pasa cuando pide la herramienta en
+    // paralelo, o cuando reintenta— se muestra UNA ficha. Dos fichas iguales terminan
+    // en dos gastos, y el usuario no tiene por qué darse cuenta de que eran la misma.
+    const igual = agFichas.find(f => f.tipo==='gasto' && f.estado==='pendiente'
+      && f.datos.concepto === datos.concepto && Number(f.datos.monto) === Number(datos.monto));
+    if(igual) return { mostrada: true, aviso: 'Esa ficha ya está en pantalla, no se duplicó. Sigue esperando que el usuario la confirme.' };
+    agFichas.push({ tipo:'gasto', datos, estado:'pendiente' });
     return { mostrada: true, aviso: 'La ficha está en pantalla. El usuario tiene que revisarla y confirmarla; todavía no se guardó nada.' };
   },
 
@@ -12648,8 +12655,16 @@ const agEjecutar = {
 /** Las fichas pendientes, dibujadas abajo del chat. */
 function agPintarFichas(){
   const c = document.getElementById('ag-chat'); if(!c) return;
-  const pend = agFichas.map((f,i)=>({f,i})).filter(({f})=>f.estado==='pendiente');
-  if(!pend.length) return;
+  // Los ya anotados dejan un renglón: si algo se guardó dos veces, se ve acá y no
+  // aparece como sorpresa en la lista de Gastos.
+  const hechos = agFichas.filter(f => f.estado==='confirmada' && f.tipo==='gasto');
+  if(hechos.length) c.insertAdjacentHTML('beforeend', hechos.map(f=>`
+    <div style="font-size:12.5px;color:#237A4B;margin:2px 0 8px;padding:8px 12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
+      ✓ Anotado: ${esc(f.datos.concepto||'')} — ${f.datos.moneda==='USD'?fmtUSD(f.datos.monto):fmtARS(f.datos.monto)}
+    </div>`).join(''));
+
+  const pend = agFichas.map((f,i)=>({f,i})).filter(({f})=>f.estado==='pendiente'||f.estado==='guardando');
+  if(!pend.length){ c.scrollTop = c.scrollHeight; return; }
   c.insertAdjacentHTML('beforeend', pend.map(({f,i}) => f.tipo==='gasto' ? `
     <div class="card" style="margin:4px 0 10px;border-color:var(--accent);">
       <div class="card-title" style="margin-bottom:10px;">Gasto para confirmar</div>
@@ -12663,8 +12678,8 @@ function agPintarFichas(){
       </div>
       <div class="field"><label>Fecha</label><input type="date" id="ag-f${i}-fecha" value="${esc(f.datos.fecha||today())}"></div>
       <div class="pos-actions" style="margin-top:8px;">
-        <button class="pos-btn-cancel" onclick="descartarFichaAgente(${i})">✕ Descartar</button>
-        <button class="pos-btn-checkout" onclick="confirmarGastoAgente(${i})">Anotar el gasto</button>
+        <button class="pos-btn-cancel" onclick="descartarFichaAgente(${i})" ${f.estado==='guardando'?'disabled':''}>✕ Descartar</button>
+        <button class="pos-btn-checkout" onclick="confirmarGastoAgente(${i})" ${f.estado==='guardando'?'disabled':''}>${f.estado==='guardando'?'Guardando…':'Anotar el gasto'}</button>
       </div>
     </div>` : `
     <div class="card" style="margin:4px 0 10px;border-color:var(--accent);">
@@ -12685,6 +12700,12 @@ window.confirmarGastoAgente = async function(i){
   if(!monto || monto<=0){ showToast('Falta el monto.', true); return; }
   const moneda = v('moneda') || 'ARS';
   const tc = parseFloat(cfg.tc) || null;
+
+  // El estado se marca ANTES de escribir, no después. Guardar tarda unas décimas y el
+  // botón queda vivo todo ese rato: dos clicks seguidos entraban los dos, porque el
+  // segundo encontraba la ficha todavía en 'pendiente'.
+  f.estado = 'guardando';
+  agPintar(); agPintarFichas();
   setSyncDot('syncing');
   try{
     await addDoc(gastosCol, withUser({
@@ -12700,9 +12721,14 @@ window.confirmarGastoAgente = async function(i){
       createdAt: serverTimestamp(),
     }));
     f.estado = 'confirmada';
+    f.datos = { ...f.datos, concepto:(v('concepto')||'').trim(), monto, moneda, fecha: v('fecha')||today() };
     showToast('Gasto anotado ✓');
-    agPintar(); agPintarFichas();
-  }catch(e){ showToast('Error al guardar: '+e.message, true); setSyncDot('error'); }
+  }catch(e){
+    // Vuelve a quedar pendiente: si falló, el usuario tiene que poder reintentar.
+    f.estado = 'pendiente';
+    showToast('Error al guardar: '+e.message, true); setSyncDot('error');
+  }
+  agPintar(); agPintarFichas();
 };
 
 window.abrirVentaAgente = function(i){
