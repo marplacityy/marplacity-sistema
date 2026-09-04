@@ -284,6 +284,13 @@
 
   /* Gastos Fijos */
   .gf-table{width:100%;border-collapse:collapse;}
+  /* Una tabla mas ancha que la pantalla tiene que scrollear ELLA, no empujar toda la
+     pagina: si empuja, se desalinea el resto y la barra de abajo queda corrida.
+     Se acota a las tarjetas que REALMENTE tienen una tabla: poner overflow en todas
+     recorta menus y cosas posicionadas que hoy se ven bien. */
+  @media(max-width:680px){
+    .card:has(> .gf-table), .card:has(> div > .gf-table){overflow-x:auto;}
+  }
   .gf-table th{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);}
   .gf-table td{padding:10px;border-bottom:1px solid var(--border);font-size:14px;vertical-align:middle;}
   .gf-table tr:last-child td{border-bottom:none;}
@@ -623,10 +630,23 @@
     .mobile-bar{display:block;}
     .main{margin-left:0;padding:1rem 1rem 5rem;}
     .grid3{grid-template-columns:1fr 1fr;}
-    .metrics{grid-template-columns:1fr 1fr;}
-    .bar-label{width:90px;}
-    .bar-val{width:65px;}
+    .metrics{grid-template-columns:1fr 1fr;gap:8px;}
     .filters-bar{flex-direction:column;}
+
+    /* Las tarjetas de números: en dos columnas de ~170px, un total bimonetario a 20px
+       no entra y se desborda. Baja el cuerpo y se permite cortar el número largo. */
+    .card{padding:1rem;}
+    .metric{padding:.8rem;}
+    .m-val{font-size:17px;overflow-wrap:anywhere;}
+    .m-sub{overflow-wrap:anywhere;}
+
+    /* Las barras, en dos renglones: la etiqueta arriba y la barra abajo con su número.
+       En una sola fila la etiqueta entraba en 90px y cortaba con puntos suspensivos
+       —"Extraordinar…"— mientras la barra se quedaba con 120px. Apiladas, el nombre se
+       lee entero y la barra ocupa el ancho completo. */
+    .bar-row{flex-wrap:wrap;gap:4px 8px;margin-bottom:14px;}
+    .bar-label{width:100%;white-space:normal;overflow:visible;text-overflow:clip;}
+    .bar-val{width:auto;min-width:70px;}
   }
 </style>
 </head>
@@ -1274,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.03-E</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.03-F</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
