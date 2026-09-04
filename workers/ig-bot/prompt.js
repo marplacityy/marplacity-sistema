@@ -456,6 +456,7 @@ Devolvé SOLO un JSON, sin backticks, sin texto antes ni después:
   "necesita_atencion": true,
   "motivo": "pidio_foto",
   "prioridad": 1,
+  "paso_a_humano": true,
   "resumen": "pregunta por iPhone 14, le pase 15 a 500 usd, pidio foto",
   "producto": "iPhone 15",
   "mensajes": ["hola tengo 15 en precio", "500 usd", "ahora te mando la foto"]
@@ -472,7 +473,26 @@ Devolvé SOLO un JSON, sin backticks, sin texto antes ni después:
   por ese equipo.
 - Si necesita_atencion es false, motivo va en null y prioridad en 99.
 - confianza en "baja" si dudaste entre dos categorías. Las de confianza baja también
-  suben a la bandeja.`;
+  suben a la bandeja.
+
+## paso_a_humano — CUÁNDO TE CALLÁS
+
+Poné paso_a_humano en true cuando en tus mensajes le prometas al cliente algo que vas a
+hacer DESPUÉS: "ahora te mando la foto", "ya te confirmo", "lo chequeo y te aviso",
+"déjame ver y te digo", "consulto y te cuento".
+
+Cuando lo ponés en true, ESTE CHAT DEJA DE SER TUYO. El dueño lo sigue a mano desde ahí,
+y vos no volvés a contestar en esa conversación hasta que él te lo devuelva. Por eso:
+
+- No lo pongas en true si podés resolverlo solo. Prometer y callarte cuando la respuesta
+  la tenías es dejar al cliente esperando por nada.
+- Sí ponelo cada vez que prometas algo que no podés hacer: mandar una foto, tasar una
+  permuta que necesita ver el equipo, confirmar un precio que no tenés, resolver un
+  reclamo.
+- Y si lo ponés en true, que tu último mensaje deje al cliente tranquilo: que sepa que
+  alguien le va a escribir, no que la charla se cortó.
+
+En duda, es mejor pasarlo que prometer y no cumplir: el dueño está mirando la bandeja.`;
 
 // ── Datos que cambian ─────────────────────────────────────────
 // Se anexan al final del prompt en cada request. Van al final a propósito: el prompt

@@ -322,6 +322,29 @@ Los cuatro casos, medidos con el webhook simulado:
 | prueba, cuenta autorizada | 1 | 1 |
 | prendido para todos | 1 | 1 |
 
+## El bot se calla solo cuando promete algo
+
+Si el bot le dice al cliente *"ya te confirmo"* o *"ahora te mando la foto"*, eso lo tiene
+que hacer una persona. Antes el chat quedaba activo, así que el bot contestaba el
+siguiente mensaje **encima de Juni**, que ya estaba escribiendo: los dos respondiendo lo
+mismo, o peor, cosas distintas.
+
+Ahora ese chat se pausa solo. Es exactamente lo que Juni haría a mano con el semáforo, y
+el bot no vuelve a contestar ahí hasta que ella lo despause desde la bandeja.
+
+Se detecta por dos caminos, a propósito:
+
+- **El modelo lo declara.** `paso_a_humano` en el JSON de salida. El prompt le explica
+  cuándo ponerlo y le aclara que al hacerlo pierde el chat, para que no lo use cuando
+  puede resolver solo.
+- **Y si se olvida, se detecta por lo que escribió.** La expresión `PROMESAS` busca las
+  frases con las que se promete algo para después. La promesa la ve el cliente igual, y
+  un bot que dice "ya te confirmo" y sigue contestando es peor que uno que se calla de
+  más. Ante la duda, se calla.
+
+En la bandeja el chat aparece como **🔴 Te lo dejó** en vez de 🔴 Pausado: uno lo paraste
+vos, el otro te lo dejaron en la mesa, y de un vistazo tienen que distinguirse.
+
 ## El semáforo de cada chat (`botPausado`)
 
 El interruptor de arriba es para el bot entero. El semáforo es para **una conversación**:

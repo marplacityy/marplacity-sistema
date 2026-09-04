@@ -1195,7 +1195,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.03-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.03-B</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -11103,9 +11103,15 @@ function renderBandeja(){
 
     // El semáforo va en la fila cerrada también: de un vistazo tenés que poder ver qué
     // chats está llevando el bot y cuáles estás llevando vos.
+    // Un chat puede estar en rojo porque lo pausaste vos o porque el bot prometió algo y
+    // se calló solo. Son situaciones distintas —una la decidiste, la otra te la dejaron
+    // en la mesa— así que el semáforo lo dice.
+    const solo = pausado && !!x.motivoPausa;
     const semaforo = `<button class="bd-semaforo ${pausado?'sem-off':'sem-on'}"
-      title="${pausado?'El bot no contesta este chat. Tocá para que vuelva a contestar.':'El bot contesta este chat solo. Tocá para pausarlo y seguirlo vos.'}"
-      onclick="event.stopPropagation(); toggleBotChat('${escJs(x.id)}')">${pausado?'🔴 Pausado':'🟢 Bot'}</button>`;
+      title="${pausado
+        ? (solo ? esc(x.motivoPausa)+'. Tocá para que el bot vuelva a contestar.' : 'El bot no contesta este chat. Tocá para que vuelva a contestar.')
+        : 'El bot contesta este chat solo. Tocá para pausarlo y seguirlo vos.'}"
+      onclick="event.stopPropagation(); toggleBotChat('${escJs(x.id)}')">${pausado?(solo?'🔴 Te lo dejó':'🔴 Pausado'):'🟢 Bot'}</button>`;
 
     const etiqueta = x.necesitaAtencion
       ? `<span class="est-badge ${vencida?'est-abandono':'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>`

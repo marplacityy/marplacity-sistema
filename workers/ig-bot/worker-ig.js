@@ -263,6 +263,23 @@ async function procesarMensaje(ev, env) {
     userId: env.OWNER_UID,
   };
 
+  // EL BOT SE CALLA SOLO CUANDO PROMETE ALGO.
+  //
+  // Si le dijo al cliente "ya te confirmo" o "ahora te mando la foto", eso lo tiene que
+  // hacer una persona. Dejar el chat activo hace que el bot conteste el proximo mensaje
+  // encima de Juni, que ya esta escribiendo: los dos contestando lo mismo, o peor, cosas
+  // distintas.
+  //
+  // Se pausa el chat, que es exactamente lo que Juni haria a mano con el semaforo. El
+  // bot no vuelve a contestar ahi hasta que ella lo despause desde la bandeja.
+  if (ia.pasoAHumano && !pausado) {
+    doc.botPausado = true;
+    // Que se note POR QUE quedo pausado: sin esto aparece en rojo en la bandeja y no se
+    // sabe si lo paro ella o el bot.
+    doc.motivoPausa = 'el bot prometio algo y te lo dejo a vos';
+    console.log('el bot prometio algo — pauso el chat de', senderId);
+  }
+
   // Pausado, el doc guarda el mensaje y poco más: `mensajes` y `sugerencia` sí se
   // limpian (la respuesta vieja ya salió, ofrecerla de nuevo en la bandeja sería
   // mandarla dos veces), pero la clasificación no se toca. Sin la IA solo quedaría
@@ -1391,15 +1408,29 @@ const ESQUEMA_RESPUESTA = {
     necesita_atencion: { type: 'boolean' },
     motivo:            { type: ['string', 'null'] },
     prioridad:         { type: 'integer' },
+    // El bot le prometio al cliente algo para despues ("ya te confirmo"). Cuando viene
+    // en true, el chat se pausa y lo sigue Juni: ver `PROMESAS` mas abajo.
+    paso_a_humano:     { type: 'boolean' },
     resumen:           { type: 'string' },
     producto:          { type: ['string', 'null'] },
     mensajes:          { type: 'array', items: { type: 'string' } },
   },
-  required: ['categoria', 'confianza', 'necesita_atencion', 'motivo', 'prioridad', 'resumen', 'producto', 'mensajes'],
+  required: ['categoria', 'confianza', 'necesita_atencion', 'motivo', 'prioridad', 'paso_a_humano', 'resumen', 'producto', 'mensajes'],
   additionalProperties: false,
 };
 
 const MOTIVOS = ['pidio_foto', 'cerrado', 'reclamo', 'permuta', 'reparacion', 'otro_medio_de_pago', 'visto', 'no_supe_responder'];
+
+/**
+ * Frases con las que el bot promete algo para despues. Es la red por si el modelo se
+ * olvida de marcar `paso_a_humano`: la promesa la ve el cliente igual, y un bot que dice
+ * "ya te confirmo" y sigue contestando encima de Juni es peor que uno que se calla de
+ * mas. Ante la duda, se calla.
+ */
+const PROMESAS = /\b(ya|ahora|enseguida|en un (rato|toque|momento)|despu[eé]s)\s+te\s+(digo|confirmo|aviso|paso|mando|env[ií]o|cuento)|te\s+(confirmo|aviso|digo|paso|mando)\s+(en un|ahora|enseguida|mas tarde|m[aá]s tarde|apenas)|\b(lo|te lo)\s+(chequeo|reviso|consulto|averiguo|miro|fijo)\b|\bd[eé]jame\s+(ver|chequear|consultar|fijarme)|\bconsulto\s+y\s+te\b|\bme\s+fijo\s+y\s+te\b|\bpregunto\s+y\s+te\b/i;
+
+export const prometeSeguimiento = mensajes =>
+  (Array.isArray(mensajes) ? mensajes : []).some(m => PROMESAS.test(String(m || '')));
 const CATEGORIAS = ['reclamo', 'permuta', 'reparacion', 'cerrado', 'indeciso', 'curioso'];
 const MAX_MENSAJES = 4;
 
@@ -1436,12 +1467,16 @@ export function normalizar(out, textoCanal) {
   }
   if (!necesitaAtencion) { motivo = null; prioridad = 99; }
 
+  // El modelo lo declara, y si se olvida lo detectamos por lo que escribio.
+  const pasoAHumano = out.paso_a_humano === true || prometeSeguimiento(mensajes);
+
   return {
     categoria,
     confianza,
-    necesitaAtencion,
+    necesitaAtencion: necesitaAtencion || pasoAHumano,
     motivo,
     prioridad,
+    pasoAHumano,
     resumen: typeof out.resumen === 'string' ? out.resumen.trim() || null : null,
     // El equipo del que se habló. Lo usa el cron: el seguimiento se escribe por ese
     // modelo. Se corta por las dudas, que va a parar a un doc y a la bandeja.
