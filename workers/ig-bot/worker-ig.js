@@ -1419,7 +1419,7 @@ const ESQUEMA_RESPUESTA = {
   additionalProperties: false,
 };
 
-const MOTIVOS = ['pidio_foto', 'cerrado', 'reclamo', 'permuta', 'reparacion', 'otro_medio_de_pago', 'visto', 'no_supe_responder'];
+const MOTIVOS = ['averiguar', 'pidio_foto', 'cerrado', 'reclamo', 'permuta', 'reparacion', 'otro_medio_de_pago', 'visto', 'no_supe_responder'];
 
 /**
  * Frases con las que el bot promete algo para despues. Es la red por si el modelo se
@@ -1427,7 +1427,21 @@ const MOTIVOS = ['pidio_foto', 'cerrado', 'reclamo', 'permuta', 'reparacion', 'o
  * "ya te confirmo" y sigue contestando encima de Juni es peor que uno que se calla de
  * mas. Ante la duda, se calla.
  */
-const PROMESAS = /\b(ya|ahora|enseguida|en un (rato|toque|momento)|despu[eé]s)\s+te\s+(digo|confirmo|aviso|paso|mando|env[ií]o|cuento)|te\s+(confirmo|aviso|digo|paso|mando)\s+(en un|ahora|enseguida|mas tarde|m[aá]s tarde|apenas)|\b(lo|te lo)\s+(chequeo|reviso|consulto|averiguo|miro|fijo)\b|\bd[eé]jame\s+(ver|chequear|consultar|fijarme)|\bconsulto\s+y\s+te\b|\bme\s+fijo\s+y\s+te\b|\bpregunto\s+y\s+te\b/i;
+const PROMESAS = new RegExp([
+  // "ya te digo", "ahora te confirmo", "en un rato te aviso"
+  '\\b(ya|ahora|enseguida|en un (rato|toque|momento)|despu[eé]s)\\s+te\\s+(digo|confirmo|aviso|paso|mando|env[ií]o|cuento)',
+  // "te confirmo en un rato", "te aviso apenas..."
+  'te\\s+(confirmo|aviso|digo|paso|mando)\\s+(en un|ahora|enseguida|mas tarde|m[aá]s tarde|apenas)',
+  // "lo chequeo", "te lo averiguo"
+  '\\b(lo|te lo)\\s+(chequeo|reviso|consulto|averiguo|miro|fijo)\\b',
+  // "te averiguo", "te chequeo" — la forma que pide la regla de NO TENGO
+  '\\bte\\s+(averiguo|chequeo|consulto|reviso)\\b',
+  // "bancá que averiguo", "esperá que me fijo"
+  '\\b(banc[aá]|esper[aá])\\b[^.!?]{0,30}\\b(averiguo|chequeo|consulto|fijo|miro|pregunto)\\b',
+  '\\bd[eé]jame\\s+(ver|chequear|consultar|fijarme)',
+  '\\b(consulto|averiguo|pregunto)\\s+y\\s+te\\b',
+  '\\bme\\s+fijo\\b',
+].join('|'), 'i');
 
 export const prometeSeguimiento = mensajes =>
   (Array.isArray(mensajes) ? mensajes : []).some(m => PROMESAS.test(String(m || '')));
