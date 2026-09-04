@@ -2,8 +2,23 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gastos — Negocio & Personal</title>
+<!-- viewport-fit=cover: sin esto, env(safe-area-inset-*) devuelve 0 y el cajón del
+     carrito queda tapado por la barra de gestos del iPhone. -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MarplaCity — Sistema</title>
+
+<!-- Instalable en el teléfono: ícono propio y pantalla completa, sin barra del
+     navegador. No hay service worker a propósito: cachear el HTML haría que un deploy
+     no se vea hasta que el teléfono decida actualizar, y el sello de versión del
+     sidebar —que es como confirmamos que un deploy llegó— dejaría de servir. -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1A1917">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png" type="image/png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MarplaCity">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -367,7 +382,47 @@
 
   /* POS */
   .pos-layout{display:grid;grid-template-columns:380px 1fr;gap:14px;align-items:start;}
-  @media(max-width:900px){.pos-layout{grid-template-columns:1fr;}}
+  @media(max-width:900px){
+    /* Los productos primero. Es lo que buscás cuando entrás al POS; el carrito arranca
+       vacío y no tiene sentido que ocupe la primera pantalla. */
+    .pos-layout{display:flex;flex-direction:column;}
+    .pos-catalog{order:1;}
+    .pos-cart{order:2;}
+  }
+
+  /* ── El carrito, como cajón de abajo (solo teléfono) ────────────────────────────
+     En pantalla chica el carrito se fija abajo y queda plegado: se ve una barra con
+     cuántos productos hay y el total. Tocándola se despliega entero, con los medios de
+     pago y el botón de cobrar. Antes había que bajar a buscar el producto y volver a
+     subir para ver el total, en cada producto. */
+  .pos-handle{display:none;}
+  @media(max-width:680px){
+    .pos-cart{
+      position:fixed;left:0;right:0;z-index:150;
+      bottom:calc(56px + env(safe-area-inset-bottom));   /* arriba de la barra de tabs */
+      max-height:76vh;overflow-y:auto;overscroll-behavior:contain;
+      background:var(--surface);border-top:1px solid var(--border);
+      border-radius:16px 16px 0 0;box-shadow:0 -8px 28px rgba(0,0,0,.16);
+      padding:0 12px 14px;transition:max-height .2s ease;
+    }
+    /* Plegado: se recorta a la altura de la barra, que es el primer hijo. Con
+       `transform` lo que quedaba a la vista eran los ÚLTIMOS 56px del contenido —el
+       final del carrito— en vez de la barra, que está arriba. */
+    .pos-cart.plegado{max-height:56px;overflow:hidden;}
+    .pos-handle{
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      position:sticky;top:0;z-index:2;width:100%;height:56px;
+      background:var(--surface);border:none;border-bottom:1px solid var(--border);
+      font-family:inherit;font-size:14px;color:var(--text);cursor:pointer;padding:0 4px;
+    }
+    .pos-handle .ph-izq{display:flex;align-items:center;gap:8px;font-weight:600;}
+    .pos-handle .ph-tot{font-family:'DM Mono',monospace;font-weight:600;}
+    .pos-handle .ph-flecha{color:var(--text3);transition:transform .2s;}
+    .pos-cart:not(.plegado) .ph-flecha{transform:rotate(180deg);}
+    /* Que el último producto no quede tapado por el cajón plegado. */
+    #page-ingresos{padding-bottom:70px;}
+    .pos-cart .card{margin-bottom:10px;}
+  }
   .pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
   .pos-tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.75rem;cursor:pointer;text-align:center;transition:all .12s;user-select:none;min-height:96px;display:flex;flex-direction:column;justify-content:space-between;}
   .pos-tile:hover{border-color:var(--accent);transform:translateY(-1px);}
@@ -1195,7 +1250,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.03-C</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.03-D</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -1641,7 +1696,12 @@
       <div id="pos-tab-vender">
         <div class="pos-layout">
           <!-- CARRITO -->
-          <div class="pos-cart">
+          <div class="pos-cart plegado" id="pos-cart">
+            <button class="pos-handle" id="pos-handle" onclick="togglePosCajon()">
+              <span class="ph-izq"><span id="ph-cant">🛒 Carrito vacío</span></span>
+              <span class="ph-tot" id="ph-total"></span>
+              <span class="ph-flecha">⌃</span>
+            </button>
             <div class="card" style="margin-bottom:12px;padding:14px 16px;">
               <div class="grid2" style="margin-bottom:0;">
                 <div class="field" style="margin-bottom:0;"><label>Cliente <span style="color:var(--text3);font-weight:400">(vacío = Cons. final)</span></label><input type="text" id="pos-cliente" placeholder="Nombre y apellido" list="clientes-global-dl" autocomplete="off" onchange="autofillTelCliente('pos')"></div>
@@ -7051,6 +7111,11 @@ function renderPosTiles(items){
   }).join('');
 }
 
+/** Abre o cierra el cajón del carrito en el celular. */
+window.togglePosCajon = function(){
+  document.getElementById('pos-cart')?.classList.toggle('plegado');
+};
+
 window.addToCart = function(tipo, refId){
   const p = posCatalog().find(x=>x.tipo===tipo && x.refId===refId);
   if(!p) return;
@@ -7187,6 +7252,15 @@ function renderCartTotalsOnly(){
     `<div class="medio-tag"><span>${esc(m.medio)} · ${m.moneda==='USD'?'u$s ':'$ '}${m.valor.toLocaleString('es-AR')}</span><button onclick="removePosMedio(${i})">×</button></div>`
   ).join('');
   document.getElementById('pos-total').textContent = fmtDual(t.totARS, t.totUSD, t.tc);
+
+  // La barra del cajón, en el celular. Se actualiza acá y no en otro lado: este es el
+  // único punto por donde pasan todos los cambios del carrito.
+  const n = cart.reduce((a, ci) => a + (ci.qty || 1), 0);
+  const phc = document.getElementById('ph-cant');
+  if(phc){
+    phc.textContent = n ? `🛒 ${n} producto${n === 1 ? '' : 's'}` : '🛒 Carrito vacío';
+    document.getElementById('ph-total').textContent = n ? fmtDual(t.totARS, t.totUSD, t.tc) : '';
+  }
   document.getElementById('pos-pagado').textContent = fmtDual(t.pagARS, t.pagUSD, t.tc);
   // resto: comparar en la moneda con más info
   const restoUSD = t.totUSD - t.pagUSD;
