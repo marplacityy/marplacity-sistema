@@ -1,0 +1,26 @@
+# Config de despliegue del Worker asistente (Telegram).
+#
+#   npx wrangler deploy            (parado en workers/asistente/)
+#
+# Es un Worker aparte del bot de Instagram y del facturador. Los tres hablan con la
+# misma base, pero atienden a gente distinta: ig-bot le contesta a clientes, facturador
+# emite comprobantes fiscales, y este le contesta SOLO al dueño. Mezclarlos haria que un
+# deploy de uno pueda romper a los otros.
+#
+# Los valores de las variables NO van aca: este repo es publico. Las Text viven en el
+# panel de Cloudflare y los Secret se cargan con `wrangler secret put`.
+#
+# keep_vars, por lo mismo que en los otros dos: sin ese flag wrangler borra del Worker
+# toda variable que no encuentre en este archivo.
+
+name = "asistente"
+main = "worker.js"
+compatibility_date = "2026-09-03"
+keep_vars = true
+
+# Los logs son la unica forma de ver por que el asistente contesto lo que contesto: que
+# herramientas pidio, con que argumentos y cuanto costo cada mensaje.
+[observability]
+enabled = true
+[observability.logs]
+enabled = true
