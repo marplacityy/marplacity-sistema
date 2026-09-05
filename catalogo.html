@@ -57,7 +57,11 @@
     display:flex;align-items:center;justify-content:center;
     font-size:34px;font-weight:700;color:var(--text3);letter-spacing:-.03em;overflow:hidden;
   }
-  .prod-foto img{width:100%;height:100%;object-fit:cover;}
+  /* Fondo blanco y la foto ENTERA, no recortada. Las de fabricante vienen sobre blanco
+     y con aire alrededor: recortarlas para llenar el cuadro le come los bordes al
+     equipo. `contain` respeta la proporcion y el blanco se funde con el recuadro. */
+  .prod-foto.con-foto{background:#FFF;}
+  .prod-foto img{width:100%;height:100%;object-fit:contain;padding:6px;}
   .prod-nombre{font-size:15px;font-weight:600;line-height:1.3;}
   .chips{display:flex;flex-wrap:wrap;gap:5px;}
   .chip{
@@ -153,7 +157,12 @@ function tarjeta(p){
   const wa = LOCAL.whatsapp ? `https://wa.me/${LOCAL.whatsapp}?text=${texto}` : null;
 
   return `<article class="prod">
-    <div class="prod-foto">${p.foto ? `<img src="${esc(p.foto)}" alt="${esc(p.nombre)}" loading="lazy">` : esc(inicial(p.nombre))}</div>
+    <div class="prod-foto${p.foto ? ' con-foto' : ''}">${p.foto
+      // Si la foto no esta (todavia no se subio, o el nombre no coincide), se cae al
+      // recuadro con el modelo en grande en vez de dejar el icono roto del navegador.
+      ? `<img src="${esc(p.foto)}" alt="${esc(p.nombre)}" loading="lazy"
+             onerror="this.parentElement.classList.remove('con-foto');this.parentElement.textContent='${esc(inicial(p.nombre))}';">`
+      : esc(inicial(p.nombre))}</div>
     <div class="prod-nombre">${esc(p.nombre)}</div>
     <div class="chips">${specs}</div>
     <div class="precio">${usd(p.precioUSD)}</div>
