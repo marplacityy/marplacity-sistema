@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.04-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.05-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -1346,6 +1346,9 @@
       </a>
       <a onclick="goTo('conocimiento')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>Base de conocimiento
+      </a>
+      <a onclick="goTo('catalogo')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Catálogo web
       </a>
       <a onclick="goTo('asistente')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Asistente
@@ -2837,6 +2840,39 @@
       </div>
     </div>
 
+    <!-- CATALOGO WEB — la vitrina publica -->
+    <div id="page-catalogo" class="page">
+      <div class="page-header">
+        <h1>Catálogo web</h1>
+        <p>Una página pública con los equipos que tenés, para mandarle a los clientes. Se publica cuando vos querés: hasta que toques el botón, lo que ve la gente es lo de la última vez.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">El link</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="cat-link" readonly onclick="this.select()"
+                 style="flex:1;min-width:240px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Mono',monospace;font-size:12.5px;color:var(--text);">
+          <button class="btn-secondary" onclick="copiarLinkCatalogo()">📋 Copiar</button>
+          <button class="btn-secondary" onclick="window.open(document.getElementById('cat-link').value,'_blank')">↗ Ver</button>
+        </div>
+        <div id="cat-estado" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Qué se va a publicar</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Entran los equipos <b>en stock con precio de venta cargado</b>, propios y de consignación. Podés sacar alguno de la lista sin borrarlo del sistema.</p>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">Del costo, el IMEI, el proveedor y las notas internas <b>no sale nada</b>: la página se arma con nombre, capacidad, color, batería, estado y precio.</p>
+        <div id="cat-resumen"></div>
+        <div style="overflow-x:auto;margin-top:10px;"><table class="tkh-table">
+          <thead><tr><th style="width:44px;">Sale</th><th>Producto</th><th style="width:70px;">GB</th><th style="width:110px;">Color</th><th style="width:70px;">Batería</th><th style="text-align:right;width:100px;">Precio</th></tr></thead>
+          <tbody id="cat-body"></tbody>
+        </table></div>
+        <div class="pos-actions" style="margin-top:14px;">
+          <button class="pos-btn-checkout" id="btn-cat-publicar" onclick="publicarCatalogo()">🌐 Publicar el catálogo</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ASISTENTE — habla en castellano y prepara el trabajo -->
     <div id="page-asistente" class="page">
       <div class="page-header">
@@ -3350,6 +3386,10 @@ async function init() {
       conoc = snap.exists() ? snap.data() : {};
       if(currentPage==='conocimiento') pintarConocimiento();
     }, snapErr);
+    onSnapshot(catalogoDoc, snap => {
+      catPublicado = snap.exists() ? snap.data() : null;
+      if(currentPage==='catalogo') renderCatalogo();
+    }, snapErr);
     onSnapshot(promptDoc, snap => {
       promptBot = snap.exists() ? snap.data() : {};
       if(currentPage==='conocimiento') pintarPromptBot();
@@ -3558,6 +3598,7 @@ window.goTo = function(page) {
   if(page==='facturas'){ populateIncCatFilter(); renderIngresos(); renderArcaBanner(); }
   if(page==='facturador') initFacturador();
   if(page==='asistente'){ agPintar(); agPintarFichas(); document.getElementById('ag-input')?.focus(); }
+  if(page==='catalogo') renderCatalogo();
   if(page==='consig'){ populateProveedoresDL(); populateConsigFilters(); renderConsig(); renderProveedores(); renderPagos(); }
   if(page==='reportes') renderReporte();
   if(page==='amort') renderAmort();
@@ -12647,6 +12688,122 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
     document.getElementById('fea-nc-esperando')?.remove();
     res.insertAdjacentHTML('beforeend', `<div class="proveedor-alerta alerta-urgente" style="margin-top:10px;">${esc(e.message)}</div>`);
   }
+};
+
+// ══ Catálogo web ═════════════════════════════════════════════
+//
+// Una página pública con los equipos que hay. Lo importante no es la página: es QUÉ SE
+// ESCRIBE en el documento que la alimenta.
+//
+// La regla de Firestore deja que ese doc lo lea cualquiera, sin estar logueado, porque
+// es para clientes. O sea que no hay forma de "mostrar solo algunos campos" del lado del
+// que lee: lo que esté adentro, se ve. Por eso el filtrado pasa acá, al escribir, y hay
+// una sola función que arma el producto público. Si algún día hay que sumar un dato, se
+// agrega ahí y en ningún otro lado.
+//
+// NUNCA entran: el costo (`valorUSD` en stock, `precioUSD` en consignación, que es lo
+// que se le debe al proveedor), el IMEI, el proveedor, las notas internas, ni los
+// chequeos de FMI y blacklist.
+
+const catalogoDoc = doc(db, 'catalogo', 'publico');
+let catPublicado = null;    // lo último que se publicó, para comparar
+
+const LINK_CATALOGO = 'https://marplacityy.github.io/marplacity-sistema/catalogo.html';
+
+/** Un equipo, con lo justo para mostrarlo. Es el único lugar que decide qué es público. */
+const productoPublico = (p, origen) => ({
+  id: `${origen}_${p.id}`,
+  nombre: String(p.nombre || p.producto || '').trim(),
+  gb: String(p.gb || '').trim(),
+  color: String(p.color || '').trim(),
+  bateria: p.bateria != null && p.bateria !== '' ? Number(p.bateria) : null,
+  ciclos: p.ciclos != null && p.ciclos !== '' ? Number(p.ciclos) : null,
+  estado: String(p.estadoProducto || p.cosmetica || '').trim(),
+  precioUSD: Number(origen === 'consig' ? p.precioVenta : p.precioVentaUSD) || 0,
+});
+
+/** Los equipos que califican: en stock y con precio de venta cargado. */
+function catalogoCandidatos(){
+  const fuera = new Set(cfg.catalogoExcluidos || []);
+  const items = [
+    ...stockItems.filter(p => p.status === 'en_stock').map(p => ({ ...productoPublico(p, 'stock'), _origen: 'Propio' })),
+    ...consigItems.filter(p => p.status === 'en_stock').map(p => ({ ...productoPublico(p, 'consig'), _origen: 'Consignación' })),
+  ];
+  return items.map(p => ({ ...p, _sale: p.precioUSD > 0 && !fuera.has(p.id) }));
+}
+
+function renderCatalogo(){
+  document.getElementById('cat-link').value = LINK_CATALOGO;
+  const items = catalogoCandidatos();
+  const salen = items.filter(p => p._sale);
+  const sinPrecio = items.filter(p => !p.precioUSD);
+
+  document.getElementById('cat-resumen').innerHTML = `
+    <div class="proveedor-alerta">
+      <b>${salen.length}</b> equipo${salen.length===1?'':'s'} en la página, de ${items.length} en stock.
+      ${sinPrecio.length ? `<br>⚠️ ${sinPrecio.length} sin precio de venta cargado: esos no se publican aunque los marques.` : ''}
+    </div>`;
+
+  document.getElementById('cat-body').innerHTML = items.map(p => `
+    <tr style="${p._sale?'':'opacity:.5;'}">
+      <td><input type="checkbox" ${p._sale?'checked':''} ${p.precioUSD?'':'disabled title="Sin precio de venta"'}
+            onchange="toggleCatalogo('${escJs(p.id)}',this.checked)"></td>
+      <td>${esc(p.nombre)}<div class="sub" style="font-size:10.5px;color:var(--text3);">${esc(p._origen)}${p.estado?' · '+esc(p.estado):''}</div></td>
+      <td>${esc(p.gb)}</td>
+      <td>${esc(p.color)}</td>
+      <td style="font-family:'DM Mono',monospace;">${p.bateria!=null?p.bateria+'%':'—'}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;">${p.precioUSD?fmtUSD(p.precioUSD):'—'}</td>
+    </tr>`).join('') || '<tr><td colspan="6" style="color:var(--text3);">No hay equipos en stock.</td></tr>';
+
+  // ¿Lo que se ve en la página coincide con lo que hay ahora?
+  const el = document.getElementById('cat-estado');
+  if(!catPublicado){
+    el.innerHTML = '<div class="proveedor-alerta alerta-atencion">Todavía no publicaste nunca. El link no muestra nada hasta que lo hagas.</div>';
+    return;
+  }
+  const ahora = JSON.stringify(salen.map(p => { const {_sale,_origen,...q} = p; return q; }));
+  const antes = JSON.stringify(catPublicado.productos || []);
+  const cuando = catPublicado.actualizado ? new Date(catPublicado.actualizado).toLocaleString('es-AR') : '';
+  el.innerHTML = ahora === antes
+    ? `<div class="proveedor-alerta">✅ La página está al día. Última publicación: ${esc(cuando)}.</div>`
+    : `<div class="proveedor-alerta alerta-atencion">🔔 <b>Hay cambios sin publicar.</b> La página muestra lo de ${esc(cuando)}; tocá Publicar para actualizarla.</div>`;
+}
+
+window.toggleCatalogo = function(id, sale){
+  const fuera = new Set(cfg.catalogoExcluidos || []);
+  sale ? fuera.delete(id) : fuera.add(id);
+  cfg.catalogoExcluidos = [...fuera];
+  setDoc(cfgDoc, withUser({ catalogoExcluidos: cfg.catalogoExcluidos }), {merge:true}).catch(()=>{});
+  renderCatalogo();
+};
+
+window.copiarLinkCatalogo = function(){
+  navigator.clipboard.writeText(LINK_CATALOGO)
+    .then(()=>showToast('Link copiado ✓'))
+    .catch(()=>showToast('No pude copiar — seleccionalo a mano', true));
+};
+
+window.publicarCatalogo = async function(){
+  const salen = catalogoCandidatos().filter(p => p._sale).map(p => { const {_sale,_origen,...q} = p; return q; });
+  if(!salen.length && !confirm('No hay ningún equipo para publicar.\n\nLa página va a quedar vacía. ¿Seguro?')) return;
+
+  const btn = document.getElementById('btn-cat-publicar');
+  btn.disabled = true; btn.textContent = 'Publicando…';
+  setSyncDot('syncing');
+  try{
+    await setDoc(catalogoDoc, withUser({
+      productos: salen,
+      actualizado: new Date().toISOString(),
+      local: {
+        nombre: cfg.localNombre || 'MarplaCity',
+        direccion: cfg.direccion || conoc.direccion || '',
+        horarios: conoc.horarios || '',
+        whatsapp: (cfg.localTel || '').replace(/\D/g,''),
+      },
+    }), {merge:false});
+    showToast(`Catálogo publicado ✓ — ${salen.length} equipo${salen.length===1?'':'s'}`);
+  }catch(e){ showToast('Error al publicar: '+e.message, true); setSyncDot('error'); }
+  btn.disabled = false; btn.textContent = '🌐 Publicar el catálogo';
 };
 
 // ══ Asistente ════════════════════════════════════════════════

@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Catálogo — MarplaCity</title>
+<meta name="description" content="Equipos disponibles en el local. Mar del Plata.">
+<meta name="theme-color" content="#1A1917">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png" type="image/png">
+
+<!-- Se ve bien cuando lo pegan en WhatsApp o Instagram -->
+<meta property="og:title" content="Catálogo — MarplaCity">
+<meta property="og:description" content="Equipos disponibles en el local, con precio. Mar del Plata.">
+<meta property="og:type" content="website">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F4F0; --surface:#FFF; --border:#E0DDD8;
+    --text:#1A1917; --text2:#6B6864; --text3:#A8A5A1;
+    --acc:#1A1917; --acc-fg:#F5F4F0; --green:#237A4B;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font-family:'DM Sans',-apple-system,system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1100px;margin:0 auto;padding:0 16px 64px;}
+
+  header{
+    position:sticky;top:0;z-index:10;background:var(--bg);
+    padding:20px 0 12px;border-bottom:1px solid var(--border);margin-bottom:18px;
+  }
+  .marca{font-size:22px;font-weight:700;letter-spacing:-.02em;}
+  .sub{font-size:13px;color:var(--text2);margin-top:2px;}
+  .buscador{
+    width:100%;margin-top:14px;padding:12px 14px;font-family:inherit;font-size:15px;
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    color:var(--text);outline:none;
+  }
+  .buscador:focus{border-color:var(--acc);}
+
+  .conteo{font-size:12.5px;color:var(--text3);margin:0 0 12px 2px;}
+
+  .grilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
+  .prod{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px;display:flex;flex-direction:column;gap:10px;
+  }
+  .prod-foto{
+    aspect-ratio:1;border-radius:10px;background:var(--bg);
+    display:flex;align-items:center;justify-content:center;
+    font-size:34px;font-weight:700;color:var(--text3);letter-spacing:-.03em;overflow:hidden;
+  }
+  .prod-foto img{width:100%;height:100%;object-fit:cover;}
+  .prod-nombre{font-size:15px;font-weight:600;line-height:1.3;}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;}
+  .chip{
+    font-size:11px;padding:3px 9px;border-radius:100px;
+    background:var(--bg);border:1px solid var(--border);color:var(--text2);white-space:nowrap;
+  }
+  .chip.bat{background:#EDF7F2;border-color:#A8DFC3;color:var(--green);font-weight:600;}
+  .precio{
+    font-family:'DM Mono',monospace;font-size:20px;font-weight:500;
+    margin-top:auto;padding-top:6px;
+  }
+  .consultar{
+    display:block;text-align:center;text-decoration:none;
+    padding:11px;border-radius:10px;background:var(--acc);color:var(--acc-fg);
+    font-family:inherit;font-size:13.5px;font-weight:600;
+  }
+
+  .aviso{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:28px 20px;text-align:center;color:var(--text2);font-size:14px;
+  }
+  footer{
+    margin-top:34px;padding-top:18px;border-top:1px solid var(--border);
+    font-size:12.5px;color:var(--text3);line-height:1.7;
+  }
+  footer a{color:var(--text2);}
+
+  @media(max-width:520px){
+    .grilla{grid-template-columns:1fr 1fr;gap:10px;}
+    .prod{padding:12px;gap:8px;}
+    .prod-nombre{font-size:13.5px;}
+    .precio{font-size:17px;}
+    .consultar{padding:9px;font-size:12.5px;}
+    .marca{font-size:19px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="marca" id="marca">MarplaCity</div>
+    <div class="sub" id="sub">Equipos disponibles en el local</div>
+    <input type="search" class="buscador" id="q" placeholder="Buscar modelo, color, capacidad…" autocomplete="off">
+  </header>
+
+  <div class="conteo" id="conteo"></div>
+  <div id="salida"><div class="aviso">Cargando…</div></div>
+
+  <footer id="pie"></footer>
+</div>
+
+<script>
+// La página es pública y no tiene login: lee un solo documento que el sistema publica
+// con los campos que se pueden mostrar. La clave de Firebase es pública por diseño —va
+// dentro de cualquier app web— y lo que protege los datos son las reglas, que sobre este
+// documento solo permiten LEER.
+const PROYECTO = 'mis-gastos-21e7b';
+const CLAVE = 'AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg';
+const URL = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/catalogo/publico?key=${CLAVE}`;
+
+let PRODUCTOS = [], LOCAL = {};
+
+const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const usd = n => 'u$s ' + Math.round(n).toLocaleString('es-AR');
+
+// Los valores de Firestore vienen envueltos por tipo ({stringValue:"x"}).
+const valor = v => v == null ? null
+  : 'stringValue'  in v ? v.stringValue
+  : 'integerValue' in v ? Number(v.integerValue)
+  : 'doubleValue'  in v ? v.doubleValue
+  : 'booleanValue' in v ? v.booleanValue
+  : 'nullValue'    in v ? null
+  : 'mapValue'     in v ? campos(v.mapValue.fields)
+  : 'arrayValue'   in v ? (v.arrayValue.values || []).map(valor)
+  : null;
+const campos = f => Object.fromEntries(Object.entries(f || {}).map(([k, v]) => [k, valor(v)]));
+
+/** La inicial del modelo, para cuando no hay foto. */
+const inicial = nombre => {
+  const m = String(nombre).match(/\d+/);
+  return m ? m[0].slice(0, 2) : String(nombre).trim().slice(0, 1).toUpperCase() || '·';
+};
+
+function tarjeta(p){
+  const specs = [
+    p.gb && `<span class="chip">${esc(p.gb)}</span>`,
+    p.color && `<span class="chip">${esc(p.color)}</span>`,
+    p.bateria != null && `<span class="chip bat">Batería ${p.bateria}%</span>`,
+    p.estado && `<span class="chip">${esc(p.estado)}</span>`,
+  ].filter(Boolean).join('');
+
+  const texto = encodeURIComponent(`Hola! Me interesa el ${p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} que vi en el catálogo`);
+  const wa = LOCAL.whatsapp ? `https://wa.me/${LOCAL.whatsapp}?text=${texto}` : null;
+
+  return `<article class="prod">
+    <div class="prod-foto">${p.foto ? `<img src="${esc(p.foto)}" alt="${esc(p.nombre)}" loading="lazy">` : esc(inicial(p.nombre))}</div>
+    <div class="prod-nombre">${esc(p.nombre)}</div>
+    <div class="chips">${specs}</div>
+    <div class="precio">${usd(p.precioUSD)}</div>
+    ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener">Consultar</a>` : ''}
+  </article>`;
+}
+
+function pintar(){
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const lista = q
+    ? PRODUCTOS.filter(p => `${p.nombre} ${p.gb} ${p.color} ${p.estado}`.toLowerCase().includes(q))
+    : PRODUCTOS;
+
+  document.getElementById('conteo').textContent =
+    lista.length ? `${lista.length} equipo${lista.length === 1 ? '' : 's'}${q ? ' encontrado' + (lista.length === 1 ? '' : 's') : ' disponibles'}` : '';
+
+  document.getElementById('salida').innerHTML = lista.length
+    ? `<div class="grilla">${lista.map(tarjeta).join('')}</div>`
+    : `<div class="aviso">${q ? 'No encontré nada con esa búsqueda.' : 'Por el momento no hay equipos publicados. Escribinos y te contamos qué hay.'}</div>`;
+}
+
+function hace(iso){
+  const min = Math.floor((Date.now() - new Date(iso)) / 60000);
+  if (min < 60) return 'hace un rato';
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} hora${h === 1 ? '' : 's'}`;
+  const d = Math.floor(h / 24);
+  return d === 1 ? 'ayer' : `hace ${d} días`;
+}
+
+(async () => {
+  try{
+    const r = await fetch(URL);
+    if(!r.ok) throw new Error('no se pudo cargar');
+    const d = campos((await r.json()).fields);
+
+    PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0);
+    LOCAL = d.local || {};
+
+    if(LOCAL.nombre) document.getElementById('marca').textContent = LOCAL.nombre;
+    document.getElementById('sub').textContent =
+      'Equipos disponibles en el local' + (d.actualizado ? ' · actualizado ' + hace(d.actualizado) : '');
+
+    document.getElementById('pie').innerHTML = [
+      LOCAL.direccion ? `📍 ${esc(LOCAL.direccion)}` : '',
+      LOCAL.horarios ? `🕗 ${esc(LOCAL.horarios)}` : '',
+      LOCAL.whatsapp ? `<a href="https://wa.me/${LOCAL.whatsapp}" target="_blank" rel="noopener">Escribinos por WhatsApp</a>` : '',
+      'Precios en dólar billete. Sujetos a disponibilidad.',
+    ].filter(Boolean).join('<br>');
+
+    pintar();
+  }catch(e){
+    document.getElementById('salida').innerHTML =
+      '<div class="aviso">No pudimos cargar el catálogo en este momento. Probá de nuevo en un rato.</div>';
+  }
+})();
+
+document.getElementById('q').addEventListener('input', pintar);
+</script>
+</body>
+</html>

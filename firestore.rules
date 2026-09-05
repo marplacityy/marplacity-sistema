@@ -226,6 +226,22 @@ service cloud.firestore {
       ];
     }
 
+    // EL CATALOGO PUBLICO. Un solo doc, que lee CUALQUIERA sin estar logueado: es una
+    // pagina para clientes.
+    //
+    // Lo que lo hace seguro no es esta regla, es lo que se escribe adentro. El sistema
+    // arma el documento con los campos publicos y nada mas: nombre, capacidad, color,
+    // bateria, estado y PRECIO DE VENTA. No entran el costo (`valorUSD` en stock,
+    // `precioUSD` en consignacion, que es lo que se le debe al proveedor), ni el IMEI,
+    // ni el proveedor, ni las notas internas.
+    //
+    // Por eso el filtrado va del lado del que escribe y no del que lee: aca no hay forma
+    // de "mostrar solo algunos campos". Lo que este en el doc, se ve.
+    match /catalogo/{docId} {
+      allow read:  if true;
+      allow write: if writesAsSelf();
+    }
+
     // Documentos compartidos por link de WhatsApp (facturas y ordenes en PDF).
     // El id del doc ES un token aleatorio de 128 bits que solo viaja en el link
     // que se le manda al cliente. Por eso:
