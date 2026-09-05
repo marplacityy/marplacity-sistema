@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.05-C</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.05-D</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -12705,16 +12705,25 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
 // que se le debe al proveedor), el IMEI, el proveedor, las notas internas, ni los
 // chequeos de FMI y blacklist.
 
-// Las fotos que ya están en el repo. Es una lista corta y se mantiene a mano a
-// propósito: el navegador no puede preguntar qué archivos hay en una carpeta, y salir a
-// probar una por una con fetch sería una consulta por modelo en cada render. Solo se usa
-// para avisar cuáles faltan; que la foto se vea no depende de esto.
-const FOTOS_QUE_HAY = new Set([
-  'iphone-13',
-  'iphone-14-pro',
-  'iphone-16e',
-  'iphone-16-pro-max',
-]);
+// Las fotos que hay en la carpeta `fotos/`, por modelo y color.
+//
+// Se mantiene a mano a propósito: el navegador no puede preguntar qué archivos hay en
+// una carpeta, y salir a probar una por una sería una consulta por producto en cada
+// render. Quien agrega una foto agrega el renglón, que es un segundo.
+//
+// La clave es `modelo-color` cuando la foto es de ese color, y `modelo` a secas cuando
+// sirve para cualquiera. Importa porque hay dos iPhone 15 en stock, uno negro y uno
+// rosa: con una sola foto por modelo, al rosa le saldría la del negro.
+const FOTOS = {
+  'iphone-13-blue':                    ['iphone-13-blue.png'],
+  'iphone-14-pro-blue':                ['iphone-14-pro-blue.png'],
+  'iphone-16e':                        ['iphone-16e.png'],
+  'iphone-16-pro-max-natural-titanium':['iphone-16-pro-max-natural-titanium.png'],
+  'iphone-15-black':      ['iphone-15-black.jpg'],
+  'iphone-15-green':      ['iphone-15-green.jpg', 'iphone-15-green-2.jpg', 'iphone-15-green-3.jpg'],
+  'iphone-15-blue':       ['iphone-15-blue.jpg'],
+  'iphone-17-pro-white':  ['iphone-17-pro-white.jpg', 'iphone-17-pro-white-2.jpg', 'iphone-17-pro-white-3.jpg'],
+};
 
 const catalogoDoc = doc(db, 'catalogo', 'publico');
 let catPublicado = null;    // lo último que se publicó, para comparar
@@ -12739,6 +12748,22 @@ const slugFoto = nombre => String(nombre || '')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim().replace(/\s+/g, '-');
 
+/**
+ * Las fotos de un equipo.
+ *
+ * Si el equipo TIENE color cargado, solo vale la foto de ese color. Nada de caer a una
+ * genérica: hay tres iPhone 13 en stock —Blue, Red y Midnight— y mostrarle al que
+ * compra un teléfono azul con el cartel "Red" al lado es peor que no mostrarle nada.
+ *
+ * La genérica queda para los equipos sin color cargado, donde no hay con qué
+ * contradecirse.
+ */
+function fotosDe(nombre, color){
+  const modelo = slugFoto(nombre);
+  const archivos = color ? (FOTOS[`${modelo}-${slugFoto(color)}`] || []) : (FOTOS[modelo] || []);
+  return archivos.map(f => `fotos/${f}`);
+}
+
 /** Un equipo, con lo justo para mostrarlo. Es el único lugar que decide qué es público. */
 const productoPublico = (p, origen) => ({
   id: `${origen}_${p.id}`,
@@ -12749,7 +12774,7 @@ const productoPublico = (p, origen) => ({
   ciclos: p.ciclos != null && p.ciclos !== '' ? Number(p.ciclos) : null,
   estado: String(p.estadoProducto || p.cosmetica || '').trim(),
   precioUSD: Number(origen === 'consig' ? p.precioVenta : p.precioVentaUSD) || 0,
-  foto: `fotos/${slugFoto(p.nombre || p.producto)}.png`,
+  fotos: fotosDe(p.nombre || p.producto, p.color),
 });
 
 /** Los equipos que califican: en stock y con precio de venta cargado. */
@@ -12776,12 +12801,13 @@ function renderCatalogo(){
     ${(()=>{
       // Qué modelos todavía no tienen imagen. La página igual los muestra, con el modelo
       // en grande; esto es para saber qué falta bajar.
-      const faltan = [...new Set(salen.map(p => slugFoto(p.nombre)))].filter(sl => !FOTOS_QUE_HAY.has(sl));
+      const faltan = [...new Set(salen.filter(p => !p.fotos.length)
+        .map(p => slugFoto(p.nombre) + (p.color ? '-' + slugFoto(p.color) : '')))];
       return faltan.length ? `<div class="proveedor-alerta alerta-atencion" style="margin-top:8px;">
         📷 <b>${faltan.length} modelo${faltan.length===1?'':'s'} sin foto.</b> Se muestran igual, con el modelo en grande.
         Para que aparezca la imagen, dejá el archivo en <code>fotos/</code> con este nombre exacto:
         <ul style="margin:6px 0 0 18px;font-family:'DM Mono',monospace;font-size:11.5px;">
-          ${faltan.map(f=>`<li>${esc(f)}.png</li>`).join('')}
+          ${faltan.map(f=>`<li>${esc(f)}.jpg</li>`).join('')}
         </ul></div>` : '';
     })()}`;
 
