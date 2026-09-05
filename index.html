@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.05-B</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.05-C</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -12705,10 +12705,39 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
 // que se le debe al proveedor), el IMEI, el proveedor, las notas internas, ni los
 // chequeos de FMI y blacklist.
 
+// Las fotos que ya están en el repo. Es una lista corta y se mantiene a mano a
+// propósito: el navegador no puede preguntar qué archivos hay en una carpeta, y salir a
+// probar una por una con fetch sería una consulta por modelo en cada render. Solo se usa
+// para avisar cuáles faltan; que la foto se vea no depende de esto.
+const FOTOS_QUE_HAY = new Set([
+  'iphone-13',
+  'iphone-14-pro',
+  'iphone-16e',
+  'iphone-16-pro-max',
+]);
+
 const catalogoDoc = doc(db, 'catalogo', 'publico');
 let catPublicado = null;    // lo último que se publicó, para comparar
 
 const LINK_CATALOGO = 'https://marplacityy.github.io/marplacity-sistema/catalogo.html';
+
+/**
+ * El nombre del archivo de foto que le corresponde a un modelo.
+ *
+ * No hay una tabla que asocie producto con imagen: el nombre ES la asociación. "iPhone
+ * 14 Pro" busca `fotos/iphone-14-pro.png`. Si el archivo no está, la página se cae sola
+ * al recuadro con el modelo en grande, así que sumar una foto es dejarla en esa carpeta
+ * con el nombre correcto y nada más — sin tocar código ni volver a publicar.
+ *
+ * Se le saca la capacidad porque la foto es del MODELO: un 128GB y un 256GB son la
+ * misma foto.
+ */
+const slugFoto = nombre => String(nombre || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')   // sin acentos
+  .toLowerCase()
+  .replace(/\b\d+\s?(gb|tb)\b/g, ' ')               // sin capacidad
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim().replace(/\s+/g, '-');
 
 /** Un equipo, con lo justo para mostrarlo. Es el único lugar que decide qué es público. */
 const productoPublico = (p, origen) => ({
@@ -12720,6 +12749,7 @@ const productoPublico = (p, origen) => ({
   ciclos: p.ciclos != null && p.ciclos !== '' ? Number(p.ciclos) : null,
   estado: String(p.estadoProducto || p.cosmetica || '').trim(),
   precioUSD: Number(origen === 'consig' ? p.precioVenta : p.precioVentaUSD) || 0,
+  foto: `fotos/${slugFoto(p.nombre || p.producto)}.png`,
 });
 
 /** Los equipos que califican: en stock y con precio de venta cargado. */
@@ -12742,7 +12772,18 @@ function renderCatalogo(){
     <div class="proveedor-alerta">
       <b>${salen.length}</b> equipo${salen.length===1?'':'s'} en la página, de ${items.length} en stock.
       ${sinPrecio.length ? `<br>⚠️ ${sinPrecio.length} sin precio de venta cargado: esos no se publican aunque los marques.` : ''}
-    </div>`;
+    </div>
+    ${(()=>{
+      // Qué modelos todavía no tienen imagen. La página igual los muestra, con el modelo
+      // en grande; esto es para saber qué falta bajar.
+      const faltan = [...new Set(salen.map(p => slugFoto(p.nombre)))].filter(sl => !FOTOS_QUE_HAY.has(sl));
+      return faltan.length ? `<div class="proveedor-alerta alerta-atencion" style="margin-top:8px;">
+        📷 <b>${faltan.length} modelo${faltan.length===1?'':'s'} sin foto.</b> Se muestran igual, con el modelo en grande.
+        Para que aparezca la imagen, dejá el archivo en <code>fotos/</code> con este nombre exacto:
+        <ul style="margin:6px 0 0 18px;font-family:'DM Mono',monospace;font-size:11.5px;">
+          ${faltan.map(f=>`<li>${esc(f)}.png</li>`).join('')}
+        </ul></div>` : '';
+    })()}`;
 
   document.getElementById('cat-body').innerHTML = items.map(p => `
     <tr style="${p._sale?'':'opacity:.5;'}">
