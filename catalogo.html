@@ -141,7 +141,7 @@
     font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
   }
   /* El pedido: mismo dialog que la ficha, otra pantalla. */
-  .pedido{padding:22px;display:flex;flex-direction:column;gap:14px;max-width:520px;margin:0 auto;}
+  .pedido-form{padding:22px;display:flex;flex-direction:column;gap:14px;max-width:520px;margin:0 auto;}
   .pedido-titulo{font-size:20px;font-weight:700;letter-spacing:-.02em;}
   .pedido-prod{display:flex;gap:12px;align-items:center;padding:12px;background:var(--bg);border-radius:10px;}
   .pedido-prod img{width:64px;height:64px;object-fit:contain;background:#FFF;border-radius:8px;flex:none;}
@@ -401,7 +401,7 @@ window.abrirPedido = id => {
 
   document.getElementById('ficha-contenido').innerHTML = `
     <button class="ficha-cerrar" onclick="cerrarFicha()" aria-label="Cerrar">×</button>
-    <form class="pedido" id="form-pedido" onsubmit="mandarPedido(event,'${esc(p.id)}')">
+    <form class="pedido-form" id="form-pedido" onsubmit="mandarPedido(event,'${esc(p.id)}')">
       <button type="button" class="volver" onclick="abrirFicha('${esc(p.id)}')">← Volver al producto</button>
       <div class="pedido-titulo">Tu pedido</div>
       <div class="pedido-prod">
