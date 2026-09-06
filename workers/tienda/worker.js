@@ -184,12 +184,27 @@ async function crearPedido(request, env, url) {
   return json({ id, estado: pedido.estado, url: pagoUrl });
 }
 
-/** Lo que la página puede mostrar de un pedido. Quien tiene el id (largo y al azar) ve esto y nada más. */
+/**
+ * Lo que la página puede mostrar de un pedido. Quien tiene el id (largo y al azar) ve
+ * esto y nada más.
+ *
+ * Si el pedido sigue "creado", antes de contestar se le pregunta a la pasarela por el
+ * pago. La página llama acá justo cuando el cliente vuelve de pagar, y el webhook puede
+ * no haber llegado todavía (o no estar configurado): sin esto, el cliente veía "pago
+ * aprobado" y el sistema "sin pagar". Pasó el 06/09/2026 con el primer pago real de Stripe.
+ */
 async function verPedido(id, env) {
   const idToken = await tokenDeLaTienda(env);
   if (!idToken) return json({ error: 'la tienda no se pudo loguear a Firebase' }, 503);
-  const d = await leerDoc(env, idToken, `pedidos/${id}`);
+  let d = await leerDoc(env, idToken, `pedidos/${id}`);
   if (!d) return json({ error: 'no existe' }, 404);
+  if (d.estado === 'creado') {
+    try {
+      if (d.pago === 'tarjeta' && d.stripe?.sessionId) await actualizarSesionStripe(env, d.stripe.sessionId);
+      if (d.pago === 'mp') await buscarPagoMP(env, id);
+      d = (await leerDoc(env, idToken, `pedidos/${id}`)) || d;
+    } catch (e) { console.log('no se pudo consultar el pago de', id, e.message); }
+  }
   return json({
     id, estado: d.estado, pago: d.pago, entrega: d.entrega,
     producto: d.producto?.nombre || '', montoUSD: d.montoUSD, montoARS: d.montoARS,
@@ -277,6 +292,14 @@ async function webhookMP(request, env, ctx, url) {
 
   ctx.waitUntil(actualizarPago(env, dataId).catch(e => console.log('webhook MP falló:', e.message)));
   return json({ ok: true });
+}
+
+/** Busca en MP el último pago de un pedido (por external_reference) y lo aplica. */
+async function buscarPagoMP(env, pedidoId) {
+  const r = await fetch(`${MP}/v1/payments/search?external_reference=${encodeURIComponent(pedidoId)}&sort=date_created&criteria=desc&limit=1`, { headers: mpHeaders(env) });
+  if (!r.ok) throw new Error(`MP no devolvió la búsqueda (${r.status})`);
+  const pago = (await r.json()).results?.[0];
+  if (pago?.id) await actualizarPago(env, pago.id);
 }
 
 async function actualizarPago(env, paymentId) {
