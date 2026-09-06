@@ -244,7 +244,7 @@ const PROYECTO = 'mis-gastos-21e7b';
 const CLAVE = 'AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg';
 const URL = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/catalogo/publico?key=${CLAVE}`;
 
-let PRODUCTOS = [], LOCAL = {}, COBRO = {};
+let PRODUCTOS = [], LOCAL = {}, COBRO = {}, CATEGORIAS = [];
 
 // El Worker que cobra. La página no tiene credenciales de nada: le manda el pedido y él
 // arma el link de pago con el precio publicado, no con el que diga la página.
@@ -610,6 +610,12 @@ function pintarFiltros(){ /* la portada va por secciones; los filtros ya no se d
 window.filtrar = t => { FILTRO = t; pintar(); window.scrollTo({ top: 0 }); };
 
 const tipoDe = p => p.tipo || 'equipo';
+const catDe = p => p.categoria || 'Otros';
+/** Las categorías en el orden publicado, más las que aparezcan sin estar en la lista. */
+function categorias(){
+  const vistas = [...new Set(PRODUCTOS.map(catDe))];
+  return [...CATEGORIAS.filter(c => vistas.includes(c)), ...vistas.filter(c => !CATEGORIAS.includes(c))];
+}
 
 /**
  * La portada: una sección por categoría con tres productos y "ver más". Buscando, se
@@ -629,10 +635,10 @@ function pintar(){
 
   // Buscando, o dentro de una categoría: una grilla sola.
   if (q || FILTRO !== 'todo') {
-    const lista = PRODUCTOS.filter(p => (q || tipoDe(p) === FILTRO) && coincide(p));
+    const lista = PRODUCTOS.filter(p => (q || catDe(p) === FILTRO) && coincide(p));
     conteo.textContent = lista.length ? `${lista.length} producto${lista.length === 1 ? '' : 's'}${q ? ' encontrado' + (lista.length === 1 ? '' : 's') : ''}` : '';
     salida.innerHTML = (q ? '' : `<button class="volver-cat" onclick="filtrar('todo')">← Todas las categorías</button>
-        <div class="seccion-cab"><div class="seccion-titulo">${TIPOS[FILTRO] || ''}</div></div>`) +
+        <div class="seccion-cab"><div class="seccion-titulo">${esc(FILTRO)}</div></div>`) +
       (lista.length
         ? `<div class="grilla">${lista.map(tarjeta).join('')}</div>`
         : '<div class="aviso">No encontré nada con esa búsqueda.</div>');
@@ -641,14 +647,13 @@ function pintar(){
 
   // La portada.
   conteo.textContent = '';
-  salida.innerHTML = Object.keys(TIPOS).map(t => {
-    const lista = PRODUCTOS.filter(p => tipoDe(p) === t);
-    if (!lista.length) return '';
+  salida.innerHTML = categorias().map(c => {
+    const lista = PRODUCTOS.filter(p => catDe(p) === c);
     const resto = lista.length - POR_SECCION;
     return `<section class="seccion">
-      <div class="seccion-cab"><div class="seccion-titulo">${TIPOS[t]}</div><div class="seccion-n">${lista.length} producto${lista.length === 1 ? '' : 's'}</div></div>
+      <div class="seccion-cab"><div class="seccion-titulo">${esc(c)}</div><div class="seccion-n">${lista.length} producto${lista.length === 1 ? '' : 's'}</div></div>
       <div class="grilla">${lista.slice(0, POR_SECCION).map(tarjeta).join('')}</div>
-      ${resto > 0 ? `<button class="vermas" onclick="filtrar('${t}')">Ver ${resto} más de ${TIPOS[t].toLowerCase()}</button>` : ''}
+      ${resto > 0 ? `<button class="vermas" onclick="filtrar('${esc(c)}')">Ver ${resto} más</button>` : ''}
     </section>`;
   }).join('');
 }
@@ -671,6 +676,7 @@ function hace(iso){
     PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0);
     LOCAL = d.local || {};
     COBRO = d.cobro || {};
+    CATEGORIAS = Array.isArray(d.categorias) ? d.categorias : [];
 
     if(LOCAL.nombre) document.getElementById('marca').textContent = LOCAL.nombre;
     document.getElementById('sub').textContent =

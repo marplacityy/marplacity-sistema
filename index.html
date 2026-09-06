@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-I</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-J</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2887,6 +2887,12 @@
           <button class="btn-secondary" id="btn-cat-ia" onclick="clasificarFotos()">🤖 Clasificar fotos nuevas</button>
           <button class="btn-secondary" id="btn-cat-fotos" onclick="sincronizarFotos()">🔄 Sincronizar con la carpeta</button>
         </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Las categorías</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">La portada muestra <b>3 productos por categoría</b>, en este orden, con un botón para ver el resto. La categoría de cada producto sale sola del nombre (iPhone, iPad, funda, cable…) y de si es nuevo o usado. Las vacías no se muestran.</p>
+        <div id="cat-categorias"></div>
       </div>
 
       <div class="card">
@@ -12942,6 +12948,70 @@ const pedidoPublico = (it, lista) => ({
 });
 
 /**
+ * La categoría de la página, deducida del nombre y del estado. Las categorías las pidió
+ * Juni el 06/09/2026; el orden de las secciones de la portada es este por defecto y se
+ * edita desde la pantalla Catálogo (cfg.catalogoCategorias). Las reglas se prueban de
+ * arriba a abajo y gana la primera: los accesorios van antes que los equipos porque
+ * "funda iPhone 15" tiene "iPhone" adentro.
+ */
+const CATEGORIAS_CATALOGO = [
+  'iPhone nuevos', 'iPhone usados', 'iPad nuevos', 'MacBook nuevas', 'Apple Watch nuevos', 'AirPods',
+  'Accesorios de carga', 'Accesorios iPad', 'Accesorios iPhone', 'Accesorios Apple',
+  'Celulares Samsung', 'Celulares Xiaomi', 'Notebooks', 'Otros',
+];
+const esUsado = p => /usad|refurb|reacond|impecab|\d+\s*\/\s*10/i.test(p.estado || '') || (p.bateria != null && !/nuev|sellad/i.test(p.estado || ''));
+/** El orden de las categorías: el editado si existe, completado con las que falten. */
+function ordenCategorias(){
+  const propio = Array.isArray(cfg.catalogoCategorias) ? cfg.catalogoCategorias.filter(c => CATEGORIAS_CATALOGO.includes(c)) : [];
+  return [...propio, ...CATEGORIAS_CATALOGO.filter(c => !propio.includes(c))];
+}
+
+window.moverCategoria = function(nombre, delta){
+  const orden = ordenCategorias();
+  const i = orden.indexOf(nombre), j = i + delta;
+  if (i < 0 || j < 0 || j >= orden.length) return;
+  [orden[i], orden[j]] = [orden[j], orden[i]];
+  cfg.catalogoCategorias = orden;
+  setDoc(cfgDoc, withUser({ catalogoCategorias: orden }), {merge:true}).catch(()=>{});
+  renderCatalogo();
+};
+
+function renderCategoriasCatalogo(){
+  const items = catalogoCandidatos().filter(p => p._sale);
+  const orden = ordenCategorias();
+  document.getElementById('cat-categorias').innerHTML = orden.map((c, i) => {
+    const n = items.filter(p => p.categoria === c).length;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);${n?'':'opacity:.5;'}">
+      <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);width:22px;">${i+1}</span>
+      <span style="flex:1;font-size:13px;">${esc(c)}</span>
+      <span style="font-size:11.5px;color:var(--text3);">${n ? n+' producto'+(n===1?'':'s') : 'vacía, no se muestra'}</span>
+      <button class="btn-secondary" style="padding:3px 8px;font-size:12px;" ${i===0?'disabled':''} onclick="moverCategoria('${escJs(c)}',-1)">▲</button>
+      <button class="btn-secondary" style="padding:3px 8px;font-size:12px;" ${i===orden.length-1?'disabled':''} onclick="moverCategoria('${escJs(c)}',1)">▼</button>
+    </div>`;
+  }).join('');
+}
+
+function categoriaDe(p){
+  const n = String(p.nombre || '');
+  const t = s => s.test(n);
+  if (t(/pencil|teclado|keyboard|smart folio|smart cover|magic keyboard/i) && t(/ipad|pencil/i)) return 'Accesorios iPad';
+  if (t(/funda|case|cover|vidrio|templado|glass|protector|magsafe|wallet/i) && t(/iphone|magsafe/i)) return 'Accesorios iPhone';
+  if (t(/funda|case|cover|teclado|keyboard/i) && t(/ipad/i)) return 'Accesorios iPad';
+  if (t(/airpods|auricular|earpods|beats/i)) return 'AirPods';
+  if (t(/apple watch|\bwatch\b|malla|band/i) && !t(/samsung|xiaomi|galaxy/i)) return 'Apple Watch nuevos';
+  if (t(/macbook|imac|mac mini|mac studio|\bmac\b/i)) return 'MacBook nuevas';
+  if (t(/ipad/i)) return 'iPad nuevos';
+  if (t(/iphone/i)) return esUsado(p) ? 'iPhone usados' : 'iPhone nuevos';
+  // Carga va después de los equipos: "AirPods Max (USB-C)" no es un cable.
+  if (t(/cargador|charger|cable|usb|lightning|adaptador|adapter|power ?bank|bater[ií]a externa|fuente|\bw\b|watt/i)) return 'Accesorios de carga';
+  if (t(/samsung|galaxy/i)) return 'Celulares Samsung';
+  if (t(/xiaomi|redmi|poco/i)) return 'Celulares Xiaomi';
+  if (t(/notebook|laptop|lenovo|\bhp\b|dell|asus|acer|thinkpad|chromebook/i)) return 'Notebooks';
+  if (t(/apple|airtag|homepod|apple tv|magic/i)) return 'Accesorios Apple';
+  return 'Otros';
+}
+
+/**
  * Todo lo que califica: equipos en stock, artículos del inventario con cantidad, y los
  * ítems de la última lista de cada origen. Un mismo producto en dos listas entra una sola
  * vez, con el precio de la primera (Mar del Plata, CABA, proveedor, en ese orden).
@@ -12964,7 +13034,7 @@ function catalogoCandidatos(){
       items.push({ ...p, _origen: 'Lista ' + KB_ORIGENES[origen] });
     }
   }
-  return items.map(p => ({ ...p, descripcion: String(notas[p.id] || '').trim(), _sale: p.precioUSD > 0 && !fuera.has(p.id) }));
+  return items.map(p => ({ ...p, categoria: categoriaDe(p), descripcion: String(notas[p.id] || '').trim(), _sale: p.precioUSD > 0 && !fuera.has(p.id) }));
 }
 
 /** La descripción que escribe Juni para un producto. Vive en la config, por id. */
@@ -13001,12 +13071,13 @@ function renderCatalogo(){
     })()}`;
 
   renderFotosCatalogo();
+  renderCategoriasCatalogo();
 
   document.getElementById('cat-body').innerHTML = items.map(p => `
     <tr style="${p._sale?'':'opacity:.5;'}">
       <td><input type="checkbox" ${p._sale?'checked':''} ${p.precioUSD?'':'disabled title="Sin precio de venta"'}
             onchange="toggleCatalogo('${escJs(p.id)}',this.checked)"></td>
-      <td>${esc(p.nombre)}<div class="sub" style="font-size:10.5px;color:var(--text3);">${esc(p._origen)}${p.estado?' · '+esc(p.estado):''}</div></td>
+      <td>${esc(p.nombre)}<div class="sub" style="font-size:10.5px;color:var(--text3);">${esc(p._origen)}${p.estado?' · '+esc(p.estado):''} · <b>${esc(p.categoria)}</b></div></td>
       <td>${esc(p.gb)}</td>
       <td>${esc(p.color)}</td>
       <td style="font-family:'DM Mono',monospace;">${p.bateria!=null?p.bateria+'%':'—'}</td>
@@ -13022,8 +13093,8 @@ function renderCatalogo(){
     el.innerHTML = '<div class="proveedor-alerta alerta-atencion">Todavía no publicaste nunca. El link no muestra nada hasta que lo hagas.</div>';
     return;
   }
-  const ahora = JSON.stringify(salen.map(p => { const {_sale,_origen,...q} = p; return q; }));
-  const antes = JSON.stringify(catPublicado.productos || []);
+  const ahora = JSON.stringify(salen.map(p => { const {_sale,_origen,...q} = p; return q; })) + JSON.stringify(ordenCategorias());
+  const antes = JSON.stringify(catPublicado.productos || []) + JSON.stringify(catPublicado.categorias || []);
   const cuando = catPublicado.actualizado ? new Date(catPublicado.actualizado).toLocaleString('es-AR') : '';
   el.innerHTML = ahora === antes
     ? `<div class="proveedor-alerta">✅ La página está al día. Última publicación: ${esc(cuando)}.</div>`
@@ -13341,6 +13412,7 @@ window.publicarCatalogo = async function(){
       },
       // Lo que la página necesita para armar el pedido. El tipo de cambio es el de
       // Configuración al momento de publicar: si cambia, hay que volver a publicar.
+      categorias: ordenCategorias(),
       cobro: {
         tc: parseFloat(cfg.tc) || 0,
         recargoTarjetaPct: RECARGO_TARJETA_PCT,

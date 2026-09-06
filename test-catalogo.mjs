@@ -37,4 +37,31 @@ assert.deepEqual(
   { 'iphone-13-red': ['iphone-13-blue.jpg'] },
 );
 
+// ── categoriaDe ──
+const srcCat = [
+  html.match(/const CATEGORIAS_CATALOGO = \[[\s\S]*?\];/)[0],
+  html.match(/const esUsado = .*;\n/)[0],
+  html.match(/function categoriaDe\(p\)\{[\s\S]*?return 'Otros';\n\}/)[0],
+].join('\n');
+const categoriaDe = new Function(srcCat + '; return categoriaDe;')();
+const casos = [
+  [{ nombre: 'iPhone 15 128GB Black', estado: '9/10', bateria: 87 }, 'iPhone usados'],
+  [{ nombre: 'iPhone 16 Pro Max 256GB White', estado: 'Nuevo' }, 'iPhone nuevos'],
+  [{ nombre: 'iPhone 13 512 Red', estado: '', bateria: 100 }, 'iPhone usados'],
+  [{ nombre: 'iPhone 17 Pro', estado: '' }, 'iPhone nuevos'],
+  [{ nombre: 'Genuine Apple Clear Case with MagSafe for iPhone 16' }, 'Accesorios iPhone'],
+  [{ nombre: 'Genuine Apple USB-C to Lightning Cables' }, 'Accesorios de carga'],
+  [{ nombre: 'Apple Pencil Pro' }, 'Accesorios iPad'],
+  [{ nombre: 'iPad Air M2 128GB' }, 'iPad nuevos'],
+  [{ nombre: 'MacBook Air M3 13' }, 'MacBook nuevas'],
+  [{ nombre: 'Apple Watch Series 10 45mm' }, 'Apple Watch nuevos'],
+  [{ nombre: 'AirPods Max (USB-C) Black' }, 'AirPods'],
+  [{ nombre: 'Samsung Galaxy S24 Ultra' }, 'Celulares Samsung'],
+  [{ nombre: 'Xiaomi Redmi Note 13' }, 'Celulares Xiaomi'],
+  [{ nombre: 'Lenovo IdeaPad 3' }, 'Notebooks'],
+  [{ nombre: 'AirTag pack x4' }, 'Accesorios Apple'],
+  [{ nombre: 'Parlante JBL Go' }, 'Otros'],
+];
+for (const [p, esperado] of casos) assert.equal(categoriaDe(p), esperado, `${p.nombre} → ${esperado}`);
+
 console.log('Todo verde');
