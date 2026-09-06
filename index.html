@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-B</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-C</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -12940,6 +12940,16 @@ function clavesDeProductos(){
   return [...claves].sort();
 }
 
+// Qué muestra la foto, en el orden en que van dentro de un producto: la de frente y dorso
+// juntos es la principal en todo el catálogo; después el frente solo, y el resto.
+const VISTAS = { ambos: 'frente y dorso', frente: 'frente', dorso: 'dorso', lateral: 'lateral', caja: 'caja', otro: 'otro' };
+
+const selectVista = (archivo, actual) => `<select onchange="vistaFoto('${escJs(archivo)}',this.value)"
+      style="width:100%;font-size:11px;padding:4px 6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);">
+    <option value="">vista: ?</option>
+    ${Object.entries(VISTAS).map(([k,v])=>`<option value="${k}" ${k===actual?'selected':''}>vista: ${v}</option>`).join('')}
+  </select>`;
+
 const selectClave = (archivo, actual) => {
   const opciones = [...new Set([...clavesDeProductos(), ...Object.keys(FOTOS)])].sort();
   return `<select onchange="asignarFoto('${escJs(archivo)}',this.value)"
@@ -12960,8 +12970,9 @@ function renderFotosCatalogo(){
       ${FOTOS[k].map(a => { const c = FOTOS_CLAS[a] || {}; return `
         <div style="width:150px;">
           <img src="${esc(FOTOS_BASE + a)}" loading="lazy" style="width:150px;height:110px;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);">
-          <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--text3);margin:4px 0;word-break:break-all;">${esc(a)}${c.vista?` · ${esc(c.vista)}`:''}${c.manual?' · a mano':c.clave?' · IA':''}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--text3);margin:4px 0;word-break:break-all;">${esc(a)}${c.manual?' · a mano':c.clave?' · IA':''}</div>
           ${selectClave(a, k)}
+          ${selectVista(a, c.vista)}
         </div>`; }).join('')}
     </div>`;
 
@@ -12985,6 +12996,16 @@ function renderFotosCatalogo(){
 }
 
 window.abrirFotoCat = k => { fotoAbierta = fotoAbierta === k ? null : k; renderFotosCatalogo(); };
+
+/** Corregir qué muestra una foto. Cambia el orden dentro del producto: "ambos" pasa a ser la principal. */
+window.vistaFoto = async function(archivo, vista){
+  const previa = FOTOS_CLAS[archivo] || {};
+  // Si el archivo no tenía decisión, la clave sigue saliendo del nombre: se conserva la que tiene hoy.
+  const clave = 'clave' in previa ? previa.clave : (Object.keys(FOTOS).find(k => FOTOS[k].includes(archivo)) || null);
+  FOTOS_CLAS = { ...FOTOS_CLAS, [archivo]: { ...previa, clave, vista: vista || '', manual: true } };
+  const archivos = [...new Set([...Object.values(FOTOS).flat(), ...Object.keys(FOTOS_CLAS)])];
+  await guardarFotos(archivos);
+};
 
 /** Mover una foto a un producto (o sacarla). Lo que se decide a mano pisa a la IA y al nombre. */
 window.asignarFoto = async function(archivo, clave){
@@ -13023,9 +13044,11 @@ function armarMapaFotos(archivos, clasificacion){
     }
     (mapa[clave] ||= []).push(nombre);
   }
+  const orden = ['ambos', 'frente'];
   const peso = a => {
     const v = clasificacion[a]?.vista;
-    return v === 'frente' ? 0 : v ? 2 : 1;
+    const i = orden.indexOf(v);
+    return i >= 0 ? i : v ? 3 : 2;     // ambos, frente, sin dato, el resto
   };
   for(const k in mapa) mapa[k].sort((a,b) => peso(a) - peso(b) || a.length - b.length || a.localeCompare(b));
   return mapa;
@@ -13117,12 +13140,12 @@ ${JSON.stringify(productos)}
 
 Reglas:
 - Mirá el equipo de la foto: modelo (por cámaras, botones, isla, notch, tamaño), color, si es un accesorio.
-- Si la foto muestra el frente del equipo (pantalla), vista = "frente". El dorso, "dorso". De costado, "lateral". La caja o los accesorios, "caja". Otra cosa, "otro".
+- vista: si la foto muestra el FRENTE Y EL DORSO JUNTOS (dos teléfonos lado a lado, uno de pantalla y otro de espalda), vista = "ambos": esa es la foto principal. Solo el frente (pantalla), "frente". Solo el dorso, "dorso". De costado, "lateral". La caja o los accesorios, "caja". Otra cosa, "otro".
 - Si dudás entre dos modelos parecidos (13 vs 14, Pro vs no Pro), poné confianza "baja".
 - No inventes colores que no están en la lista para ese producto.
 
 Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
-[{"archivo":"...","producto":"iPhone 13"|null,"color":"Red"|"","vista":"frente|dorso|lateral|caja|otro","confianza":"alta|baja","nota":"qué viste, en 5 palabras"}]` });
+[{"archivo":"...","producto":"iPhone 13"|null,"color":"Red"|"","vista":"ambos|frente|dorso|lateral|caja|otro","confianza":"alta|baja","nota":"qué viste, en 5 palabras"}]` });
 
       const resp = await fetch(WORKER_URL, {
         method: 'POST',

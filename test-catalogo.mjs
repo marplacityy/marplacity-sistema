@@ -19,15 +19,16 @@ assert.deepEqual(
   { 'iphone-15-black': ['iphone-15-black.jpg', 'iphone-15-black-2.jpg'], 'galaxy-s23-2': ['galaxy-s23-2.jpg'] },
 );
 
-// Lo que decidió la IA manda sobre el nombre, y el frente va primero.
+// Lo que decidió la IA manda sobre el nombre. Orden: frente y dorso juntos, frente, sin dato, el resto.
 const clas = {
   'IMG_1.jpg': { clave: 'iphone-13-red', vista: 'dorso' },
   'IMG_2.jpg': { clave: 'iphone-13-red', vista: 'frente' },
   'IMG_3.jpg': { clave: null, vista: 'otro' },          // mirada y sin producto: no entra
+  'IMG_4.jpg': { clave: 'iphone-13-red', vista: 'ambos' },
 };
 assert.deepEqual(
-  armarMapaFotos(['IMG_1.jpg', 'IMG_2.jpg', 'IMG_3.jpg', 'iphone-13-red-2.jpg'], clas),
-  { 'iphone-13-red': ['IMG_2.jpg', 'iphone-13-red-2.jpg', 'IMG_1.jpg'] },   // frente, sin dato, dorso
+  armarMapaFotos(['IMG_1.jpg', 'IMG_2.jpg', 'IMG_3.jpg', 'IMG_4.jpg', 'iphone-13-red-2.jpg'], clas),
+  { 'iphone-13-red': ['IMG_4.jpg', 'IMG_2.jpg', 'iphone-13-red-2.jpg', 'IMG_1.jpg'] },
 );
 
 // Una foto con nombre "bueno" que la IA reasignó, va donde dijo la IA.
