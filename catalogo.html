@@ -372,12 +372,13 @@ function formasDePago(p){
   const usd = Number(p.precioUSD) || 0;
   const tc = Number(COBRO.tc) || 0;
   const rec = Number(COBRO.recargoTarjetaPct) || 0;
+  const recMp = Number(COBRO.recargoMpPct) || 0;
   const mpMax = Number(COBRO.mpMaxUSD) || 0;
   const formas = [];
   if (tc && mpMax && usd <= mpMax) formas.push({
     id: 'mp', titulo: 'En pesos con Mercado Pago',
-    detalle: `${ars(usd * tc)} · al dólar de hoy (${tc.toLocaleString('es-AR')})`,
-    total: ars(usd * tc), boton: 'Pagar con Mercado Pago',
+    detalle: `${ars(usd * tc * (1 + recMp / 100))} · al dólar de hoy (${tc.toLocaleString('es-AR')})${recMp ? `, incluye ${recMp}% por Mercado Pago` : ''}`,
+    total: ars(usd * tc * (1 + recMp / 100)), boton: 'Pagar con Mercado Pago',
   });
   formas.push({
     id: 'tarjeta', titulo: 'En dólares con tarjeta',

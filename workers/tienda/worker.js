@@ -111,12 +111,14 @@ export function montoDelPedido(producto, pago, cobro) {
   const usd = Number(producto.precioUSD) || 0;
   const tc = Number(cobro?.tc) || 0;
   const rec = Number(cobro?.recargoTarjetaPct) || 0;
+  const recMp = Number(cobro?.recargoMpPct) || 0;
   const mpMax = Number(cobro?.mpMaxUSD) || 0;
   if (usd <= 0) return { error: 'el producto no tiene precio' };
   if (pago === 'mp') {
     if (!tc) return { error: 'el catálogo no tiene tipo de cambio: hay que volver a publicarlo' };
     if (mpMax && usd > mpMax) return { error: `Mercado Pago solo para productos de hasta u$s ${mpMax}` };
-    return { montoUSD: usd, montoARS: Math.round(usd * tc), tc };
+    // El recargo cubre la comisión de MP: el cliente paga el precio más ese porcentaje.
+    return { montoUSD: usd, montoARS: Math.round(usd * tc * (1 + recMp / 100)), tc };
   }
   if (pago === 'tarjeta') return { montoUSD: Math.round(usd * (1 + rec / 100)), montoARS: null, tc };
   return { montoUSD: usd, montoARS: null, tc };

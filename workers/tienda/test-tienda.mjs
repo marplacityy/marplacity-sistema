@@ -16,8 +16,9 @@ assert.ok(validarPedido({ productoId: 'x', pago: 'mp', entrega: 'envio', nombre:
 assert.ok(validarPedido({ productoId: 'x', pago: 'mp', entrega: 'retiro', nombre: 'Ana', whatsapp: '12' }).error, 'whatsapp corto');
 
 // ── montoDelPedido ──
-const cobro = { tc: 1410, recargoTarjetaPct: 5, mpMaxUSD: 200 };
-assert.deepEqual(montoDelPedido({ precioUSD: 150 }, 'mp', cobro), { montoUSD: 150, montoARS: 211500, tc: 1410 });
+const cobro = { tc: 1410, recargoTarjetaPct: 5, recargoMpPct: 8, mpMaxUSD: 200 };
+assert.deepEqual(montoDelPedido({ precioUSD: 150 }, 'mp', cobro), { montoUSD: 150, montoARS: 228420, tc: 1410 }, 'MP lleva 8%');
+assert.equal(montoDelPedido({ precioUSD: 150 }, 'mp', { tc: 1410, mpMaxUSD: 200 }).montoARS, 211500, 'sin recargo cargado, sin recargo');
 assert.ok(montoDelPedido({ precioUSD: 950 }, 'mp', cobro).error, 'un teléfono no va por MP');
 assert.equal(montoDelPedido({ precioUSD: 950 }, 'tarjeta', cobro).montoUSD, 998, 'tarjeta lleva 5%');
 assert.equal(montoDelPedido({ precioUSD: 950 }, 'efectivo', cobro).montoUSD, 950);
