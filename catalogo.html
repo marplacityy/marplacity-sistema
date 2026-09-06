@@ -56,16 +56,20 @@
   .filtro.on{background:var(--acc);border-color:var(--acc);color:var(--acc-fg);}
 
   .grilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
-  /* Una sección por categoría: título, tres productos y "ver más". */
-  .seccion{margin:0 0 26px;}
-  .seccion-cab{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 10px 2px;}
+  /* Una sección por categoría: título con "ver todos" al lado, y una fila que se desliza
+     de derecha a izquierda con frenado en cada tarjeta. Sin JS: scroll-snap nativo. */
+  .seccion{margin:0 0 22px;}
+  .seccion-cab{display:flex;align-items:baseline;gap:12px;margin:0 0 8px 2px;}
   .seccion-titulo{font-size:17px;font-weight:700;letter-spacing:-.02em;}
-  .seccion-n{font-size:12.5px;color:var(--text3);}
-  .vermas{
-    display:block;width:100%;margin-top:10px;padding:11px;border-radius:10px;text-align:center;
-    background:var(--surface);border:1px solid var(--border);color:var(--text);
-    font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
+  .vertodos{font-size:12.5px;font-weight:600;color:var(--text2);text-decoration:none;white-space:nowrap;}
+  .vertodos:hover{color:var(--text);}
+  .fila{
+    display:flex;gap:12px;overflow-x:auto;padding:2px 2px 10px;
+    scroll-snap-type:x mandatory;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;overscroll-behavior-x:contain;
   }
+  .fila::-webkit-scrollbar{display:none;}
+  .fila .prod{flex:0 0 230px;scroll-snap-align:start;}
   .volver-cat{
     background:none;border:none;font-family:inherit;font-size:13px;color:var(--text2);
     cursor:pointer;padding:0;margin:0 0 12px 2px;display:block;
@@ -218,9 +222,11 @@
     .precio{font-size:13px;padding-top:2px;}
     .puntos{bottom:3px;gap:3px;}
     .punto{width:4px;height:4px;}
-    .seccion{margin-bottom:20px;}
+    .seccion{margin-bottom:18px;}
     .seccion-titulo{font-size:15px;}
-    .vermas{padding:9px;font-size:12.5px;}
+    .vertodos{font-size:12px;}
+    .fila{gap:8px;padding-bottom:6px;}
+    .fila .prod{flex:0 0 calc((100% - 16px) / 3);}
     .marca{font-size:19px;}
   }
 </style>
@@ -599,10 +605,13 @@ async function pedidoDesdeUrl(){
   pantallaPedido(d);
 }
 
-/** Abre la ficha que pide la URL, si hay una. */
+/** Abre lo que pide la URL: #p=id es una ficha, #c=slug una categoría. */
 function fichaDesdeUrl(){
-  const m = /^#p=(.+)$/.exec(location.hash);
-  if (m) abrirFicha(decodeURIComponent(m[1]));
+  const p = /^#p=(.+)$/.exec(location.hash);
+  if (p) { abrirFicha(decodeURIComponent(p[1])); return; }
+  const c = /^#c=(.+)$/.exec(location.hash);
+  const cat = c && categoriaPorSlug(decodeURIComponent(c[1]));
+  if (cat && FILTRO !== cat) { FILTRO = cat; pintar(); }
 }
 
 /** Cambia la foto que se ve. Vive en window porque la llama el onclick del puntito. */
@@ -612,11 +621,22 @@ window.verFoto = (boton, k) => {
   caja.querySelectorAll('.punto').forEach((b, i) => b.classList.toggle('on', i === k));
 };
 
-// Cuántos productos muestra cada categoría en la portada antes del "ver más".
-const POR_SECCION = 3;
-
 function pintarFiltros(){ /* la portada va por secciones; los filtros ya no se dibujan */ }
-window.filtrar = t => { FILTRO = t; pintar(); window.scrollTo({ top: 0 }); };
+
+/** El slug de una categoría para el link: "Accesorios de carga" → accesorios-de-carga. */
+const slug = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const categoriaPorSlug = sl => categorias().find(c => slug(c) === sl) || null;
+
+/**
+ * Abrir una categoría (o volver a la portada con 'todo'). Queda en la URL como #c=slug,
+ * así cada categoría tiene su link: catalogo.html#c=accesorios-de-carga.
+ */
+window.filtrar = t => {
+  FILTRO = t;
+  history.replaceState(null, '', t === 'todo' ? location.pathname + location.search : '#c=' + slug(t));
+  pintar();
+  window.scrollTo({ top: 0 });
+};
 
 const tipoDe = p => p.tipo || 'equipo';
 const catDe = p => p.categoria || 'Otros';
@@ -658,11 +678,12 @@ function pintar(){
   conteo.textContent = '';
   salida.innerHTML = categorias().map(c => {
     const lista = PRODUCTOS.filter(p => catDe(p) === c);
-    const resto = lista.length - POR_SECCION;
     return `<section class="seccion">
-      <div class="seccion-cab"><div class="seccion-titulo">${esc(c)}</div><div class="seccion-n">${lista.length} producto${lista.length === 1 ? '' : 's'}</div></div>
-      <div class="grilla">${lista.slice(0, POR_SECCION).map(tarjeta).join('')}</div>
-      ${resto > 0 ? `<button class="vermas" onclick="filtrar('${esc(c)}')">Ver ${resto} más</button>` : ''}
+      <div class="seccion-cab">
+        <div class="seccion-titulo">${esc(c)}</div>
+        <a class="vertodos" href="#c=${slug(c)}" onclick="event.preventDefault();filtrar('${esc(c)}')">Ver todos (${lista.length}) ›</a>
+      </div>
+      <div class="fila">${lista.map(tarjeta).join('')}</div>
     </section>`;
   }).join('');
 }
@@ -709,7 +730,10 @@ function hace(iso){
 })();
 
 document.getElementById('q').addEventListener('input', pintar);
-window.addEventListener('hashchange', () => { if (location.hash) fichaDesdeUrl(); else document.getElementById('ficha').close(); });
+window.addEventListener('hashchange', () => {
+  if (!location.hash) { document.getElementById('ficha').close(); if (FILTRO !== 'todo') { FILTRO = 'todo'; pintar(); } return; }
+  fichaDesdeUrl();
+});
 </script>
 </body>
 </html>
