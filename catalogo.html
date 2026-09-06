@@ -56,6 +56,20 @@
   .filtro.on{background:var(--acc);border-color:var(--acc);color:var(--acc-fg);}
 
   .grilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
+  /* Una sección por categoría: título, tres productos y "ver más". */
+  .seccion{margin:0 0 26px;}
+  .seccion-cab{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:0 0 10px 2px;}
+  .seccion-titulo{font-size:17px;font-weight:700;letter-spacing:-.02em;}
+  .seccion-n{font-size:12.5px;color:var(--text3);}
+  .vermas{
+    display:block;width:100%;margin-top:10px;padding:11px;border-radius:10px;text-align:center;
+    background:var(--surface);border:1px solid var(--border);color:var(--text);
+    font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
+  }
+  .volver-cat{
+    background:none;border:none;font-family:inherit;font-size:13px;color:var(--text2);
+    cursor:pointer;padding:0;margin:0 0 12px 2px;display:block;
+  }
   .prod{
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
     padding:16px;display:flex;flex-direction:column;gap:10px;cursor:pointer;
@@ -167,11 +181,23 @@
   .pedido-total .s{font-size:12px;color:var(--text3);}
   .volver{background:none;border:none;font-family:inherit;font-size:13px;color:var(--text2);cursor:pointer;padding:0;text-align:left;}
 
+  /* Celular: la ficha ocupa la pantalla y tiene que caber de un vistazo. La foto va a una
+     altura fija y chica (la tarjeta ya la mostró grande), el resto compacto, y la ventana
+     con scroll propio para que el pedido largo no quede cortado. */
   @media(max-width:640px){
-    dialog.ficha{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0;margin:0;}
+    dialog.ficha{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0;margin:0;overflow-y:auto;}
     .ficha-cuerpo{grid-template-columns:1fr;}
-    .ficha-galeria{padding:14px;}
-    .ficha-grande{aspect-ratio:auto;height:46vw;max-height:320px;}
+    .ficha-galeria{padding:12px 12px 8px;gap:8px;}
+    .ficha-grande{aspect-ratio:auto;height:180px;font-size:48px;}
+    .ficha-mini img{width:44px;height:44px;}
+    .ficha-datos{padding:14px 16px 20px;gap:10px;}
+    .ficha-nombre{font-size:18px;padding-right:36px;}
+    .ficha-desc{font-size:13.5px;}
+    .ficha-precio{font-size:24px;padding-top:4px;}
+    .ficha-cerrar{position:fixed;top:10px;right:10px;z-index:2;box-shadow:0 1px 4px rgba(0,0,0,.15);}
+    .pedido-form{padding:16px;gap:12px;}
+    .pedido-titulo{font-size:18px;padding-right:36px;}
+    .pedido-prod img{width:52px;height:52px;}
   }
 
   footer{
@@ -577,27 +603,54 @@ window.verFoto = (boton, k) => {
   caja.querySelectorAll('.punto').forEach((b, i) => b.classList.toggle('on', i === k));
 };
 
-/** Los botones de filtro. Solo aparecen los tipos que hay, y ninguno si hay uno solo. */
-function pintarFiltros(){
-  const tipos = Object.keys(TIPOS).filter(t => PRODUCTOS.some(p => (p.tipo || 'equipo') === t));
-  document.getElementById('filtros').innerHTML = tipos.length > 1
-    ? ['todo', ...tipos].map(t => `<button class="filtro${FILTRO === t ? ' on' : ''}" onclick="filtrar('${t}')">${t === 'todo' ? 'Todo' : TIPOS[t]}</button>`).join('')
-    : '';
-}
-window.filtrar = t => { FILTRO = t; pintarFiltros(); pintar(); };
+// Cuántos productos muestra cada categoría en la portada antes del "ver más".
+const POR_SECCION = 3;
 
+function pintarFiltros(){ /* la portada va por secciones; los filtros ya no se dibujan */ }
+window.filtrar = t => { FILTRO = t; pintar(); window.scrollTo({ top: 0 }); };
+
+const tipoDe = p => p.tipo || 'equipo';
+
+/**
+ * La portada: una sección por categoría con tres productos y "ver más". Buscando, se
+ * muestra todo lo que coincida en una sola grilla; abriendo una categoría, esa entera.
+ */
 function pintar(){
   const q = document.getElementById('q').value.trim().toLowerCase();
-  const lista = PRODUCTOS
-    .filter(p => FILTRO === 'todo' || (p.tipo || 'equipo') === FILTRO)
-    .filter(p => !q || `${p.nombre} ${p.gb} ${p.color} ${p.estado}`.toLowerCase().includes(q));
+  const coincide = p => !q || `${p.nombre} ${p.gb} ${p.color} ${p.estado}`.toLowerCase().includes(q);
+  const salida = document.getElementById('salida');
+  const conteo = document.getElementById('conteo');
 
-  document.getElementById('conteo').textContent =
-    lista.length ? `${lista.length} producto${lista.length === 1 ? '' : 's'}${q ? ' encontrado' + (lista.length === 1 ? '' : 's') : ''}` : '';
+  if (!PRODUCTOS.length) {
+    conteo.textContent = '';
+    salida.innerHTML = '<div class="aviso">Por el momento no hay equipos publicados. Escribinos y te contamos qué hay.</div>';
+    return;
+  }
 
-  document.getElementById('salida').innerHTML = lista.length
-    ? `<div class="grilla">${lista.map(tarjeta).join('')}</div>`
-    : `<div class="aviso">${q ? 'No encontré nada con esa búsqueda.' : 'Por el momento no hay equipos publicados. Escribinos y te contamos qué hay.'}</div>`;
+  // Buscando, o dentro de una categoría: una grilla sola.
+  if (q || FILTRO !== 'todo') {
+    const lista = PRODUCTOS.filter(p => (q || tipoDe(p) === FILTRO) && coincide(p));
+    conteo.textContent = lista.length ? `${lista.length} producto${lista.length === 1 ? '' : 's'}${q ? ' encontrado' + (lista.length === 1 ? '' : 's') : ''}` : '';
+    salida.innerHTML = (q ? '' : `<button class="volver-cat" onclick="filtrar('todo')">← Todas las categorías</button>
+        <div class="seccion-cab"><div class="seccion-titulo">${TIPOS[FILTRO] || ''}</div></div>`) +
+      (lista.length
+        ? `<div class="grilla">${lista.map(tarjeta).join('')}</div>`
+        : '<div class="aviso">No encontré nada con esa búsqueda.</div>');
+    return;
+  }
+
+  // La portada.
+  conteo.textContent = '';
+  salida.innerHTML = Object.keys(TIPOS).map(t => {
+    const lista = PRODUCTOS.filter(p => tipoDe(p) === t);
+    if (!lista.length) return '';
+    const resto = lista.length - POR_SECCION;
+    return `<section class="seccion">
+      <div class="seccion-cab"><div class="seccion-titulo">${TIPOS[t]}</div><div class="seccion-n">${lista.length} producto${lista.length === 1 ? '' : 's'}</div></div>
+      <div class="grilla">${lista.slice(0, POR_SECCION).map(tarjeta).join('')}</div>
+      ${resto > 0 ? `<button class="vermas" onclick="filtrar('${t}')">Ver ${resto} más de ${TIPOS[t].toLowerCase()}</button>` : ''}
+    </section>`;
+  }).join('');
 }
 
 function hace(iso){
