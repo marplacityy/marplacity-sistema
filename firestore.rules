@@ -265,8 +265,11 @@ service cloud.firestore {
     // precio lo lee del catalogo publicado, no del cliente); el dueño los lee desde el
     // sistema. Nadie los borra: un pedido pagado es un registro contable.
     match /pedidos/{docId} {
-      allow read:           if owns() || esTienda();
-      allow create, update: if esTienda();
+      allow read:   if owns() || esTienda();
+      allow create: if esTienda();
+      // El dueño los cierra desde el sistema (entregado / cancelado); el Worker los
+      // actualiza cuando MP avisa del pago.
+      allow update: if esTienda() || (owns() && writesAsSelf());
     }
 
     match /docs_publicos/{token} {

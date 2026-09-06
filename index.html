@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-F</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-G</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -1349,6 +1349,9 @@
       </a>
       <a onclick="goTo('catalogo')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Catálogo web
+      </a>
+      <a onclick="goTo('pedidos')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg> Pedidos <span id="nav-pedidos" class="badge badge-inc" style="display:none;margin-left:6px;"></span>
       </a>
       <a onclick="goTo('asistente')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> Asistente
@@ -2841,6 +2844,23 @@
     </div>
 
     <!-- CATALOGO WEB — la vitrina publica -->
+    <div id="page-pedidos" class="page">
+      <div class="page-header">
+        <h1>Pedidos</h1>
+        <p>Lo que compraron o reservaron desde el catálogo web. Un pedido pagado o reservado es alguien esperando: escribile por WhatsApp, coordiná la entrega y marcalo entregado.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <button class="btn-secondary" id="ped-f-abiertos" onclick="filtrarPedidos('abiertos')">Por atender</button>
+          <button class="btn-secondary" id="ped-f-todos" onclick="filtrarPedidos('todos')">Todos</button>
+        </div>
+        <div style="overflow-x:auto;"><table class="tkh-table">
+          <thead><tr><th style="width:120px;">Cuándo</th><th>Cliente</th><th>Producto</th><th>Pago</th><th>Entrega</th><th style="width:100px;">Estado</th><th style="width:170px;"></th></tr></thead>
+          <tbody id="ped-body"></tbody>
+        </table></div>
+      </div>
+    </div>
+
     <div id="page-catalogo" class="page">
       <div class="page-header">
         <h1>Catálogo web</h1>
@@ -3209,6 +3229,7 @@ const pagosFijosCol = collection(db, 'pagos_fijos');
 const amortsCol = collection(db, 'amorts');
 const listasCol = collection(db, 'listas_precios');
 const convsCol = collection(db, 'conversaciones');   // DMs de Instagram, un doc por cliente
+const pedidosCol = collection(db, 'pedidos');        // compras del catálogo web (las escribe el Worker tienda)
 const botDoc = doc(db, 'config', 'bot');             // el interruptor del bot de IG
 const mensajesDoc = doc(db, 'config', 'mensajes');   // mensajes que el bot manda textuales
 const promptDoc   = doc(db, 'config', 'prompt');     // las reglas del bot, editables desde acá
@@ -3238,6 +3259,8 @@ let comprobantes = [];       // comprobantes/{...}: facturas fiscales con CAE
 let conoc = {};              // conocimiento/{uid}: datos del local para el bot de IG
 let promptBot = {};          // config/prompt: las reglas del bot, si el dueño las reescribió
 let convsItems = [];         // conversaciones que necesitan atención (la bandeja del bot)
+let pedidosItems = [];       // pedidos del catálogo web, del más nuevo al más viejo
+let pedidosFiltro = 'abiertos';
 let botCfg = {activo:true, modo:'todos', cuentasPrueba:[]};   // config/bot: el interruptor
 let mensajesFijos = {};      // config/mensajes: lo que el bot manda textual, sin pasar por la IA
 let icats = ['Accesorios','Repuestos','Fundas','Vidrios','Cargadores','Cables','Insumos','Otros'];
@@ -3411,6 +3434,13 @@ async function init() {
     onSnapshot(catalogoDoc, snap => {
       catPublicado = snap.exists() ? snap.data() : null;
       if(currentPage==='catalogo') renderCatalogo();
+    }, snapErr);
+    onSnapshot(myQ(pedidosCol), snap => {
+      pedidosItems = snap.docs.map(d=>({id:d.id,...d.data()}));
+      pedidosItems.sort((a,b)=>String(b.creado||'').localeCompare(String(a.creado||'')));
+      pintarBadgePedidos();
+      if(currentPage==='pedidos') deb('pedidos',renderPedidos);
+      setSyncDot('ok');
     }, snapErr);
     onSnapshot(promptDoc, snap => {
       promptBot = snap.exists() ? snap.data() : {};
@@ -3621,6 +3651,7 @@ window.goTo = function(page) {
   if(page==='facturador') initFacturador();
   if(page==='asistente'){ agPintar(); agPintarFichas(); document.getElementById('ag-input')?.focus(); }
   if(page==='catalogo') renderCatalogo();
+  if(page==='pedidos') renderPedidos();
   if(page==='consig'){ populateProveedoresDL(); populateConsigFilters(); renderConsig(); renderProveedores(); renderPagos(); }
   if(page==='reportes') renderReporte();
   if(page==='amort') renderAmort();
@@ -12726,6 +12757,71 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
 // NUNCA entran: el costo (`valorUSD` en stock, `precioUSD` en consignación, que es lo
 // que se le debe al proveedor), el IMEI, el proveedor, las notas internas, ni los
 // chequeos de FMI y blacklist.
+
+// ══ Pedidos del catálogo web ═════════════════════════════════
+//
+// Los escribe el Worker `tienda`; acá solo se miran y se cierran. Un pedido está
+// "abierto" mientras haya alguien esperando algo: pagó o reservó y todavía no se le
+// entregó. Lo demás (creado sin pagar, rechazado, entregado, cancelado) es historial.
+
+const PED_ESTADOS = {
+  creado:    ['Sin pagar',   'badge-per'],
+  pendiente: ['Pago en proceso', 'badge-per'],
+  pagado:    ['Pagado',      'badge-inc'],
+  reservado: ['Reservado',   'badge-inc'],
+  rechazado: ['Rechazado',   'badge-neg'],
+  devuelto:  ['Devuelto',    'badge-neg'],
+  entregado: ['Entregado',   ''],
+  cancelado: ['Cancelado',   ''],
+};
+const PED_PAGOS = { mp: 'Mercado Pago', tarjeta: 'Tarjeta (USD)', efectivo: 'Efectivo en el local' };
+const pedidoAbierto = p => p.estado === 'pagado' || p.estado === 'reservado' || p.estado === 'pendiente';
+
+function pintarBadgePedidos(){
+  const n = pedidosItems.filter(pedidoAbierto).length;
+  const el = document.getElementById('nav-pedidos');
+  if(!el) return;
+  el.textContent = n; el.style.display = n ? 'inline-block' : 'none';
+}
+
+window.filtrarPedidos = f => { pedidosFiltro = f; renderPedidos(); };
+
+function renderPedidos(){
+  ['abiertos','todos'].forEach(f => document.getElementById('ped-f-'+f).className = f===pedidosFiltro ? 'btn-save' : 'btn-secondary');
+  const lista = pedidosFiltro === 'abiertos' ? pedidosItems.filter(pedidoAbierto) : pedidosItems;
+
+  const cuando = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('es-AR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+  const monto = p => p.pago === 'mp' ? fmtARS(p.montoARS||0) : fmtUSD(p.montoUSD||0);
+
+  document.getElementById('ped-body').innerHTML = lista.map(p => {
+    const [txt, cls] = PED_ESTADOS[p.estado] || [p.estado, ''];
+    const prod = p.producto || {}, cli = p.cliente || {};
+    const wa = (cli.whatsapp||'').replace(/\D/g,'');
+    const msg = encodeURIComponent(`Hola ${cli.nombre||''}! Te escribo por tu pedido del ${prod.nombre||''} en el catálogo de MarplaCity.`);
+    return `<tr style="${pedidoAbierto(p)?'':'opacity:.6;'}">
+      <td style="font-family:'DM Mono',monospace;font-size:11.5px;">${esc(cuando(p.creado))}<div class="sub" style="font-size:10px;color:var(--text3);">${esc(p.id.slice(0,8))}</div></td>
+      <td>${esc(cli.nombre||'—')}<div class="sub" style="font-size:11px;">${wa ? `<a href="https://wa.me/${wa}?text=${msg}" target="_blank" rel="noopener">📱 ${esc(cli.whatsapp)}</a>` : ''}${cli.email ? ' · '+esc(cli.email) : ''}</div></td>
+      <td>${esc(prod.nombre||'')}<div class="sub" style="font-size:11px;color:var(--text3);">${esc([prod.gb, prod.color, prod.tipo==='pedido'?'a pedido':''].filter(Boolean).join(' · '))}</div></td>
+      <td>${esc(PED_PAGOS[p.pago]||p.pago)}<div class="sub" style="font-family:'DM Mono',monospace;font-size:11.5px;">${monto(p)}</div></td>
+      <td>${p.entrega === 'envio' ? 'Envío' : 'Retira'}${p.direccion ? `<div class="sub" style="font-size:11px;color:var(--text3);">${esc(p.direccion)}</div>` : ''}</td>
+      <td><span class="badge ${cls}">${esc(txt)}</span></td>
+      <td style="white-space:nowrap;">${pedidoAbierto(p) ? `
+        <button class="btn-secondary" style="padding:5px 9px;font-size:11.5px;" onclick="cerrarPedido('${escJs(p.id)}','entregado')">✓ Entregado</button>
+        <button class="btn-secondary" style="padding:5px 9px;font-size:11.5px;" onclick="cerrarPedido('${escJs(p.id)}','cancelado')">✕</button>` : ''}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" style="color:var(--text3);">${pedidosFiltro==='abiertos' ? 'No hay pedidos por atender.' : 'Todavía no hubo pedidos.'}</td></tr>`;
+}
+
+/** Cerrar un pedido: entregado o cancelado. Un pagado que se cancela hay que devolverlo desde Mercado Pago, eso no lo hace el sistema. */
+window.cerrarPedido = async function(id, estado){
+  const p = pedidosItems.find(x => x.id === id); if(!p) return;
+  if(estado === 'cancelado' && !confirm(`¿Cancelar el pedido de ${p.cliente?.nombre||'este cliente'}?\n\n${p.estado==='pagado' ? 'OJO: ya está pagado. La devolución del dinero la tenés que hacer desde Mercado Pago, esto solo lo saca de la lista.' : 'Solo lo saca de la lista de pedidos por atender.'}`)) return;
+  setSyncDot('syncing');
+  try{
+    await updateDoc(doc(db,'pedidos',id), { estado, actualizado: new Date().toISOString(), cerradoPor: (currentUser && currentUser.email) || uid });
+    showToast(estado === 'entregado' ? 'Pedido entregado ✓' : 'Pedido cancelado');
+  }catch(e){ showToast('No se pudo: '+e.message, true); setSyncDot('error'); }
+};
 
 // El catálogo de fotos vive en Firestore (`catalogo/fotos`), no acá.
 //
