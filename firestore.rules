@@ -60,7 +60,7 @@ service cloud.firestore {
     // El usuario de servicio de la tienda (tienda@marplacity.com): el Worker que cobra
     // el catalogo web. Solo toca `pedidos`; si su token se filtra, no llega a nada mas.
     function esTienda() {
-      return loggedIn() && request.auth.uid == 'UID_DE_LA_TIENDA';
+      return loggedIn() && request.auth.uid == '9cXTn1KMIxhkLLPPuswmrmrj7pX2';
     }
 
     // Certificado y clave privada fiscales, cifrados con AES-GCM por el Worker.
