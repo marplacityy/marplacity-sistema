@@ -651,14 +651,25 @@ async function configDelBot(env) {
 const PAUSA_ENTRE_DM = 1200;
 const dormir = ms => new Promise(r => setTimeout(r, ms));
 
+/**
+ * Manda un DM. Si `texto` es una URL de imagen, la manda como FOTO y no como link.
+ *
+ * La diferencia no es estetica: Instagram trata mal los mensajes con enlaces —ya nos
+ * paso con el link del canal, que directamente no llegaba— y ademas un cliente que pide
+ * una foto quiere ver la foto, no tocar un link y salir de la conversacion.
+ */
 async function mandarDM(env, igUserId, texto) {
+  const esFoto = /^https:\/\/\S+\.(jpg|jpeg|png|webp)$/i.test(String(texto).trim());
+  const mensaje = esFoto
+    ? { attachment: { type: 'image', payload: { url: String(texto).trim(), is_reusable: true } } }
+    : { text: texto };
   try {
     const r = await fetch(
       `https://graph.instagram.com/v21.0/me/messages?access_token=${env.IG_TOKEN}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipient: { id: igUserId }, message: { text: texto } }),
+        body: JSON.stringify({ recipient: { id: igUserId }, message: mensaje }),
       },
     );
     if (!r.ok) { console.log('envio fallo', igUserId, r.status, (await r.text()).slice(0, 200)); return false; }
@@ -1263,7 +1274,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
 
   // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
   // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
-  const [stock, accesorios, conocimiento, listaMdp, listaCaba, listaProv, mensajesFijos, promptDoc] = await Promise.all([
+  const [stock, accesorios, conocimiento, listaMdp, listaCaba, listaProv, mensajesFijos, promptDoc, fotosDoc] = await Promise.all([
     equiposDisponibles(env, idToken),
     accesoriosDisponibles(env, idToken),
     leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`),
@@ -1272,6 +1283,8 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     ultimaLista(env, idToken, 'prov'),
     leerDoc(env, idToken, 'config/mensajes'),
     leerDoc(env, idToken, 'config/prompt'),
+    // Que fotos hay y donde. Es la misma fuente que usa el catalogo web: una sola.
+    leerDoc(env, idToken, 'catalogo/fotos'),
   ]);
 
   // La lista de MDP es la del día: si es de una fecha anterior, el prompt se lo avisa
@@ -1281,7 +1294,13 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
   // Las reglas del bot: las que el dueño escribió desde el sistema si las hay, y si no
   // las del archivo prompt.js. Se lee en cada mensaje a propósito: cambiar una regla
   // tiene que ser guardar en el sistema, sin deploy de por medio.
-  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock, accesorios, listaMdp, listaCaba, listaProv, mdpVencida });
+  // Al equipo que tiene foto se le agrega su clave, para que el modelo pueda mandarla.
+  const conFoto = (stock || []).map(e => {
+    const clave = claveDeFoto(e.equipo, e.color);
+    return (fotosDoc?.mapa || {})[clave] ? { ...e, foto: clave } : e;
+  });
+
+  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock: conFoto, accesorios, listaMdp, listaCaba, listaProv, mdpVencida });
   console.log('prompt:', promptDoc?.texto ? 'editado desde el sistema' : 'el de prompt.js');
   const textoCanal = mensajesFijos?.invitacionCanal || null;
 
@@ -1348,7 +1367,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
 
     const crudo = (d.content?.map(x => x.text || '').join('') || d.text || '').trim();
     const out = JSON.parse(limpiarJson(crudo));
-    const r2 = normalizar(out, textoCanal);
+    const r2 = normalizar(out, textoCanal, fotosDoc);
 
     console.log('IA ->', r2.categoria, '| prioridad', r2.prioridad, '|', r2.mensajes.length, 'mensaje(s)');
     return r2;
@@ -1419,6 +1438,17 @@ const ESQUEMA_RESPUESTA = {
   additionalProperties: false,
 };
 
+/**
+ * La clave de la foto de un equipo: `modelo-color`, o `modelo` si no tiene color. Tiene
+ * que dar exactamente lo mismo que el sistema, porque las dos puntas leen el mismo mapa.
+ */
+const claveDeFoto = (nombre, color) => {
+  const sl = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/\b\d+\s?(gb|tb)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '-');
+  const modelo = sl(nombre);
+  return color ? `${modelo}-${sl(color)}` : modelo;
+};
+
 const MOTIVOS = ['averiguar', 'pidio_foto', 'cerrado', 'reclamo', 'permuta', 'reparacion', 'otro_medio_de_pago', 'visto', 'no_supe_responder'];
 
 /**
@@ -1453,8 +1483,8 @@ const MAX_MENSAJES = 4;
  * si un campo falta o no es de los válidos, la conversación se marca para revisar en
  * vez de guardarse con datos que después rompen la bandeja o la query del cron.
  */
-export function normalizar(out, textoCanal) {
-  const mensajes = expandirCanal(out.mensajes, textoCanal).slice(0, MAX_MENSAJES);
+export function normalizar(out, textoCanal, fotos) {
+  const mensajes = expandirCanal(out.mensajes, textoCanal, fotos).slice(0, MAX_MENSAJES);
 
   const categoria = CATEGORIAS.includes(out.categoria) ? out.categoria : null;
   const confianza = out.confianza === 'baja' ? 'baja' : 'alta';
@@ -1507,14 +1537,28 @@ export function normalizar(out, textoCanal) {
  * reemplaza carácter por carácter. Si el texto no está cargado, la marca se cae del
  * array en vez de mandarse literal al cliente.
  */
-export function expandirCanal(mensajes, textoCanal) {
+export function expandirCanal(mensajes, textoCanal, fotos) {
   if (!Array.isArray(mensajes)) return [];
+  const mapa = fotos?.mapa || {};
+  const base = fotos?.base || '';
   return mensajes
-    .map(m => {
+    .flatMap(m => {
       const s = String(m ?? '').trim();
-      if (s !== MARCA_CANAL) return s;
-      if (!textoCanal) { console.log('falta config/mensajes.invitacionCanal: se descarta la marca'); return ''; }
-      return textoCanal;
+
+      // [[FOTO:clave]] → la URL de la imagen. mandarDM la reconoce y la manda como foto,
+      // no como link. Si la clave no esta en el mapa, el mensaje se descarta en vez de
+      // que al cliente le llegue la marca escrita.
+      const foto = /^\[\[FOTO:([a-z0-9-]+)\]\]$/i.exec(s);
+      if (foto) {
+        const archivos = mapa[foto[1].toLowerCase()];
+        if (!archivos?.length) { console.log('no hay foto para', foto[1], '— se descarta la marca'); return []; }
+        // Hasta dos: tres fotos seguidas por DM es spam.
+        return archivos.slice(0, 2).map(a => base + a);
+      }
+
+      if (s !== MARCA_CANAL) return [s];
+      if (!textoCanal) { console.log('falta config/mensajes.invitacionCanal: se descarta la marca'); return []; }
+      return [textoCanal];
     })
     .filter(Boolean);
 }

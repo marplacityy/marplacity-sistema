@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.05-E</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.05-F</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2859,6 +2859,16 @@
       </div>
 
       <div class="card">
+        <div class="card-title">Las fotos</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Las imágenes viven en la carpeta <code>fotos/</code> del repositorio, y qué foto es de qué modelo se guarda en la base. <b>Lo usan los dos:</b> esta página para publicar, y el bot de Instagram para mandarle la foto al cliente que la pide.</p>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">Cuando agregues archivos nuevos a <code>fotos/</code> y los subas, tocá sincronizar: hasta que lo hagas, la foto está en el repositorio pero nadie sabe que existe.</p>
+        <div id="cat-fotos"></div>
+        <div class="pos-actions" style="margin-top:14px;">
+          <button class="btn-secondary" id="btn-cat-fotos" onclick="sincronizarFotos()">🔄 Sincronizar con la carpeta</button>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-title">Qué se va a publicar</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Entran los equipos <b>en stock con precio de venta cargado</b>, propios y de consignación. Podés sacar alguno de la lista sin borrarlo del sistema.</p>
         <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">Del costo, el IMEI, el proveedor y las notas internas <b>no sale nada</b>: la página se arma con nombre, capacidad, color, batería, estado y precio.</p>
@@ -3385,6 +3395,14 @@ async function init() {
     onSnapshot(conocDoc, snap => {
       conoc = snap.exists() ? snap.data() : {};
       if(currentPage==='conocimiento') pintarConocimiento();
+    }, snapErr);
+    onSnapshot(fotosDoc, snap => {
+      const d = snap.exists() ? snap.data() : null;
+      FOTOS = d?.mapa || {};
+      // Se guarda la URL completa: el bot necesita una dirección absoluta para mandarla
+      // por Instagram, y la página del catálogo funciona igual con las dos.
+      FOTOS_BASE = d?.base || 'fotos/';
+      if(currentPage==='catalogo') renderCatalogo();
     }, snapErr);
     onSnapshot(catalogoDoc, snap => {
       catPublicado = snap.exists() ? snap.data() : null;
@@ -12705,29 +12723,19 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
 // que se le debe al proveedor), el IMEI, el proveedor, las notas internas, ni los
 // chequeos de FMI y blacklist.
 
-// Las fotos que hay en la carpeta `fotos/`, por modelo y color.
+// El catálogo de fotos vive en Firestore (`catalogo/fotos`), no acá.
 //
-// Se mantiene a mano a propósito: el navegador no puede preguntar qué archivos hay en
-// una carpeta, y salir a probar una por una sería una consulta por producto en cada
-// render. Quien agrega una foto agrega el renglón, que es un segundo.
+// Estaba escrito en el código, y eso significaba que solo lo veía el sistema. Ahora es
+// un dato: lo lee esta pantalla para publicar, y lo puede leer el bot de Instagram para
+// saber de qué equipos hay imagen y dónde está cada una. Una sola fuente para los dos.
 //
 // La clave es `modelo-color` cuando la foto es de ese color, y `modelo` a secas cuando
 // sirve para cualquiera. Importa porque hay dos iPhone 15 en stock, uno negro y uno
 // rosa: con una sola foto por modelo, al rosa le saldría la del negro.
-const FOTOS = {
-  'iphone-13-blue':                    ['iphone-13-blue.png'],
-  'iphone-14-pro-blue':                ['iphone-14-pro-blue.png'],
-  // Oficiales de Apple, del newsroom del lanzamiento: fondo blanco, frente y dorso.
-  'iphone-14-pro-space-black':         ['iphone-14-pro-space-black.jpg'],
-  'iphone-14-pro-silver':              ['iphone-14-pro-silver.jpg'],
-  'iphone-14-pro-max-deep-purple':     ['iphone-14-pro-max-deep-purple.jpg'],
-  'iphone-16e':                        ['iphone-16e.png'],
-  'iphone-16-pro-max-natural-titanium':['iphone-16-pro-max-natural-titanium.png'],
-  'iphone-15-black':      ['iphone-15-black.jpg'],
-  'iphone-15-green':      ['iphone-15-green.jpg', 'iphone-15-green-2.jpg', 'iphone-15-green-3.jpg'],
-  'iphone-15-blue':       ['iphone-15-blue.jpg'],
-  'iphone-17-pro-white':  ['iphone-17-pro-white.jpg', 'iphone-17-pro-white-2.jpg', 'iphone-17-pro-white-3.jpg'],
-};
+let FOTOS = {};                       // { 'iphone-15-black': ['iphone-15-black.jpg'], ... }
+let FOTOS_BASE = 'fotos/';            // el prefijo, por si algún día se mudan a otro lado
+
+const fotosDoc = doc(db, 'catalogo', 'fotos');
 
 const catalogoDoc = doc(db, 'catalogo', 'publico');
 let catPublicado = null;    // lo último que se publicó, para comparar
@@ -12765,7 +12773,7 @@ const slugFoto = nombre => String(nombre || '')
 function fotosDe(nombre, color){
   const modelo = slugFoto(nombre);
   const archivos = color ? (FOTOS[`${modelo}-${slugFoto(color)}`] || []) : (FOTOS[modelo] || []);
-  return archivos.map(f => `fotos/${f}`);
+  return archivos.map(f => FOTOS_BASE + f);
 }
 
 /** Un equipo, con lo justo para mostrarlo. Es el único lugar que decide qué es público. */
@@ -12815,6 +12823,8 @@ function renderCatalogo(){
         </ul></div>` : '';
     })()}`;
 
+  renderFotosCatalogo();
+
   document.getElementById('cat-body').innerHTML = items.map(p => `
     <tr style="${p._sale?'':'opacity:.5;'}">
       <td><input type="checkbox" ${p._sale?'checked':''} ${p.precioUSD?'':'disabled title="Sin precio de venta"'}
@@ -12839,6 +12849,67 @@ function renderCatalogo(){
     ? `<div class="proveedor-alerta">✅ La página está al día. Última publicación: ${esc(cuando)}.</div>`
     : `<div class="proveedor-alerta alerta-atencion">🔔 <b>Hay cambios sin publicar.</b> La página muestra lo de ${esc(cuando)}; tocá Publicar para actualizarla.</div>`;
 }
+
+/**
+ * Lo que hay hoy en la base de fotos. Se dibuja para poder mirarlo: es el unico lugar
+ * donde se ve, porque el archivo de imagen esta en el repositorio y el mapa en Firestore.
+ */
+function renderFotosCatalogo(){
+  const claves = Object.keys(FOTOS).sort();
+  const total = claves.reduce((a,k) => a + FOTOS[k].length, 0);
+  document.getElementById('cat-fotos').innerHTML = !claves.length
+    ? '<div class="proveedor-alerta alerta-atencion">La base de fotos está vacía. Tocá sincronizar.</div>'
+    : `<div class="proveedor-alerta" style="margin-bottom:10px;"><b>${total}</b> imagen${total===1?'':'es'} de <b>${claves.length}</b> modelo${claves.length===1?'':'s'}.</div>
+       <div style="display:flex;flex-wrap:wrap;gap:10px;">${claves.map(k=>`
+         <div style="width:82px;text-align:center;">
+           <img src="${esc(FOTOS_BASE + FOTOS[k][0])}" loading="lazy"
+                style="width:82px;height:82px;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);">
+           <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--text3);margin-top:4px;word-break:break-all;line-height:1.25;">${esc(k)}${FOTOS[k].length>1?` ·${FOTOS[k].length}`:''}</div>
+         </div>`).join('')}</div>`;
+}
+
+/**
+ * Rearma el mapa leyendo qué archivos hay realmente en `fotos/`.
+ *
+ * El navegador no puede listar una carpeta, pero el repositorio es público y GitHub la
+ * lista por su API. Se pregunta ahí a propósito: eso es lo que GitHub Pages termina
+ * sirviendo, así que si un archivo aparece en la lista, la URL de la foto anda seguro.
+ *
+ * La clave sale del nombre del archivo sin extensión. Las fotos extra del mismo equipo
+ * terminan en `-2`, `-3`: ese sufijo se saca SOLO si existe el archivo base sin él, para
+ * no romper un modelo que de verdad termine en número.
+ */
+window.sincronizarFotos = async function(){
+  const btn = document.getElementById('btn-cat-fotos');
+  btn.disabled = true; btn.textContent = 'Leyendo la carpeta…';
+  try{
+    const r = await fetch('https://api.github.com/repos/marplacityy/marplacity-sistema/contents/fotos');
+    if(!r.ok) throw new Error(r.status === 403 ? 'GitHub pidió esperar un rato (límite de consultas)' : 'GitHub contestó '+r.status);
+    const archivos = (await r.json())
+      .filter(f => f.type === 'file' && /\.(jpe?g|png|webp)$/i.test(f.name))
+      .map(f => f.name);
+
+    const stems = new Set(archivos.map(n => n.replace(/\.[^.]+$/, '')));
+    const mapa = {};
+    for(const nombre of archivos.sort()){
+      const stem = nombre.replace(/\.[^.]+$/, '');
+      const m = /^(.+)-[2-9]$/.exec(stem);
+      const clave = (m && stems.has(m[1])) ? m[1] : stem;
+      (mapa[clave] ||= []).push(nombre);
+    }
+    // La foto principal primero: la que no tiene sufijo es la que se ve en la tarjeta.
+    for(const k in mapa) mapa[k].sort((a,b) => a.length - b.length || a.localeCompare(b));
+
+    setSyncDot('syncing');
+    await setDoc(fotosDoc, withUser({
+      mapa,
+      base: LINK_CATALOGO.replace(/[^/]+$/, '') + 'fotos/',
+      actualizado: new Date().toISOString(),
+    }), {merge:false});
+    showToast(`Fotos sincronizadas ✓ — ${archivos.length} imagen${archivos.length===1?'':'es'}, ${Object.keys(mapa).length} modelos`);
+  }catch(e){ showToast('No pude sincronizar: '+e.message, true); setSyncDot('error'); }
+  btn.disabled = false; btn.textContent = '🔄 Sincronizar con la carpeta';
+};
 
 window.toggleCatalogo = function(id, sale){
   const fuera = new Set(cfg.catalogoExcluidos || []);
