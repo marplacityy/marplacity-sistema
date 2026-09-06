@@ -85,7 +85,7 @@ Como consecuencia, el HTML se genera con template strings + `innerHTML`: usá `e
 
 Cada documento lleva `userId`. Toda escritura pasa por `withUser(obj)` y toda lectura por `myQ(col)` (`query(col, where('userId','==',uid))`). Consultar una colección sin `myQ` filtra mal y puede violar las reglas de seguridad.
 
-Colecciones: `gastos`, `ingresos`, `stock`, `consig`, `pagos_consig`, `gastos_fijos`, `pagos_fijos`, `reparaciones`, `inventario`, `repuestos`, `precios_repuestos`, `clientes`, `cierres`, `encargues`, `amorts`, `cola_impresion`, `conversaciones` (DMs de Instagram: la escribe el Worker `ig-bot`, un doc por cliente), más el doc singular `config/{uid}`.
+Colecciones: `gastos`, `ingresos`, `stock`, `consig`, `pagos_consig`, `gastos_fijos`, `pagos_fijos`, `reparaciones`, `inventario`, `repuestos`, `precios_repuestos`, `clientes`, `cierres`, `encargues`, `amorts`, `cola_impresion`, `conversaciones` (DMs de Instagram: la escribe el Worker `ig-bot`, un doc por cliente), `pedidos` (compras del catálogo web: las crea el Worker `tienda`, el dueño solo las cierra), más el doc singular `config/{uid}`.
 
 Como la config de Firebase está en el HTML de un repo público, **las Security Rules son la única barrera real**. `firestore.rules` en la raíz es la fuente versionada; si agregás una colección hay que sumarla ahí también. Deploy: `firebase deploy --only firestore:rules`. `firebase-tools` está instalado y logueado; `firebase deploy --only firestore:rules --dry-run` compila el archivo y avisa los errores sin publicar nada.
 
@@ -144,6 +144,12 @@ Las consultas acotadas necesitan índices compuestos (`userId` + `fecha`), versi
 Página pública sin login que lee un solo doc, `catalogo/publico`, que el dueño publica desde la pantalla Catálogo (`publicarCatalogo`). `catalogoCandidatos()` es el único lugar que decide qué sale: equipos en stock (propios y consignación), artículos de inventario con cantidad y precio sugerido, y los ítems de la última lista de precios de cada origen (`kbUltimaLista`) como `tipo:'pedido'`. Las descripciones por producto viven en `cfg.catalogoNotas[id]`.
 
 Las fotos están en `fotos/` del repo y el mapa producto → archivos en `catalogo/fotos` (lo usa también el bot de Instagram para `[[FOTO:clave]]`). La clave es `slugFoto(nombre)` + `-slugFoto(color)`. `armarMapaFotos()` la saca del nombre del archivo, salvo que `clasificacion[archivo]` diga otra cosa: eso lo escribe la IA (`clasificarFotos`, vía el proxy de Anthropic) o el dueño a mano desde la grilla. `node test-catalogo.mjs` chequea esa función sin red.
+
+### Tienda (`workers/tienda`)
+
+El cobro del catálogo. La página manda el pedido a `POST /pedido` del Worker; este lee el precio de `catalogo/publico` (nunca del cliente), guarda el doc en `pedidos` y devuelve a dónde ir a pagar: Mercado Pago (pesos, `precioUSD × tc × (1 + recargoMpPct)`, solo hasta `mpMaxUSD`) o Stripe (dólares, `× (1 + recargoTarjetaPct)`). Efectivo = reserva sin pagar. Las tres reglas viajan en `cobro` dentro del catálogo publicado: cambiar una constante en `index.html` no hace nada hasta volver a publicar.
+
+Al volver del pago la página consulta `GET /pedido/:id`, y si sigue `creado` el Worker le pregunta a la pasarela y lo actualiza ahí mismo; los webhooks (`/mp/webhook`, `/stripe/webhook`) son respaldo. Secretos con `wrangler secret put`, ver `workers/tienda/README.md`. `node workers/tienda/test-tienda.mjs` chequea validación, montos y firmas sin red.
 
 ### Servicios externos
 
