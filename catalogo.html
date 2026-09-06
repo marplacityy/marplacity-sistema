@@ -219,6 +219,10 @@ const CLAVE = 'AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg';
 const URL = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/catalogo/publico?key=${CLAVE}`;
 
 let PRODUCTOS = [], LOCAL = {}, COBRO = {};
+
+// El Worker que cobra. La página no tiene credenciales de nada: le manda el pedido y él
+// arma el link de pago con el precio publicado, no con el que diga la página.
+const TIENDA_URL = 'https://tienda.fiwind702050.workers.dev';
 let FILTRO = 'todo';   // qué tipo se ve: todo, equipo, accesorio, pedido
 
 const TIPOS = { equipo: 'Equipos', accesorio: 'Accesorios', pedido: 'A pedido' };
@@ -479,13 +483,86 @@ window.pedidoPorWhatsApp = id => {
 };
 
 /**
- * Por ahora el pedido confirmado también sale por WhatsApp, con todos los datos. Cuando
- * esté la pasarela, "mp" y "tarjeta" van a ir a pagar y "efectivo" a reservar.
+ * Confirmar el pedido. Mercado Pago y la reserva en efectivo van al Worker; la tarjeta
+ * en dólares todavía no está y sale por WhatsApp.
  */
-window.mandarPedido = (ev, id) => {
+window.mandarPedido = async (ev, id) => {
   ev.preventDefault();
-  pedidoPorWhatsApp(id);
+  const p = PRODUCTOS.find(x => x.id === id);
+  const f = ev.target;
+  if (f.pago.value === 'tarjeta') { pedidoPorWhatsApp(id); return; }
+
+  const btn = document.getElementById('btn-pedido');
+  const texto = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Un momento…';
+  try {
+    const r = await fetch(`${TIENDA_URL}/pedido`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        productoId: p.id, pago: f.pago.value, entrega: f.entrega.value, direccion: f.direccion.value,
+        nombre: f.nombre.value, whatsapp: f.whatsapp.value, email: f.email.value,
+      }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `la tienda respondió ${r.status}`);
+    if (d.url) { location.href = d.url; return; }      // a pagar a Mercado Pago
+    pantallaPedido({ id: d.id, estado: d.estado, producto: p.nombre, pago: f.pago.value });
+  } catch (e) {
+    alert('No pudimos tomar el pedido: ' + e.message + '\n\nPodés seguir por WhatsApp.');
+    btn.disabled = false; btn.textContent = texto;
+  }
 };
+
+/** La pantalla final: qué pasó con el pedido y cómo seguir. */
+function pantallaPedido(d){
+  const MENSAJES = {
+    pagado:    ['✅ Pago aprobado', 'Ya tenemos tu pedido. Te escribimos por WhatsApp para coordinar la entrega.'],
+    reservado: ['✅ Reservado', 'Te lo guardamos 24 horas. Pasá por el local a retirarlo y pagalo ahí.'],
+    creado:    ['⏳ Pago pendiente', 'Todavía no nos llegó la confirmación del pago. Si ya pagaste, en unos minutos se actualiza.'],
+    pendiente: ['⏳ Pago en proceso', 'Mercado Pago está procesando el pago. Te avisamos cuando se acredite.'],
+    rechazado: ['❌ El pago no se completó', 'Podés intentar de nuevo con otro medio, o seguir por WhatsApp.'],
+    devuelto:  ['↩️ Pago devuelto', 'Este pago fue devuelto. Si tenés dudas, escribinos.'],
+  };
+  const [titulo, detalle] = MENSAJES[d.estado] || ['Pedido recibido', ''];
+  const wa = LOCAL.whatsapp
+    ? `https://wa.me/${LOCAL.whatsapp}?text=${encodeURIComponent(`Hola! Hice el pedido ${d.id.slice(0, 8)} (${d.producto}) desde el catálogo`)}`
+    : null;
+  document.getElementById('ficha-contenido').innerHTML = `
+    <button class="ficha-cerrar" onclick="cerrarFicha()" aria-label="Cerrar">×</button>
+    <div class="pedido-form">
+      <div class="pedido-titulo">${titulo}</div>
+      <div class="ficha-desc">${esc(detalle)}</div>
+      <div class="ficha-nota">Pedido ${esc(d.id.slice(0, 8))} · ${esc(d.producto)}</div>
+      <div class="ficha-acciones">
+        ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener">Seguir por WhatsApp</a>` : ''}
+        <button class="btn-sec" type="button" onclick="cerrarFicha()">Volver al catálogo</button>
+      </div>
+    </div>`;
+  const dlg = document.getElementById('ficha');
+  if (!dlg.open) dlg.showModal();
+}
+
+/**
+ * Volviendo de Mercado Pago: la URL trae ?pedido=ID (y MP agrega status=approved|...).
+ * Se le pregunta al Worker cómo quedó; si el aviso de MP todavía no llegó, vale lo que
+ * dice la URL para no mostrar "pendiente" a alguien que acaba de pagar.
+ */
+async function pedidoDesdeUrl(){
+  const q = new URLSearchParams(location.search);
+  const id = q.get('pedido');
+  if (!id) return;
+  history.replaceState(null, '', location.pathname);
+  let d = { id, estado: 'creado', producto: '' };
+  try {
+    const r = await fetch(`${TIENDA_URL}/pedido/${encodeURIComponent(id)}`);
+    if (r.ok) d = await r.json();
+  } catch (e) { /* sin red: se muestra lo que diga la URL */ }
+  const st = q.get('status') || q.get('collection_status');
+  if (d.estado === 'creado' && st === 'approved') d.estado = 'pagado';
+  if (d.estado === 'creado' && (st === 'rejected' || st === 'cancelled')) d.estado = 'rechazado';
+  pantallaPedido(d);
+}
 
 /** Abre la ficha que pide la URL, si hay una. */
 function fichaDesdeUrl(){
@@ -556,6 +633,7 @@ function hace(iso){
     pintarFiltros();
     pintar();
     fichaDesdeUrl();
+    pedidoDesdeUrl();
   }catch(e){
     document.getElementById('salida').innerHTML =
       '<div class="aviso">No pudimos cargar el catálogo en este momento. Probá de nuevo en un rato.</div>';

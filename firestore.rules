@@ -57,6 +57,12 @@ service cloud.firestore {
       return loggedIn() && request.auth.uid == 'zZo6qzqCZTSBbORkCOIxr3HU21s2';
     }
 
+    // El usuario de servicio de la tienda (tienda@marplacity.com): el Worker que cobra
+    // el catalogo web. Solo toca `pedidos`; si su token se filtra, no llega a nada mas.
+    function esTienda() {
+      return loggedIn() && request.auth.uid == 'UID_DE_LA_TIENDA';
+    }
+
     // Certificado y clave privada fiscales, cifrados con AES-GCM por el Worker.
     // Un doc por CUIT y entorno: fiscal_certs/{cuit}_{homo|prod}.
     //
@@ -255,6 +261,14 @@ service cloud.firestore {
     //   - `list`: PROHIBIDO. Si aca dijera `allow read` (que es get + list),
     //     cualquiera podria pedir la coleccion entera y bajarse las facturas y
     //     ordenes de todos los clientes. El token dejaria de proteger nada.
+    // Pedidos del catalogo web. Los crea y actualiza SOLO el Worker de la tienda (el
+    // precio lo lee del catalogo publicado, no del cliente); el dueño los lee desde el
+    // sistema. Nadie los borra: un pedido pagado es un registro contable.
+    match /pedidos/{docId} {
+      allow read:           if owns() || esTienda();
+      allow create, update: if esTienda();
+    }
+
     match /docs_publicos/{token} {
       allow get:    if true;
       allow list:   if false;
