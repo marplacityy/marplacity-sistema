@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento, sinLasQueNoSalieron } from './worker-ig.js';
-import { construirSystem } from './prompt.js';
+import { construirSystem as _construirSystem } from './prompt.js';
+// construirSystem devuelve bloques (por el cache del prompt); los tests miran el texto.
+const construirSystem = o => _construirSystem(o).map(b => b.text).join('\n\n');
 
 const CANAL = 'TEXTO-REAL-DEL-CANAL';
 let fallos = 0;

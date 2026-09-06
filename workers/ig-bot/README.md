@@ -109,7 +109,7 @@ misma persona repetida en cinco filas.
 | `motivo` | string | por qué (ver la tabla de prioridades en `prompt-bot.md`) |
 | `prioridad` | int | 1 a 8, o 99 si no necesita atención |
 | `seguimientoEnviado` | bool | lo marca el cron cuando manda el seguimiento |
-| `botPausado` | bool | el semáforo de ESE chat: `true` = el bot no le contesta. **Lo escribe el sistema, el bot solo lo lee** |
+| `botPausado` | bool | el semáforo de ESE chat: `true` = el bot no le contesta. Lo escribe el sistema, y el bot solo para pausarse cuando promete algo (ver `motivoPausa`) |
 | `pausadoPor`, `pausadoEn` | string, timestamp | quién tocó el semáforo y cuándo. **Los escribe el sistema, no el bot** |
 | `aprobadoPor`, `aprobadoEn` | string, timestamp | quién cerró la conversación desde la bandeja y cuándo. **Los escribe el sistema, no el bot** |
 | `revisado` | bool | |

@@ -157,15 +157,21 @@ service cloud.firestore {
     // puesto el historial de conversaciones.
     match /conversaciones/{docId} {
       // Los campos que el bot escribe de verdad. Lo que le agrega la bandeja desde el
-      // sistema (quien aprobo la respuesta y cuando) queda afuera: el bot no lo toca,
-      // y si intenta tocarlo el update se rechaza entero.
+      // sistema (quien aprobo la respuesta y cuando, quien toco el semaforo) queda
+      // afuera: el bot no lo toca, y si intenta tocarlo el update se rechaza entero.
+      //
+      // botPausado y motivoPausa: desde el 03/09/2026 el bot se pausa solo cuando le
+      // promete algo al cliente ("ya te confirmo"). Sin estos dos aca el PATCH entero
+      // se rechazaba, el chat NUNCA quedaba pausado y el bot seguia contestando encima
+      // del dueño. Paso el 06/09/2026.
       function soloCamposDelBot() {
         return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'igUserId', 'userId', 'fecha', 'ultimoMensajeCliente', 'ultimoMensaje',
           'adjuntos', 'urlsAdjuntos', 'tieneImagen', 'tieneAudio',
           'estado', 'confianza', 'resumen', 'ultimoProducto', 'igUsuario',
           'mensajes', 'sugerencia', 'respondido', 'revisado', 'historial',
-          'necesitaAtencion', 'motivo', 'prioridad', 'seguimientoEnviado'
+          'necesitaAtencion', 'motivo', 'prioridad', 'seguimientoEnviado',
+          'botPausado', 'motivoPausa'
         ]);
       }
 

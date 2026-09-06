@@ -11143,8 +11143,8 @@ window.toggleBotChat = async function(id){
   if(pendiente) await retomarChat(x);
 };
 
-// Solo el campo del semáforo, y quién lo tocó. El Worker lo lee pero no lo escribe nunca:
-// por eso no está en la lista blanca de `soloCamposDelBot()` de firestore.rules.
+// Solo el campo del semáforo, y quién lo tocó. El Worker también lo escribe, pero solo
+// para pausar (cuando promete algo); `pausadoPor`/`pausadoEn` son del sistema nada más.
 async function pausarChat(id, pausado, aviso){
   setSyncDot('syncing');
   try{
