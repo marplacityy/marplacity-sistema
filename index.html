@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-C</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-D</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -12753,6 +12753,12 @@ let catPublicado = null;    // lo último que se publicó, para comparar
 
 const LINK_CATALOGO = 'https://marplacityy.github.io/marplacity-sistema/catalogo.html';
 
+// Reglas de cobro de la tienda. Pagar con tarjeta en dólares (Stripe) lleva recargo, y
+// Mercado Pago se ofrece solo para productos baratos: cobrar un teléfono por ahí dispara
+// impuestos que se comen el margen. Decidido por Juni el 06/09/2026.
+const RECARGO_TARJETA_PCT = 5;
+const MP_MAX_USD = 200;
+
 /**
  * El nombre del archivo de foto que le corresponde a un modelo.
  *
@@ -13234,6 +13240,13 @@ window.publicarCatalogo = async function(){
         direccion: cfg.direccion || conoc.direccion || '',
         horarios: conoc.horarios || '',
         whatsapp: (cfg.localTel || '').replace(/\D/g,''),
+      },
+      // Lo que la página necesita para armar el pedido. El tipo de cambio es el de
+      // Configuración al momento de publicar: si cambia, hay que volver a publicar.
+      cobro: {
+        tc: parseFloat(cfg.tc) || 0,
+        recargoTarjetaPct: RECARGO_TARJETA_PCT,
+        mpMaxUSD: MP_MAX_USD,
       },
     }), {merge:false});
     showToast(`Catálogo publicado ✓ — ${salen.length} producto${salen.length===1?'':'s'}`);
