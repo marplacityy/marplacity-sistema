@@ -14,6 +14,7 @@
  *   POST /pedido         crea el pedido; devuelve {id, url} (url = a dónde ir a pagar)
  *   GET  /pedido/:id     el estado del pedido, para la pantalla de vuelta del pago
  *   POST /mp/webhook     Mercado Pago avisa que un pago cambió
+ *   POST /stripe/webhook Stripe avisa que un pago cambió
  *
  * Variables (Settings → Variables del panel de Cloudflare, o `wrangler secret put`):
  *   FIREBASE_PROJECT   (Text)    mis-gastos-21e7b
@@ -23,6 +24,8 @@
  *   TIENDA_PASSWORD    (Secret)  su contraseña
  *   MP_ACCESS_TOKEN    (Secret)  Access Token de Mercado Pago (el de prueba o el de producción)
  *   MP_WEBHOOK_SECRET  (Secret)  la "clave secreta" de Webhooks de la app de MP (opcional, pero conviene)
+ *   STRIPE_SECRET_KEY  (Secret)  clave secreta de Stripe (sk_test_... primero, sk_live_... después)
+ *   STRIPE_WEBHOOK_SECRET (Secret) el "signing secret" del endpoint de webhook en Stripe (whsec_...)
  *   CATALOGO_URL       (Text)    a dónde vuelve el cliente después de pagar
  *
  * Los precios NUNCA vienen de la página: se leen de `catalogo/publico`, que es lo que
@@ -52,6 +55,7 @@ export default {
           FIREBASE_PROJECT: !!env.FIREBASE_PROJECT, FIREBASE_KEY: !!env.FIREBASE_KEY, OWNER_UID: !!env.OWNER_UID,
           TIENDA_EMAIL: !!env.TIENDA_EMAIL, TIENDA_PASSWORD: !!env.TIENDA_PASSWORD,
           MP_ACCESS_TOKEN: !!env.MP_ACCESS_TOKEN, MP_WEBHOOK_SECRET: !!env.MP_WEBHOOK_SECRET,
+          STRIPE_SECRET_KEY: !!env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: !!env.STRIPE_WEBHOOK_SECRET,
           CATALOGO_URL: !!env.CATALOGO_URL,
         },
       });
@@ -64,6 +68,7 @@ export default {
       if (request.method === 'GET' && m) return await verPedido(m[1], env);
 
       if (request.method === 'POST' && url.pathname === '/mp/webhook') return await webhookMP(request, env, ctx, url);
+      if (request.method === 'POST' && url.pathname === '/stripe/webhook') return await webhookStripe(request, env, ctx);
     } catch (e) {
       console.log('error', url.pathname, e.message);
       return json({ error: e.message }, 500);
@@ -141,8 +146,6 @@ async function crearPedido(request, env, url) {
   const monto = montoDelPedido(producto, p.pago, catalogo.cobro);
   if (monto.error) return json({ error: monto.error }, 400);
 
-  if (p.pago === 'tarjeta') return json({ error: 'el pago con tarjeta en dólares todavía no está: elegí otra forma o seguí por WhatsApp' }, 501);
-
   const id = crypto.randomUUID();
   const ahora = new Date().toISOString();
   const pedido = {
@@ -169,6 +172,11 @@ async function crearPedido(request, env, url) {
     const pref = await preferenciaMP(env, id, pedido, url.origin);
     pedido.mp = { preferenceId: pref.id };
     pagoUrl = pref.init_point;
+  }
+  if (p.pago === 'tarjeta') {
+    const ses = await sesionStripe(env, id, pedido);
+    pedido.stripe = { sessionId: ses.id };
+    pagoUrl = ses.url;
   }
 
   await escribirDoc(env, idToken, `pedidos/${id}`, pedido);
@@ -298,6 +306,138 @@ async function actualizarPago(env, paymentId) {
     },
   });
   console.log('pedido', pedidoId, '->', estado, `(MP ${pago.status})`);
+}
+
+// ── Stripe ───────────────────────────────────────────────────
+
+const STRIPE = 'https://api.stripe.com/v1';
+
+/** Stripe habla form-urlencoded, con claves anidadas entre corchetes. */
+const formStripe = obj => {
+  const out = new URLSearchParams();
+  const meter = (k, v) => {
+    if (v === undefined || v === null) return;
+    if (typeof v === 'object') Object.entries(v).forEach(([k2, v2]) => meter(`${k}[${k2}]`, v2));
+    else out.append(k, String(v));
+  };
+  Object.entries(obj).forEach(([k, v]) => meter(k, v));
+  return out;
+};
+
+/**
+ * La sesión de Checkout: un pedido, un ítem, el monto en dólares con el recargo ya
+ * sumado. `client_reference_id` lleva el id del pedido, y con eso el webhook sabe cuál
+ * actualizar. Stripe cobra en centavos.
+ */
+async function sesionStripe(env, pedidoId, pedido) {
+  if (!env.STRIPE_SECRET_KEY) throw new Error('falta STRIPE_SECRET_KEY');
+  const vuelta = `${env.CATALOGO_URL || 'https://marplacityy.github.io/marplacity-sistema/catalogo.html'}?pedido=${pedidoId}`;
+  const titulo = [pedido.producto.nombre, pedido.producto.gb, pedido.producto.color].filter(Boolean).join(' ');
+  const r = await fetch(`${STRIPE}/checkout/sessions`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': pedidoId },
+    body: formStripe({
+      mode: 'payment',
+      line_items: [{ quantity: 1, price_data: { currency: 'usd', unit_amount: Math.round(pedido.montoUSD * 100), product_data: { name: titulo } } }],
+      client_reference_id: pedidoId,
+      metadata: { pedido: pedidoId },
+      customer_email: pedido.cliente.email || undefined,
+      success_url: `${vuelta}&status=approved`,
+      cancel_url: `${vuelta}&status=cancelled`,
+    }),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    console.log('Stripe sesion', r.status, JSON.stringify(d).slice(0, 300));
+    throw new Error(`Stripe rechazó el pedido (${r.status})`);
+  }
+  return d;
+}
+
+/**
+ * ¿La notificación la mandó Stripe? Header "Stripe-Signature: t=<ts>,v1=<hmac>", firma
+ * HMAC-SHA256 de "<ts>.<cuerpo crudo>" con el signing secret del endpoint.
+ * Exportado para el test.
+ */
+export async function firmaStripeValida(secret, header, cuerpo, ahora = Date.now()) {
+  if (!secret) return false;
+  const partes = {};
+  for (const s of String(header || '').split(',')) { const [k, v] = s.trim().split('='); if (k && v) (partes[k] ||= []).push(v); }
+  const t = partes.t?.[0];
+  if (!t || !partes.v1?.length) return false;
+  if (Math.abs(ahora / 1000 - Number(t)) > 300) return false;   // 5 minutos de tolerancia
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${cuerpo}`));
+  const hex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).join('');
+  return partes.v1.includes(hex);
+}
+
+/**
+ * Stripe avisa por acá. A diferencia de MP, acá la firma sí es confiable y se exige.
+ * Igual el estado se toma de la sesión consultada a la API, no del cuerpo del aviso.
+ */
+async function webhookStripe(request, env, ctx) {
+  const cuerpo = await request.text();
+  if (!(await firmaStripeValida(env.STRIPE_WEBHOOK_SECRET, request.headers.get('stripe-signature'), cuerpo))) {
+    console.log('webhook Stripe: firma inválida');
+    return json({ error: 'firma inválida' }, 401);
+  }
+  let ev = {};
+  try { ev = JSON.parse(cuerpo); } catch { return json({ error: 'json inválido' }, 400); }
+  console.log('webhook Stripe', ev.type, ev.data?.object?.id);
+
+  const obj = ev.data?.object || {};
+  if (String(ev.type || '').startsWith('checkout.session.')) {
+    ctx.waitUntil(actualizarSesionStripe(env, obj.id).catch(e => console.log('webhook Stripe falló:', e.message)));
+  } else if (ev.type === 'charge.refunded' && obj.payment_intent) {
+    ctx.waitUntil(marcarDevueltoStripe(env, obj.payment_intent).catch(e => console.log('webhook Stripe falló:', e.message)));
+  }
+  return json({ ok: true });
+}
+
+const ESTADO_STRIPE = { paid: 'pagado', unpaid: 'pendiente', no_payment_required: 'pagado' };
+
+async function actualizarSesionStripe(env, sessionId) {
+  const r = await fetch(`${STRIPE}/checkout/sessions/${encodeURIComponent(sessionId)}`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
+  if (!r.ok) throw new Error(`Stripe no devolvió la sesión ${sessionId} (${r.status})`);
+  const ses = await r.json();
+  const pedidoId = ses.client_reference_id || ses.metadata?.pedido;
+  if (!pedidoId) { console.log('sesión sin pedido', sessionId); return; }
+
+  const idToken = await tokenDeLaTienda(env);
+  if (!idToken) throw new Error('la tienda no se pudo loguear a Firebase');
+  const pedido = await leerDoc(env, idToken, `pedidos/${pedidoId}`);
+  if (!pedido) { console.log('pedido no existe', pedidoId); return; }
+
+  // Una sesión que venció o se canceló sin pagar: el pedido vuelve a "rechazado" solo si nunca se pagó.
+  let estado = ESTADO_STRIPE[ses.payment_status] || 'pendiente';
+  if (ses.status === 'expired' && estado !== 'pagado') estado = 'rechazado';
+  if (pedido.estado === 'pagado' && estado !== 'pagado') return;
+
+  await escribirDoc(env, idToken, `pedidos/${pedidoId}`, {
+    estado,
+    actualizado: new Date().toISOString(),
+    ...(estado === 'pagado' ? { pagadoEn: new Date().toISOString() } : {}),
+    stripe: {
+      ...(pedido.stripe || {}),
+      sessionId: ses.id, paymentIntent: ses.payment_intent || '', paymentStatus: ses.payment_status || '',
+      monto: ses.amount_total != null ? ses.amount_total / 100 : null, moneda: ses.currency || 'usd',
+    },
+  });
+  console.log('pedido', pedidoId, '->', estado, `(Stripe ${ses.payment_status})`);
+}
+
+/** Un reembolso: se busca el pedido por el payment_intent guardado en la sesión. */
+async function marcarDevueltoStripe(env, paymentIntent) {
+  const r = await fetch(`${STRIPE}/checkout/sessions?payment_intent=${encodeURIComponent(paymentIntent)}&limit=1`, { headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` } });
+  if (!r.ok) throw new Error(`Stripe no devolvió la sesión del pago ${paymentIntent} (${r.status})`);
+  const ses = (await r.json()).data?.[0];
+  const pedidoId = ses?.client_reference_id || ses?.metadata?.pedido;
+  if (!pedidoId) { console.log('reembolso sin pedido', paymentIntent); return; }
+  const idToken = await tokenDeLaTienda(env);
+  if (!idToken) throw new Error('la tienda no se pudo loguear a Firebase');
+  await escribirDoc(env, idToken, `pedidos/${pedidoId}`, { estado: 'devuelto', actualizado: new Date().toISOString() });
+  console.log('pedido', pedidoId, '-> devuelto (Stripe)');
 }
 
 // ── Firebase ─────────────────────────────────────────────────

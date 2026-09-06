@@ -4,7 +4,7 @@
  *   node workers/tienda/test-tienda.mjs
  */
 import assert from 'node:assert/strict';
-import { validarPedido, montoDelPedido, firmaMPValida } from './worker.js';
+import { validarPedido, montoDelPedido, firmaMPValida, firmaStripeValida } from './worker.js';
 
 // ── validarPedido ──
 const ok = validarPedido({ productoId: 'stock_1', pago: 'mp', entrega: 'retiro', nombre: 'Ana', whatsapp: '223 555-1234', email: 'ANA@x.com' });
@@ -32,5 +32,18 @@ const v1 = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).jo
 assert.equal(await firmaMPValida('clave-de-prueba', `ts=1700000000,v1=${v1}`, 'req-1', '123'), true);
 assert.equal(await firmaMPValida('clave-de-prueba', `ts=1700000000,v1=${v1}`, 'req-1', '124'), false, 'otro id, otra firma');
 assert.equal(await firmaMPValida('', 'lo que sea', 'req-1', '123'), true, 'sin clave cargada no se verifica');
+
+// ── firmaStripeValida ──
+{
+  const secret = 'whsec_prueba', cuerpo = '{"id":"evt_1","type":"checkout.session.completed"}', t = 1700000000;
+  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const m = await crypto.subtle.sign('HMAC', k, new TextEncoder().encode(`${t}.${cuerpo}`));
+  const hex = [...new Uint8Array(m)].map(b => b.toString(16).padStart(2, '0')).join('');
+  const ahora = t * 1000 + 60_000;
+  assert.equal(await firmaStripeValida(secret, `t=${t},v1=${hex}`, cuerpo, ahora), true);
+  assert.equal(await firmaStripeValida(secret, `t=${t},v1=${hex}`, cuerpo + ' ', ahora), false, 'otro cuerpo, otra firma');
+  assert.equal(await firmaStripeValida(secret, `t=${t},v1=${hex}`, cuerpo, ahora + 10 * 60_000), false, 'un aviso de hace 10 minutos no vale');
+  assert.equal(await firmaStripeValida('', `t=${t},v1=${hex}`, cuerpo, ahora), false, 'sin secret no se acepta nada');
+}
 
 console.log('Todo verde');

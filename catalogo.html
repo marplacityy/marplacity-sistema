@@ -484,14 +484,13 @@ window.pedidoPorWhatsApp = id => {
 };
 
 /**
- * Confirmar el pedido. Mercado Pago y la reserva en efectivo van al Worker; la tarjeta
- * en dólares todavía no está y sale por WhatsApp.
+ * Confirmar el pedido. Todo va al Worker: Mercado Pago y tarjeta devuelven a dónde ir a
+ * pagar; la reserva en efectivo queda hecha y se muestra la pantalla final.
  */
 window.mandarPedido = async (ev, id) => {
   ev.preventDefault();
   const p = PRODUCTOS.find(x => x.id === id);
   const f = ev.target;
-  if (f.pago.value === 'tarjeta') { pedidoPorWhatsApp(id); return; }
 
   const btn = document.getElementById('btn-pedido');
   const texto = btn.textContent;
@@ -507,7 +506,7 @@ window.mandarPedido = async (ev, id) => {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `la tienda respondió ${r.status}`);
-    if (d.url) { location.href = d.url; return; }      // a pagar a Mercado Pago
+    if (d.url) { location.href = d.url; return; }      // a pagar (Mercado Pago o Stripe)
     pantallaPedido({ id: d.id, estado: d.estado, producto: p.nombre, pago: f.pago.value });
   } catch (e) {
     alert('No pudimos tomar el pedido: ' + e.message + '\n\nPodés seguir por WhatsApp.');

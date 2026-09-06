@@ -14,6 +14,7 @@ URL de producción: https://tienda.fiwind702050.workers.dev/
 | `POST /pedido` | crea el pedido. Devuelve `{id, estado, url}`; si hay `url`, la página manda al cliente ahí a pagar |
 | `GET /pedido/:id` | el estado del pedido, para la pantalla de vuelta del pago |
 | `POST /mp/webhook` | Mercado Pago avisa que un pago cambió |
+| `POST /stripe/webhook` | Stripe avisa que un pago cambió (`checkout.session.*`, `charge.refunded`) |
 
 **El precio no viene de la página.** Se lee de `catalogo/publico` (lo que publicó el
 dueño) y las reglas de cobro (`cobro`: tipo de cambio, recargo de tarjeta, tope de MP)
@@ -24,8 +25,8 @@ Formas de pago:
 - `mp` — en pesos, `precioUSD × tc`. Solo hasta `cobro.mpMaxUSD` (u$s 200): cobrar un
   teléfono por Mercado Pago dispara impuestos que se comen el margen.
 - `efectivo` — reserva sin pagar; el pedido nace `reservado`.
-- `tarjeta` — dólares con recargo (Stripe). **Todavía no está**: devuelve 501 y la página
-  manda ese caso por WhatsApp.
+- `tarjeta` — dólares con tarjeta por Stripe Checkout, `precioUSD × (1 + recargoTarjetaPct)`.
+  Sin tope: es la forma de pagar un teléfono a distancia.
 
 ## El doc de `pedidos`
 
@@ -55,12 +56,18 @@ Orden la primera vez:
    npx wrangler secret put TIENDA_PASSWORD
    npx wrangler secret put MP_ACCESS_TOKEN      # el de prueba primero
    npx wrangler secret put MP_WEBHOOK_SECRET    # la "clave secreta" de Webhooks de la app de MP
+   npx wrangler secret put STRIPE_SECRET_KEY    # sk_test_... primero, sk_live_... después
+   npx wrangler secret put STRIPE_WEBHOOK_SECRET # el signing secret (whsec_...) del endpoint
    ```
 
    Y en el panel (Settings → Variables), las Text: `OWNER_UID` (el uid del dueño, el mismo
    que tiene ig-bot) y `TIENDA_EMAIL`. Las que ya son públicas van en `wrangler.toml`.
 4. En la app de Mercado Pago → Webhooks: URL `https://tienda.fiwind702050.workers.dev/mp/webhook`,
    evento **Pagos**.
+5. En Stripe → Developers → Webhooks → Add endpoint: URL
+   `https://tienda.fiwind702050.workers.dev/stripe/webhook`, eventos `checkout.session.completed`,
+   `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`,
+   `checkout.session.expired` y `charge.refunded`.
 
 Después del deploy abrir https://tienda.fiwind702050.workers.dev/ y confirmar que la
 lista de `vars` esté toda en `true`.
