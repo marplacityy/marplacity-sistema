@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-A</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-B</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2861,20 +2861,21 @@
       <div class="card">
         <div class="card-title">Las fotos</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Las imágenes viven en la carpeta <code>fotos/</code> del repositorio, y qué foto es de qué modelo se guarda en la base. <b>Lo usan los dos:</b> esta página para publicar, y el bot de Instagram para mandarle la foto al cliente que la pide.</p>
-        <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">Cuando agregues archivos nuevos a <code>fotos/</code> y los subas, tocá sincronizar: hasta que lo hagas, la foto está en el repositorio pero nadie sabe que existe.</p>
+        <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">Dejá los archivos en <code>fotos/</code> con cualquier nombre y subilos. Después tocá <b>Clasificar</b>: la IA mira cada foto nueva, reconoce modelo, color y si es el frente o el dorso, y la asigna al producto. Lo que no reconozca queda abajo para que lo asignes vos.</p>
         <div id="cat-fotos"></div>
         <div class="pos-actions" style="margin-top:14px;">
+          <button class="btn-secondary" id="btn-cat-ia" onclick="clasificarFotos()">🤖 Clasificar fotos nuevas</button>
           <button class="btn-secondary" id="btn-cat-fotos" onclick="sincronizarFotos()">🔄 Sincronizar con la carpeta</button>
         </div>
       </div>
 
       <div class="card">
         <div class="card-title">Qué se va a publicar</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Entran los equipos <b>en stock con precio de venta cargado</b>, propios y de consignación. Podés sacar alguno de la lista sin borrarlo del sistema.</p>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Entran los equipos <b>en stock con precio de venta cargado</b> (propios y de consignación), los artículos del <b>inventario</b> con cantidad y precio sugerido, y los productos de la <b>última lista de precios</b> de cada origen, que salen como "a pedido". Podés sacar cualquiera de la lista sin borrarlo del sistema.</p>
         <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">Del costo, el IMEI, el proveedor y las notas internas <b>no sale nada</b>: la página se arma con nombre, capacidad, color, batería, estado y precio.</p>
         <div id="cat-resumen"></div>
         <div style="overflow-x:auto;margin-top:10px;"><table class="tkh-table">
-          <thead><tr><th style="width:44px;">Sale</th><th>Producto</th><th style="width:70px;">GB</th><th style="width:110px;">Color</th><th style="width:70px;">Batería</th><th style="text-align:right;width:100px;">Precio</th></tr></thead>
+          <thead><tr><th style="width:44px;">Sale</th><th>Producto</th><th style="width:70px;">GB</th><th style="width:110px;">Color</th><th style="width:70px;">Batería</th><th style="text-align:right;width:100px;">Precio</th><th>Descripción</th></tr></thead>
           <tbody id="cat-body"></tbody>
         </table></div>
         <div class="pos-actions" style="margin-top:14px;">
@@ -3315,6 +3316,7 @@ async function init() {
       invItems = snap.docs.map(d=>({id:d.id,...d.data()}));
       invItems.sort((a,b)=>COLL.compare(a.nombre||'', b.nombre||''));
       if(currentPage==='inv') deb('inv',renderInv);
+      if(currentPage==='catalogo') deb('catalogo',renderCatalogo);
       setSyncDot('ok');
     }, snapErr);
     onSnapshot(myQ(repCol), snap => {
@@ -3364,6 +3366,7 @@ async function init() {
       // como "la última" lo decide el orden en que Firestore devolvió los docs.
       listasItems.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'') || (msDe(b.createdAt) - msDe(a.createdAt)));
       if(currentPage==='conocimiento') deb('kb',renderConocimiento);
+      if(currentPage==='catalogo') deb('catalogo',renderCatalogo);
       setSyncDot('ok');
     }, snapErr);
     // El tablero del bot necesita TODAS las conversaciones, no solo las que piden
@@ -3399,6 +3402,7 @@ async function init() {
     onSnapshot(fotosDoc, snap => {
       const d = snap.exists() ? snap.data() : null;
       FOTOS = d?.mapa || {};
+      FOTOS_CLAS = d?.clasificacion || {};
       // Se guarda la URL completa: el bot necesita una dirección absoluta para mandarla
       // por Instagram, y la página del catálogo funciona igual con las dos.
       FOTOS_BASE = d?.base || 'fotos/';
@@ -12734,6 +12738,13 @@ window.emitirNotaCreditoArca = async function(comprobanteId){
 // rosa: con una sola foto por modelo, al rosa le saldría la del negro.
 let FOTOS = {};                       // { 'iphone-15-black': ['iphone-15-black.jpg'], ... }
 let FOTOS_BASE = 'fotos/';            // el prefijo, por si algún día se mudan a otro lado
+// Qué decidió la IA (o Juni a mano) de cada archivo: { 'IMG_0412.jpg': { clave, vista, confianza, manual } }.
+// `clave` en null es "mirada y no identificada". Manda sobre el nombre del archivo.
+let FOTOS_CLAS = {};
+let fotoAbierta = null;               // la clave cuyo detalle está desplegado en la grilla
+// Los archivos se leen de acá para clasificar: es la copia cruda del repo, disponible al
+// instante después del push, sin esperar a que GitHub Pages termine de publicar.
+const FOTOS_RAW = 'https://raw.githubusercontent.com/marplacityy/marplacity-sistema/main/fotos/';
 
 const fotosDoc = doc(db, 'catalogo', 'fotos');
 
@@ -12779,6 +12790,7 @@ function fotosDe(nombre, color){
 /** Un equipo, con lo justo para mostrarlo. Es el único lugar que decide qué es público. */
 const productoPublico = (p, origen) => ({
   id: `${origen}_${p.id}`,
+  tipo: 'equipo',
   nombre: String(p.nombre || p.producto || '').trim(),
   gb: String(p.gb || '').trim(),
   color: String(p.color || '').trim(),
@@ -12789,15 +12801,76 @@ const productoPublico = (p, origen) => ({
   fotos: fotosDe(p.nombre || p.producto, p.color),
 });
 
-/** Los equipos que califican: en stock y con precio de venta cargado. */
+// Un precio en la moneda que sea, pasado a dólares con el tipo de cambio de Configuración.
+const enUSD = (precio, moneda) => {
+  const n = Number(precio) || 0;
+  if(moneda !== 'ARS') return n;
+  const tc = parseFloat(cfg.tc) || 0;
+  return tc ? Math.round(n / tc) : 0;
+};
+
+/** Un artículo del inventario (accesorios, cargadores, fundas): sin color ni batería. */
+const accesorioPublico = p => ({
+  id: `inv_${p.id}`,
+  tipo: 'accesorio',
+  nombre: String(p.nombre || '').trim(),
+  gb: '', color: '', bateria: null, ciclos: null,
+  estado: '',
+  precioUSD: enUSD(p.sugerido, p.moneda),
+  fotos: fotosDe(p.nombre, ''),
+});
+
+/**
+ * Un ítem de una lista de precios: NO está en el local, se trae a pedido. El id sale del
+ * nombre y no de un doc, porque cada guardado de la lista es un doc nuevo y el cliente
+ * que compartió el link ayer tiene que seguir cayendo en el mismo producto hoy.
+ */
+const pedidoPublico = (it, lista) => ({
+  id: 'lista_' + slugFoto(`${it.producto} ${it.gb} ${it.color} ${it.condicion}`),
+  tipo: 'pedido',
+  nombre: String(it.producto || '').trim(),
+  gb: String(it.gb || '').trim(),
+  color: String(it.color || '').trim(),
+  bateria: null, ciclos: null,
+  estado: it.condicion === 'nuevo' ? 'Nuevo' : it.condicion === 'usado' ? 'Usado' : '',
+  precioUSD: enUSD(it.precioPublico, lista.moneda),
+  fotos: fotosDe(it.producto, it.color),
+});
+
+/**
+ * Todo lo que califica: equipos en stock, artículos del inventario con cantidad, y los
+ * ítems de la última lista de cada origen. Un mismo producto en dos listas entra una sola
+ * vez, con el precio de la primera (Mar del Plata, CABA, proveedor, en ese orden).
+ */
 function catalogoCandidatos(){
   const fuera = new Set(cfg.catalogoExcluidos || []);
+  const notas = cfg.catalogoNotas || {};
   const items = [
     ...stockItems.filter(p => p.status === 'en_stock').map(p => ({ ...productoPublico(p, 'stock'), _origen: 'Propio' })),
     ...consigItems.filter(p => p.status === 'en_stock').map(p => ({ ...productoPublico(p, 'consig'), _origen: 'Consignación' })),
+    ...invItems.filter(p => (Number(p.qty) || 0) > 0).map(p => ({ ...accesorioPublico(p), _origen: 'Inventario' })),
   ];
-  return items.map(p => ({ ...p, _sale: p.precioUSD > 0 && !fuera.has(p.id) }));
+  const vistos = new Set();
+  for(const origen of Object.keys(KB_ORIGENES)){
+    const lista = kbUltimaLista(origen);
+    for(const it of (lista && Array.isArray(lista.items) ? lista.items : [])){
+      const p = pedidoPublico(it, lista);
+      if(!p.nombre || vistos.has(p.id)) continue;
+      vistos.add(p.id);
+      items.push({ ...p, _origen: 'Lista ' + KB_ORIGENES[origen] });
+    }
+  }
+  return items.map(p => ({ ...p, descripcion: String(notas[p.id] || '').trim(), _sale: p.precioUSD > 0 && !fuera.has(p.id) }));
 }
+
+/** La descripción que escribe Juni para un producto. Vive en la config, por id. */
+window.notaCatalogo = function(id, texto){
+  const notas = { ...(cfg.catalogoNotas || {}) };
+  texto = String(texto || '').trim();
+  if(texto) notas[id] = texto; else delete notas[id];
+  cfg.catalogoNotas = notas;
+  setDoc(cfgDoc, withUser({ catalogoNotas: notas }), {merge:true}).catch(()=>{});
+};
 
 function renderCatalogo(){
   document.getElementById('cat-link').value = LINK_CATALOGO;
@@ -12807,7 +12880,7 @@ function renderCatalogo(){
 
   document.getElementById('cat-resumen').innerHTML = `
     <div class="proveedor-alerta">
-      <b>${salen.length}</b> equipo${salen.length===1?'':'s'} en la página, de ${items.length} en stock.
+      <b>${salen.length}</b> producto${salen.length===1?'':'s'} en la página, de ${items.length} posibles.
       ${sinPrecio.length ? `<br>⚠️ ${sinPrecio.length} sin precio de venta cargado: esos no se publican aunque los marques.` : ''}
     </div>
     ${(()=>{
@@ -12834,7 +12907,10 @@ function renderCatalogo(){
       <td>${esc(p.color)}</td>
       <td style="font-family:'DM Mono',monospace;">${p.bateria!=null?p.bateria+'%':'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;">${p.precioUSD?fmtUSD(p.precioUSD):'—'}</td>
-    </tr>`).join('') || '<tr><td colspan="6" style="color:var(--text3);">No hay equipos en stock.</td></tr>';
+      <td><input type="text" value="${esc(p.descripcion)}" placeholder="Opcional: lo que quieras contar de este producto"
+            onchange="notaCatalogo('${escJs(p.id)}',this.value)"
+            style="width:100%;min-width:200px;padding:6px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);"></td>
+    </tr>`).join('') || '<tr><td colspan="7" style="color:var(--text3);">No hay nada para publicar.</td></tr>';
 
   // ¿Lo que se ve en la página coincide con lo que hay ahora?
   const el = document.getElementById('cat-estado');
@@ -12854,19 +12930,234 @@ function renderCatalogo(){
  * Lo que hay hoy en la base de fotos. Se dibuja para poder mirarlo: es el unico lugar
  * donde se ve, porque el archivo de imagen esta en el repositorio y el mapa en Firestore.
  */
+/** Las claves de foto de todo lo que se puede publicar, para los selects de asignación. */
+function clavesDeProductos(){
+  const claves = new Set();
+  for(const p of catalogoCandidatos()){
+    const m = slugFoto(p.nombre);
+    if(m) claves.add(p.color ? `${m}-${slugFoto(p.color)}` : m);
+  }
+  return [...claves].sort();
+}
+
+const selectClave = (archivo, actual) => {
+  const opciones = [...new Set([...clavesDeProductos(), ...Object.keys(FOTOS)])].sort();
+  return `<select onchange="asignarFoto('${escJs(archivo)}',this.value)"
+      style="width:100%;font-size:11px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);">
+    <option value="">— sin asignar —</option>
+    ${opciones.map(k=>`<option value="${esc(k)}" ${k===actual?'selected':''}>${esc(k)}</option>`).join('')}
+  </select>`;
+};
+
 function renderFotosCatalogo(){
   const claves = Object.keys(FOTOS).sort();
   const total = claves.reduce((a,k) => a + FOTOS[k].length, 0);
-  document.getElementById('cat-fotos').innerHTML = !claves.length
-    ? '<div class="proveedor-alerta alerta-atencion">La base de fotos está vacía. Tocá sincronizar.</div>'
-    : `<div class="proveedor-alerta" style="margin-bottom:10px;"><b>${total}</b> imagen${total===1?'':'es'} de <b>${claves.length}</b> modelo${claves.length===1?'':'s'}.</div>
-       <div style="display:flex;flex-wrap:wrap;gap:10px;">${claves.map(k=>`
-         <div style="width:82px;text-align:center;">
+  // Las que la IA miró y no pudo ubicar en ningún producto: se listan para asignarlas a mano.
+  const sueltas = Object.keys(FOTOS_CLAS).filter(a => !FOTOS_CLAS[a]?.clave).sort();
+
+  const detalle = k => fotoAbierta !== k ? '' : `
+    <div style="grid-column:1/-1;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;display:flex;flex-wrap:wrap;gap:10px;">
+      ${FOTOS[k].map(a => { const c = FOTOS_CLAS[a] || {}; return `
+        <div style="width:150px;">
+          <img src="${esc(FOTOS_BASE + a)}" loading="lazy" style="width:150px;height:110px;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);">
+          <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--text3);margin:4px 0;word-break:break-all;">${esc(a)}${c.vista?` · ${esc(c.vista)}`:''}${c.manual?' · a mano':c.clave?' · IA':''}</div>
+          ${selectClave(a, k)}
+        </div>`; }).join('')}
+    </div>`;
+
+  document.getElementById('cat-fotos').innerHTML = (!claves.length && !sueltas.length)
+    ? '<div class="proveedor-alerta alerta-atencion">La base de fotos está vacía. Subí archivos a <code>fotos/</code> y tocá Clasificar.</div>'
+    : `<div class="proveedor-alerta" style="margin-bottom:10px;"><b>${total}</b> imagen${total===1?'':'es'} de <b>${claves.length}</b> modelo${claves.length===1?'':'s'}. Tocá una para ver sus fotos y moverlas.</div>
+       <div style="display:grid;grid-template-columns:repeat(auto-fill,82px);gap:10px;">${claves.map(k=>`
+         <div style="width:82px;text-align:center;cursor:pointer;" onclick="abrirFotoCat('${escJs(k)}')">
            <img src="${esc(FOTOS_BASE + FOTOS[k][0])}" loading="lazy"
-                style="width:82px;height:82px;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);">
+                style="width:82px;height:82px;object-fit:contain;background:#fff;border:1px solid ${fotoAbierta===k?'var(--text)':'var(--border)'};border-radius:var(--radius-sm);">
            <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--text3);margin-top:4px;word-break:break-all;line-height:1.25;">${esc(k)}${FOTOS[k].length>1?` ·${FOTOS[k].length}`:''}</div>
-         </div>`).join('')}</div>`;
+         </div>${detalle(k)}`).join('')}</div>
+       ${sueltas.length ? `
+       <div class="proveedor-alerta alerta-atencion" style="margin-top:14px;">📷 <b>${sueltas.length} foto${sueltas.length===1?'':'s'} sin identificar.</b> La IA no supo de qué producto son: asignalas vos.</div>
+       <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;">${sueltas.map(a=>`
+         <div style="width:150px;">
+           <img src="${esc(FOTOS_BASE + a)}" loading="lazy" style="width:150px;height:110px;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);">
+           <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--text3);margin:4px 0;word-break:break-all;">${esc(a)}${FOTOS_CLAS[a]?.nota?` · ${esc(FOTOS_CLAS[a].nota)}`:''}</div>
+           ${selectClave(a, '')}
+         </div>`).join('')}</div>` : ''}`;
 }
+
+window.abrirFotoCat = k => { fotoAbierta = fotoAbierta === k ? null : k; renderFotosCatalogo(); };
+
+/** Mover una foto a un producto (o sacarla). Lo que se decide a mano pisa a la IA y al nombre. */
+window.asignarFoto = async function(archivo, clave){
+  FOTOS_CLAS = { ...FOTOS_CLAS, [archivo]: { ...(FOTOS_CLAS[archivo] || {}), clave: clave || null, manual: true } };
+  const archivos = [...new Set([...Object.values(FOTOS).flat(), ...Object.keys(FOTOS_CLAS)])];
+  await guardarFotos(archivos);
+};
+
+/**
+ * Arma el mapa producto → archivos a partir de la lista de archivos.
+ *
+ * Manda lo que se decidió por archivo (la IA o Juni a mano); si no hay decisión, la clave
+ * sale del nombre como siempre: `iphone-15-black-2.jpg` es la segunda foto de
+ * `iphone-15-black`. El sufijo se saca SOLO si existe el archivo base sin él, para no
+ * romper un modelo que de verdad termine en número.
+ *
+ * Dentro de cada producto va primero el frente: es la foto de la tarjeta.
+ */
+function armarMapaFotos(archivos, clasificacion){
+  // Los "bases" válidos para un sufijo -2: un archivo sin sufijo, o una clave ya asignada.
+  const stems = new Set([
+    ...archivos.map(n => n.replace(/\.[^.]+$/, '')),
+    ...Object.values(clasificacion).map(c => c && c.clave).filter(Boolean),
+  ]);
+  const mapa = {};
+  for(const nombre of [...archivos].sort()){
+    const c = clasificacion[nombre];
+    let clave;
+    if(c && 'clave' in c){
+      if(!c.clave) continue;          // mirada y sin producto: no entra al mapa
+      clave = c.clave;
+    }else{
+      const stem = nombre.replace(/\.[^.]+$/, '');
+      const m = /^(.+)-[2-9]$/.exec(stem);
+      clave = (m && stems.has(m[1])) ? m[1] : stem;
+    }
+    (mapa[clave] ||= []).push(nombre);
+  }
+  const peso = a => {
+    const v = clasificacion[a]?.vista;
+    return v === 'frente' ? 0 : v ? 2 : 1;
+  };
+  for(const k in mapa) mapa[k].sort((a,b) => peso(a) - peso(b) || a.length - b.length || a.localeCompare(b));
+  return mapa;
+}
+
+/** Los archivos de imagen que hay de verdad en `fotos/`, según GitHub. */
+async function archivosDeFotos(){
+  const r = await fetch('https://api.github.com/repos/marplacityy/marplacity-sistema/contents/fotos');
+  if(!r.ok) throw new Error(r.status === 403 ? 'GitHub pidió esperar un rato (límite de consultas)' : 'GitHub contestó '+r.status);
+  return (await r.json())
+    .filter(f => f.type === 'file' && /\.(jpe?g|png|webp)$/i.test(f.name))
+    .map(f => f.name);
+}
+
+/** Guarda el mapa y las decisiones. Solo se conservan decisiones de archivos que existen. */
+async function guardarFotos(archivos){
+  const vivos = new Set(archivos);
+  const clasificacion = Object.fromEntries(Object.entries(FOTOS_CLAS).filter(([a]) => vivos.has(a)));
+  const mapa = armarMapaFotos(archivos, clasificacion);
+  setSyncDot('syncing');
+  await setDoc(fotosDoc, withUser({
+    mapa,
+    clasificacion,
+    base: LINK_CATALOGO.replace(/[^/]+$/, '') + 'fotos/',
+    actualizado: new Date().toISOString(),
+  }), {merge:false});
+  return mapa;
+}
+
+/**
+ * Una foto achicada a 1024 px y en JPEG, en base64, para mandarla a la IA.
+ * Las fotos del celular pesan 3 o 4 MB; así van a 150 KB y la clasificación sale igual.
+ */
+async function fotoParaIA(archivo){
+  const r = await fetch(FOTOS_RAW + encodeURIComponent(archivo));
+  if(!r.ok) throw new Error(`no pude leer ${archivo} (${r.status})`);
+  const bmp = await createImageBitmap(await r.blob());
+  const k = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);   // los PNG con transparencia, sobre blanco
+  ctx.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
+/**
+ * Le muestra a la IA las fotos que todavía no tienen producto y le pide que diga de cuál
+ * son. Una foto "nueva" es la que no tiene decisión guardada y cuyo nombre tampoco
+ * coincide con un producto: las que ya se nombraron bien a mano no se vuelven a mirar.
+ */
+window.clasificarFotos = async function(){
+  const btn = document.getElementById('btn-cat-ia');
+  btn.disabled = true; btn.textContent = 'Leyendo la carpeta…';
+  try{
+    const archivos = await archivosDeFotos();
+    const conocidas = new Set(clavesDeProductos());
+    const stems = new Set(archivos.map(n => n.replace(/\.[^.]+$/, '')));
+    const nuevas = archivos.filter(a => {
+      if(FOTOS_CLAS[a]) return false;
+      const stem = a.replace(/\.[^.]+$/, '');
+      const m = /^(.+)-[2-9]$/.exec(stem);
+      return !conocidas.has((m && stems.has(m[1])) ? m[1] : stem);
+    });
+    if(!nuevas.length){
+      await guardarFotos(archivos);
+      showToast('No hay fotos nuevas para clasificar — mapa sincronizado ✓');
+      return;
+    }
+
+    // Los productos entre los que tiene que elegir: nombre y color, sin capacidad.
+    const productos = [...new Set(catalogoCandidatos().map(p => JSON.stringify({ producto: p.nombre, color: p.color || '' })))].map(x => JSON.parse(x));
+
+    const LOTE = 6;
+    let hechas = 0;
+    for(let i = 0; i < nuevas.length; i += LOTE){
+      const lote = nuevas.slice(i, i + LOTE);
+      btn.textContent = `Mirando ${Math.min(i + LOTE, nuevas.length)} de ${nuevas.length}…`;
+      const contenido = [];
+      for(const a of lote){
+        contenido.push({ type: 'text', text: `Archivo: ${a}` });
+        contenido.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: await fotoParaIA(a) } });
+      }
+      contenido.push({ type: 'text', text:
+`Sos el que ordena las fotos de productos de un local de celulares. Para CADA archivo de arriba decí de qué producto es.
+
+Productos que se venden (elegí "producto" y "color" EXACTAMENTE de esta lista; si la foto es de un producto que no está, poné null en producto):
+${JSON.stringify(productos)}
+
+Reglas:
+- Mirá el equipo de la foto: modelo (por cámaras, botones, isla, notch, tamaño), color, si es un accesorio.
+- Si la foto muestra el frente del equipo (pantalla), vista = "frente". El dorso, "dorso". De costado, "lateral". La caja o los accesorios, "caja". Otra cosa, "otro".
+- Si dudás entre dos modelos parecidos (13 vs 14, Pro vs no Pro), poné confianza "baja".
+- No inventes colores que no están en la lista para ese producto.
+
+Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
+[{"archivo":"...","producto":"iPhone 13"|null,"color":"Red"|"","vista":"frente|dorso|lateral|caja|otro","confianza":"alta|baja","nota":"qué viste, en 5 palabras"}]` });
+
+      const resp = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: await workerHeaders(),
+        body: JSON.stringify({
+          model: 'claude-sonnet-5',
+          max_tokens: 3000,
+          output_config: { effort: 'low' },
+          messages: [{ role: 'user', content: contenido }],
+        }),
+      });
+      const txt = textoDeIA(await resp.json()).replace(/^```(?:json)?\s*|\s*```$/g, '');
+      const lista = JSON.parse(txt);
+      if(!Array.isArray(lista)) throw new Error('la IA no devolvió una lista');
+      for(const r of lista){
+        if(!lote.includes(r.archivo)) continue;
+        const clave = r.producto ? slugFoto(r.producto) + (r.color ? '-' + slugFoto(r.color) : '') : null;
+        FOTOS_CLAS = { ...FOTOS_CLAS, [r.archivo]: {
+          clave, vista: String(r.vista || 'otro'), confianza: String(r.confianza || ''),
+          nota: String(r.nota || '').slice(0, 80), manual: false,
+        } };
+        hechas++;
+      }
+      // Lo que la IA no nombró queda como "sin identificar", para que no se vuelva a pagar.
+      for(const a of lote) if(!FOTOS_CLAS[a]) FOTOS_CLAS = { ...FOTOS_CLAS, [a]: { clave: null, vista: 'otro', nota: 'la IA no la mencionó', manual: false } };
+    }
+
+    const mapa = await guardarFotos(archivos);
+    const sinDueno = nuevas.filter(a => !FOTOS_CLAS[a]?.clave).length;
+    const bajas = nuevas.filter(a => FOTOS_CLAS[a]?.confianza === 'baja').length;
+    showToast(`Clasificadas ${hechas} foto${hechas===1?'':'s'} ✓ — ${Object.keys(mapa).length} modelos con imagen` +
+      (sinDueno ? ` · ${sinDueno} sin identificar` : '') + (bajas ? ` · ${bajas} con duda, revisalas` : ''));
+  }catch(e){ showToast('No pude clasificar: '+e.message, true); setSyncDot('error'); }
+  btn.disabled = false; btn.textContent = '🤖 Clasificar fotos nuevas';
+};
 
 /**
  * Rearma el mapa leyendo qué archivos hay realmente en `fotos/`.
@@ -12883,29 +13174,8 @@ window.sincronizarFotos = async function(){
   const btn = document.getElementById('btn-cat-fotos');
   btn.disabled = true; btn.textContent = 'Leyendo la carpeta…';
   try{
-    const r = await fetch('https://api.github.com/repos/marplacityy/marplacity-sistema/contents/fotos');
-    if(!r.ok) throw new Error(r.status === 403 ? 'GitHub pidió esperar un rato (límite de consultas)' : 'GitHub contestó '+r.status);
-    const archivos = (await r.json())
-      .filter(f => f.type === 'file' && /\.(jpe?g|png|webp)$/i.test(f.name))
-      .map(f => f.name);
-
-    const stems = new Set(archivos.map(n => n.replace(/\.[^.]+$/, '')));
-    const mapa = {};
-    for(const nombre of archivos.sort()){
-      const stem = nombre.replace(/\.[^.]+$/, '');
-      const m = /^(.+)-[2-9]$/.exec(stem);
-      const clave = (m && stems.has(m[1])) ? m[1] : stem;
-      (mapa[clave] ||= []).push(nombre);
-    }
-    // La foto principal primero: la que no tiene sufijo es la que se ve en la tarjeta.
-    for(const k in mapa) mapa[k].sort((a,b) => a.length - b.length || a.localeCompare(b));
-
-    setSyncDot('syncing');
-    await setDoc(fotosDoc, withUser({
-      mapa,
-      base: LINK_CATALOGO.replace(/[^/]+$/, '') + 'fotos/',
-      actualizado: new Date().toISOString(),
-    }), {merge:false});
+    const archivos = await archivosDeFotos();
+    const mapa = await guardarFotos(archivos);
     showToast(`Fotos sincronizadas ✓ — ${archivos.length} imagen${archivos.length===1?'':'es'}, ${Object.keys(mapa).length} modelos`);
   }catch(e){ showToast('No pude sincronizar: '+e.message, true); setSyncDot('error'); }
   btn.disabled = false; btn.textContent = '🔄 Sincronizar con la carpeta';
@@ -12943,7 +13213,7 @@ window.publicarCatalogo = async function(){
         whatsapp: (cfg.localTel || '').replace(/\D/g,''),
       },
     }), {merge:false});
-    showToast(`Catálogo publicado ✓ — ${salen.length} equipo${salen.length===1?'':'s'}`);
+    showToast(`Catálogo publicado ✓ — ${salen.length} producto${salen.length===1?'':'s'}`);
   }catch(e){ showToast('Error al publicar: '+e.message, true); setSyncDot('error'); }
   btn.disabled = false; btn.textContent = '🌐 Publicar el catálogo';
 };

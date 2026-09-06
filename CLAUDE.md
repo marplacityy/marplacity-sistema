@@ -139,6 +139,12 @@ Las consultas acotadas necesitan índices compuestos (`userId` + `fecha`), versi
 2. **Documento HTML autónomo + `window.print()`** — etiquetas (`labelDoc`/`abrirLabel`, con JsBarcode y QRious cargados dentro del doc generado) y tickets 80 mm (`tkDocAutonomo`).
 3. **Cola remota** — si `cfg.printMode === 'local'`, `printTicket80` no imprime: hace `addDoc(cola_impresion, {html, estado:'pendiente'})` y un agente externo en el local levanta la cola. Si el encolado falla, cae a `window.print()`.
 
+### Catálogo web (`catalogo.html`)
+
+Página pública sin login que lee un solo doc, `catalogo/publico`, que el dueño publica desde la pantalla Catálogo (`publicarCatalogo`). `catalogoCandidatos()` es el único lugar que decide qué sale: equipos en stock (propios y consignación), artículos de inventario con cantidad y precio sugerido, y los ítems de la última lista de precios de cada origen (`kbUltimaLista`) como `tipo:'pedido'`. Las descripciones por producto viven en `cfg.catalogoNotas[id]`.
+
+Las fotos están en `fotos/` del repo y el mapa producto → archivos en `catalogo/fotos` (lo usa también el bot de Instagram para `[[FOTO:clave]]`). La clave es `slugFoto(nombre)` + `-slugFoto(color)`. `armarMapaFotos()` la saca del nombre del archivo, salvo que `clasificacion[archivo]` diga otra cosa: eso lo escribe la IA (`clasificarFotos`, vía el proxy de Anthropic) o el dueño a mano desde la grilla. `node test-catalogo.mjs` chequea esa función sin red.
+
 ### Servicios externos
 
 - `WORKER_URL` (`anthropic-proxy.fiwind702050.workers.dev`) — proxy Cloudflare hacia la API de Anthropic para los reportes y el chat con IA. Autenticado con `X-Firebase-Token` (ID token de Firebase) vía `workerHeaders()`. El Worker es **transparente**: valida el token y reenvía el body tal cual, así que el modelo y todos los parámetros se definen acá en el HTML.
