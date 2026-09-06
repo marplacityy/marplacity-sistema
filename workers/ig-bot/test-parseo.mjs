@@ -137,6 +137,19 @@ ok(tarde === 0, 'ninguno queda de madrugada ni se atrasa', String(tarde));
 ok(pasado === 0, 'ninguno pasa las 24 h de Meta', String(pasado));
 ok(adelantoMax <= 9, 'lo mas que se adelanta son 9 h', String(adelantoMax));
 
+console.log('\n── la tienda en el prompt ──');
+{
+  const cat = { categorias: ['iPhone usados', 'Accesorios de carga', 'Notebooks'], productos: [
+    { categoria: 'Accesorios de carga' }, { categoria: 'Accesorios de carga' }, { categoria: 'iPhone usados' }, { categoria: 'Fundas raras' },
+  ] };
+  const s = construirSystem({ conocimiento: null, stock: [], listaMdp: null, listaCaba: null, catalogo: cat, urlCatalogo: 'https://x/catalogo.html' });
+  ok(s.includes('https://x/catalogo.html#c=accesorios-de-carga'), 'cada categoria con su link');
+  ok(s.indexOf('iPhone usados') < s.indexOf('Accesorios de carga'), 'en el orden publicado');
+  ok(!s.includes('#c=notebooks'), 'las vacias no se ofrecen');
+  ok(s.includes('#c=fundas-raras'), 'las que no estan en el orden van igual');
+  ok(!construirSystem({ conocimiento: null, stock: [], listaMdp: null, listaCaba: null }).includes('TIENDA WEB'), 'sin catalogo no hay bloque');
+}
+
 console.log('\n── construirSystem con los docs vacios ──');
 // Firestore devuelve null —no undefined— cuando el doc no existe, y un default de
 // parametro no atrapa null. Con la base de conocimiento sin cargar, que es el estado

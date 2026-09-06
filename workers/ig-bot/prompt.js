@@ -740,6 +740,39 @@ ${NOMBRES_BIEN}
 ${JSON.stringify(lista.items)}`;
 }
 
+/** El slug de una categoría, igual que en catalogo.html: "Accesorios de carga" → accesorios-de-carga. */
+const slugCategoria = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/**
+ * La tienda web, por categoría, con su link. Es lo que le permite al bot decir "te dejo
+ * el link de la tienda para que veas todos los cargadores" en vez de listar productos
+ * de a uno. Sale de `catalogo/publico`: las categorías en el orden que publicó el dueño
+ * y cuántos productos hay en cada una. Las vacías no se ofrecen.
+ *
+ * OJO con los links en Instagram: Meta rechaza algunos dominios (pasó con ig.me, ver
+ * cargar-mensajes.mjs). github.io pasa; si algún día la tienda cambia de dominio, probar
+ * con un DM antes de confiar en esto.
+ */
+function bloqueTienda(catalogo, urlCatalogo) {
+  const productos = Array.isArray(catalogo?.productos) ? catalogo.productos : [];
+  const orden = Array.isArray(catalogo?.categorias) ? catalogo.categorias : [];
+  if (!productos.length || !urlCatalogo) return '';
+  const conteo = {};
+  for (const p of productos) { const c = p?.categoria || 'Otros'; conteo[c] = (conteo[c] || 0) + 1; }
+  const cats = [...orden.filter(c => conteo[c]), ...Object.keys(conteo).filter(c => !orden.includes(c))];
+  if (!cats.length) return '';
+  return `## LA TIENDA WEB (links por categoría)
+
+Tenés una tienda web con todo lo publicado, ordenado por categoría, donde se puede ver cada producto con foto y precio y comprarlo o reservarlo. Cuando el cliente pregunte por un TIPO de producto en general (cargadores, fundas, iPads, iPhones usados, "qué tenés de...") o quiera ver todo lo que hay, mandale el link de ESA categoría, como un mensaje aparte y corto, por ejemplo: "te dejo el link de la tienda para que veas todos los cargadores que tengo" y en el mensaje siguiente el link solo.
+
+- Si preguntan por un modelo puntual que tenés, contestá el precio como siempre; el link va de yapa solo si tiene sentido.
+- Un link por mensaje, sin texto pegado adelante ni atrás.
+- Usá SOLO estos links, tal cual. No inventes categorías ni links.
+- Tienda entera: ${urlCatalogo}
+
+${cats.map(c => `- ${c} (${conteo[c]} producto${conteo[c] === 1 ? '' : 's'}): ${urlCatalogo}#c=${slugCategoria(c)}`).join('\n')}`;
+}
+
 /**
  * Arma el system prompt final, EN DOS BLOQUES, y el orden no es estetico.
  *
@@ -758,7 +791,7 @@ ${JSON.stringify(lista.items)}`;
  * entre un DM y el siguiente? Si cambia, va en el segundo. Meter algo variable en el
  * primero no rompe nada, pero hace que el cache no sirva nunca y nadie se entera.
  */
-export function construirSystem({ base, conocimiento, stock, accesorios, listaMdp, listaCaba, listaProv, mdpVencida } = {}) {
+export function construirSystem({ base, conocimiento, stock, accesorios, listaMdp, listaCaba, listaProv, mdpVencida, catalogo, urlCatalogo } = {}) {
   const fijo = [
     // `base` es la versión que el dueño editó desde el sistema. Si no editó nunca, o
     // si borró todo el texto, se usa la de este archivo.
@@ -774,6 +807,7 @@ export function construirSystem({ base, conocimiento, stock, accesorios, listaMd
     bloqueLista('MAR DEL PLATA', listaMdp, mdpVencida),
     bloqueLista('CABA', listaCaba),
     bloqueProveedor(listaProv),
+    bloqueTienda(catalogo, urlCatalogo),
   ].filter(Boolean).join('\n\n');
 
   // Cache de una hora y no de cinco minutos: los DM del local llegan salteados. Con la

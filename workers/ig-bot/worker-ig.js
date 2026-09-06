@@ -23,6 +23,9 @@
 
 import { construirSystem, MARCA_CANAL } from './prompt.js';
 
+// La tienda web publica. Es la misma direccion que usa el sistema (LINK_CATALOGO).
+const URL_CATALOGO = 'https://marplacityy.github.io/marplacity-sistema/catalogo.html';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
@@ -1274,7 +1277,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
 
   // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
   // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
-  const [stock, accesorios, conocimiento, listaMdp, listaCaba, listaProv, mensajesFijos, promptDoc, fotosDoc] = await Promise.all([
+  const [stock, accesorios, conocimiento, listaMdp, listaCaba, listaProv, mensajesFijos, promptDoc, fotosDoc, catalogoDoc] = await Promise.all([
     equiposDisponibles(env, idToken),
     accesoriosDisponibles(env, idToken),
     leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`),
@@ -1285,6 +1288,8 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     leerDoc(env, idToken, 'config/prompt'),
     // Que fotos hay y donde. Es la misma fuente que usa el catalogo web: una sola.
     leerDoc(env, idToken, 'catalogo/fotos'),
+    // Lo publicado en la tienda web, para ofrecer el link de cada categoria.
+    leerDoc(env, idToken, 'catalogo/publico'),
   ]);
 
   // La lista de MDP es la del día: si es de una fecha anterior, el prompt se lo avisa
@@ -1300,7 +1305,8 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     return (fotosDoc?.mapa || {})[clave] ? { ...e, foto: clave } : e;
   });
 
-  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock: conFoto, accesorios, listaMdp, listaCaba, listaProv, mdpVencida });
+  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock: conFoto, accesorios, listaMdp, listaCaba, listaProv, mdpVencida,
+    catalogo: catalogoDoc, urlCatalogo: URL_CATALOGO });
   console.log('prompt:', promptDoc?.texto ? 'editado desde el sistema' : 'el de prompt.js');
   const textoCanal = mensajesFijos?.invitacionCanal || null;
 
