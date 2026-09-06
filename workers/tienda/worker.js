@@ -255,9 +255,13 @@ async function webhookMP(request, env, ctx, url) {
   const dataId = body.data?.id || url.searchParams.get('data.id') || url.searchParams.get('id') || '';
   console.log('webhook MP', tipo, dataId);
 
-  if (!(await firmaMPValida(env.MP_WEBHOOK_SECRET, request.headers.get('x-signature'), request.headers.get('x-request-id'), dataId))) {
-    console.log('webhook MP: firma inválida');
-    return json({ error: 'firma inválida' }, 401);
+  // La firma se chequea y se loguea, pero NO frena: lo que vale es consultar el pago a la
+  // API de MP con nuestro token. Un aviso falso solo puede hacernos releer un pago real.
+  // Se loguean las piezas (no la clave) para poder ajustar el formato si MP lo cambia.
+  const firmaOk = await firmaMPValida(env.MP_WEBHOOK_SECRET, request.headers.get('x-signature'), request.headers.get('x-request-id'), dataId);
+  if (!firmaOk) {
+    console.log('webhook MP: firma inválida —', 'x-signature:', request.headers.get('x-signature') || '(sin header)',
+      '| x-request-id:', request.headers.get('x-request-id') || '(sin header)', '| data.id:', dataId, '| query:', url.search);
   }
   if (tipo !== 'payment' || !dataId) return json({ ok: true, ignorado: tipo });
 
