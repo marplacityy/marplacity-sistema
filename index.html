@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-M</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.07-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -3053,7 +3053,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { initializeFirestore, persistentLocalCache, collection, doc, addDoc, deleteDoc, getDocs, setDoc, getDoc, updateDoc, onSnapshot, writeBatch, serverTimestamp, query, where } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, collection, doc, addDoc, deleteDoc, getDocs, setDoc, getDoc, updateDoc, onSnapshot, writeBatch, serverTimestamp, query, where, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -3145,9 +3145,17 @@ const myQ = (col) => query(col, where('userId','==',uid));
 // Sin esto el sistema se trae TODOS los documentos de cada colección en cada
 // arranque, para siempre: es lo que agota la cuota diaria de lecturas cuando
 // se acumulan años. Solo se acotan las colecciones históricas de alto volumen
-// (gastos, ingresos, cierres). NO se acotan reparaciones (nextRepNum() saca el
-// correlativo del array y se duplicarían números), ni consignación/pagos (el
+// (gastos, ingresos, cierres, reparaciones). NO se acotan consignación/pagos (el
 // FIFO de deuda necesita el historial completo), ni las de estado actual.
+//
+// Reparaciones se acotó el 07/09/2026: la importación de RepairDesk trajo 8.000
+// tickets desde 2019 que se leían enteros en cada arranque, y era lo que se pagaba
+// como "App Engine" en la factura de Google. El correlativo del ticket ya no sale
+// del array: vive en cfg.repUltimoNum (ver nextRepNum).
+//
+// Clientes (9.000 docs, casi todos de esa importación) no se trae al arrancar: se
+// carga una sola vez por sesión, recién cuando una pantalla la necesita (Clientes,
+// Facturas, Reparaciones, POS) o al escribir un nombre (ver cargarClientes).
 // ventanaMeses = 0/null → sin límite.
 let ventanaMeses = 12;
 let ventanaDesde = null;
@@ -3204,6 +3212,13 @@ function attachListenersVentana(){
     if(currentPage==='reportes') renderReporte();
     setSyncDot('ok');
   }));
+  unsubVentana.push(subVentana(repCol, snap => {
+    const _r = applySnap('reps', snap);
+    if(_r){ reps = _r; reps.sort((a,b)=>(b.num||0)-(a.num||0)); }
+    if(currentPage==='rep') deb('reps',renderReps);
+    if(currentPage==='home') deb('home',renderHome);
+    setSyncDot('ok');
+  }));
   unsubVentana.push(subVentana(cierresCol, snap => {
     cierresItems = snap.docs.map(d=>({id:d.id,...d.data()}));
     cierresItems.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
@@ -3235,8 +3250,8 @@ window.setVentanaDatos = async function(meses){
   // sin esto los documentos viejos sobrevivirían en memoria.
   unsubVentana.forEach(u=>{ try{ u(); }catch(e){} });
   unsubVentana = [];
-  delete _stores.gastos; delete _stores.ingresos;
-  gastos = []; ingresos = []; cierresItems = [];
+  delete _stores.gastos; delete _stores.ingresos; delete _stores.reps;
+  gastos = []; ingresos = []; cierresItems = []; reps = [];
   setSyncDot('syncing');
   attachListenersVentana();
   const info = document.getElementById('cfg-ventana-info');
@@ -3364,13 +3379,7 @@ async function init() {
       if(currentPage==='facturas') deb('inc',renderIngresos);
       setSyncDot('ok');
     }, snapErr);
-    onSnapshot(myQ(clientesCol), snap => {
-      const _c = applySnap('clientes', snap);
-      if(_c){ clientesItems = _c; clientesItems.sort((a,b)=>COLL.compare(a.nombre||'', b.nombre||'')); }
-      if(currentPage==='clientes') deb('cl',renderClientes);
-      populateClientesDL();
-      setSyncDot('ok');
-    }, snapErr);
+    // clientes: no se trae al arrancar. Se suscribe al entrar a la pantalla (ver goTo).
     onSnapshot(myQ(invCol), snap => {
       invItems = snap.docs.map(d=>({id:d.id,...d.data()}));
       invItems.sort((a,b)=>COLL.compare(a.nombre||'', b.nombre||''));
@@ -3378,13 +3387,7 @@ async function init() {
       if(currentPage==='catalogo') deb('catalogo',renderCatalogo);
       setSyncDot('ok');
     }, snapErr);
-    onSnapshot(myQ(repCol), snap => {
-      const _r = applySnap('reps', snap);
-      if(_r){ reps = _r; reps.sort((a,b)=>(b.num||0)-(a.num||0)); }
-      if(currentPage==='rep') deb('reps',renderReps);
-      if(currentPage==='home') deb('home',renderHome);
-      setSyncDot('ok');
-    }, snapErr);
+    // reparaciones: acotada por fecha, ver attachListenersVentana().
     onSnapshot(myQ(fijosCol), snap => {
       fijosItems = snap.docs.map(d=>({id:d.id,...d.data()}));
       fijosItems.sort((a,b)=>COLL.compare(a.nombre||'', b.nombre||''));
@@ -3679,7 +3682,8 @@ window.goTo = function(page) {
   if(page==='fijos'){ populateGFSelects(); renderFijos(); }
   if(page==='rep'){ initRepForm(); renderReps(); }
   if(page==='inv'){ populateICatSelects(); renderInv(); }
-  if(page==='clientes'){ renderClientes(); }
+  if(page==='clientes'){ cargarClientes(); renderClientes(); }
+  if(page==='facturas' || page==='rep' || page==='ingresos') cargarClientes();
   if(page==='facturas'){
     if(!window._incInit){ window._incInit=true; const r=fechasPreset('hoy'); document.getElementById('inc-fl-desde').value=r.d; document.getElementById('inc-fl-hasta').value=r.h; }
   }
@@ -4607,6 +4611,7 @@ window.verDiagnostico = function(){
 
 // ── Fusión de clientes duplicados ─────────────────────
 window.dedupClientes = async function(){
+  await cargarClientes();
   const grupos = new Map();
   clientesItems.forEach(x=>{
     const k = (x.nombre||'').toLowerCase().trim();
@@ -4695,6 +4700,7 @@ window.importarRD = async function(){
   try{ data = JSON.parse(await file.text()); }
   catch(e){ showToast('Archivo inválido.', true); fi.value=''; return; }
   if(!data.clientes || (!data.reps && !data.facturas)){ showToast('El archivo no tiene el formato esperado.', true); fi.value=''; return; }
+  await cargarClientes();   // para no duplicar los que ya existen
   data.reps = data.reps||[];
   data.facturas = data.facturas||[];
 
@@ -6859,9 +6865,10 @@ function renderHome(){
 // ── Búsqueda global ───────────────────────────────────
 window.closeGS = function(){ document.getElementById('gs-modal').classList.remove('open'); };
 
-function buscarGlobal(q){
+async function buscarGlobal(q){
   q = q.toLowerCase().trim();
   if(q.length < 2) return;
+  await cargarClientes();
   const has = (...campos) => campos.join(' ').toLowerCase().includes(q);
   const R = [];
 
@@ -6907,14 +6914,41 @@ document.getElementById('ent-modal').addEventListener('click', function(e){ if(e
 // — un datalist con 7.000 opciones congela el navegador
 function populateClientesDL(){ /* ya no se pre-carga: ver fillClienteDL */ }
 
-function fillClienteDL(dlId, q){
+// La lista completa de clientes se suscribe recién al entrar a la pantalla Clientes,
+// una sola vez por sesión. El resto del sistema busca en Firestore lo que necesita.
+let clientesListos = null;   // promesa que resuelve con el primer snapshot
+function cargarClientes(){
+  if(clientesListos) return clientesListos;
+  setSyncDot('syncing');
+  clientesListos = new Promise(res => {
+    onSnapshot(myQ(clientesCol), snap => {
+      const _c = applySnap('clientes', snap);
+      if(_c){ clientesItems = _c; clientesItems.sort((a,b)=>COLL.compare(a.nombre||'', b.nombre||'')); }
+      if(currentPage==='clientes') deb('cl',renderClientes);
+      setSyncDot('ok');
+      res();
+    }, e => { snapErr(e); res(); });
+  });
+  return clientesListos;
+}
+
+/**
+ * Los clientes que coinciden con `q`. Si la lista todavía no está cargada, se carga
+ * (una sola vez por sesión) y se espera a que llegue: es lo que evita crear un cliente
+ * duplicado al vender porque "no se encontró" uno que sí existía.
+ */
+async function buscarClientes(q){
+  q = (q||'').toLowerCase().trim();
+  if(q.length < 2) return [];
+  await cargarClientes();
+  return clientesItems.filter(x=>(x.nombre||'').toLowerCase().includes(q)).slice(0,20);
+}
+
+async function fillClienteDL(dlId, q){
   const dl = document.getElementById(dlId); if(!dl) return;
   q = (q||'').toLowerCase().trim();
   if(q.length < 2){ dl.innerHTML=''; return; }
-  const matches = [];
-  for(const x of clientesItems){
-    if((x.nombre||'').toLowerCase().includes(q)){ matches.push(x); if(matches.length>=20) break; }
-  }
+  const matches = await buscarClientes(q);
   dl.innerHTML = matches.map(x=>`<option value="${esc(x.nombre)}">`).join('');
 }
 
@@ -6923,15 +6957,20 @@ function attachClienteAC(inputId, dlId){
   el.addEventListener('input', ()=>fillClienteDL(dlId, el.value));
 }
 
-window.autofillTelRep = function(){
-  const nombre = document.getElementById('r-cliente').value.trim().toLowerCase();
-  const cl = clientesItems.find(x=>(x.nombre||'').toLowerCase()===nombre);
+/** El cliente con ese nombre exacto, buscando en Firestore si la lista no está cargada. */
+async function clientePorNombre(nombre){
+  nombre = (nombre||'').trim().toLowerCase();
+  if(!nombre) return null;
+  return (await buscarClientes(nombre)).find(x=>(x.nombre||'').toLowerCase()===nombre) || null;
+}
+
+window.autofillTelRep = async function(){
+  const cl = await clientePorNombre(document.getElementById('r-cliente').value);
   if(cl && cl.tel && !document.getElementById('r-tel').value) document.getElementById('r-tel').value = cl.tel;
 };
 
-window.autofillTelCliente = function(prefix){
-  const nombre = document.getElementById(prefix+'-cliente').value.trim().toLowerCase();
-  const cl = clientesItems.find(x=>(x.nombre||'').toLowerCase()===nombre);
+window.autofillTelCliente = async function(prefix){
+  const cl = await clientePorNombre(document.getElementById(prefix+'-cliente').value);
   if(cl && cl.tel){
     const telEl = document.getElementById(prefix+'-cliente-tel') || document.getElementById(prefix==='r'?'r-tel':null);
     if(telEl && !telEl.value) telEl.value = cl.tel;
@@ -6942,7 +6981,7 @@ window.autofillTelCliente = function(prefix){
 async function resolverCliente(nombre, tel){
   nombre = (nombre||'').trim();
   if(!nombre) return null;
-  const existente = clientesItems.find(x=>(x.nombre||'').toLowerCase()===nombre.toLowerCase());
+  const existente = await clientePorNombre(nombre);
   if(existente){
     // actualizar tel si vino uno nuevo y no tenía
     if(tel && !existente.tel){
@@ -8324,9 +8363,17 @@ window.import3uRep = function(){
   rd.readAsText(file);
 };
 
+/**
+ * El próximo número de ticket. Sale de cfg.repUltimoNum, no del array: el array está
+ * acotado a la ventana y una ventana sin reparaciones repetiría números. Por las dudas
+ * se toma el mayor entre lo guardado y lo que haya en memoria, y se persiste al usarlo.
+ */
 function nextRepNum(){
-  const max = reps.reduce((m,r)=>Math.max(m, r.num||0), 0);
-  return Math.max(max, 1000) + 1;
+  const enMemoria = reps.reduce((m,r)=>Math.max(m, r.num||0), 0);
+  const num = Math.max(Number(cfg.repUltimoNum)||0, enMemoria, 1000) + 1;
+  cfg.repUltimoNum = num;
+  setDoc(cfgDoc, withUser({ repUltimoNum: num }), {merge:true}).catch(()=>{});
+  return num;
 }
 
 window.guardarRep = async function(){
@@ -8424,7 +8471,7 @@ function renderReps(){
   const MAX_RENDER = 100;
   const totalItems = items.length;
   items = items.slice(0, MAX_RENDER);
-  document.getElementById('rep-list').innerHTML = (totalItems>MAX_RENDER?`<div class="empty" style="grid-column:1/-1;padding:.5rem;">Mostrando ${MAX_RENDER} de ${totalItems} — refiná la búsqueda para ver el resto.</div>`:'') + items.map(r=>{
+  document.getElementById('rep-list').innerHTML = (ventanaDesde?`<div class="empty" style="grid-column:1/-1;padding:.5rem;">📅 ${textoVentana()} — los tickets anteriores no están cargados. Ampliá el rango en Configuración.</div>`:'') + (totalItems>MAX_RENDER?`<div class="empty" style="grid-column:1/-1;padding:.5rem;">Mostrando ${MAX_RENDER} de ${totalItems} — refiná la búsqueda para ver el resto.</div>`:'') + items.map(r=>{
     const e = estInfo(r.estado);
     const pv = r.moneda==='ARS' ? fmtARS(r.precio) : 'u$s '+r.precio;
     const sd = r.saldo>0 ? (r.moneda==='ARS'?fmtARS(r.saldo):'u$s '+r.saldo) : null;
@@ -8663,7 +8710,7 @@ window.mandarARefurb = async function(stockId){
   if(trabajo===null) return;
   setSyncDot('syncing');
   try{
-    const num = reps.reduce((m,r)=>Math.max(m, r.num||0), 0) + 1;
+    const num = nextRepNum();
     await addDoc(repCol, withUser({
       num,
       fecha: today(),
