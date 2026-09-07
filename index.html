@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-K</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-L</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2868,6 +2868,34 @@
       </div>
 
       <div class="card">
+        <div class="card-title">Qué se va a publicar</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Entran los equipos <b>en stock con precio de venta cargado</b> (propios y de consignación), los artículos del <b>inventario</b> con cantidad y precio sugerido, y los productos de la <b>última lista de precios</b> de cada origen. Del costo, el IMEI, el proveedor y las notas internas <b>no sale nada</b>.</p>
+        <div id="cat-resumen"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
+          <input type="search" id="cat-q" placeholder="Buscar…" oninput="renderCatalogo()"
+                 style="flex:1;min-width:160px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);">
+          <select id="cat-f-cat" onchange="renderCatalogo()" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);"></select>
+          <select id="cat-f-tipo" onchange="renderCatalogo()" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);">
+            <option value="">Todos</option>
+            <option value="inmediato">Stock inmediato</option>
+            <option value="pedido">A pedido</option>
+            <option value="sinprecio">Sin precio</option>
+            <option value="fuera">Sacados del catálogo</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto;margin-top:10px;"><table class="tkh-table">
+          <thead><tr>
+            <th style="width:44px;"><input type="checkbox" id="cat-todos" title="Tildar o destildar todos los que se ven" onchange="tildarCatalogo(this.checked)"></th>
+            <th>Producto</th><th style="width:170px;">Categoría</th><th style="width:120px;">Entrega</th><th style="width:60px;">GB</th><th style="width:100px;">Color</th><th style="width:60px;">Bat.</th><th style="text-align:right;width:90px;">Precio</th><th>Descripción</th>
+          </tr></thead>
+          <tbody id="cat-body"></tbody>
+        </table></div>
+        <div class="pos-actions" style="margin-top:14px;">
+          <button class="pos-btn-checkout" id="btn-cat-publicar" onclick="publicarCatalogo()">🌐 Publicar el catálogo</button>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="card-title">El link</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
           <input type="text" id="cat-link" readonly onclick="this.select()"
@@ -2891,23 +2919,13 @@
 
       <div class="card">
         <div class="card-title">Las categorías</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">La portada muestra <b>3 productos por categoría</b>, en este orden, con un botón para ver el resto. La categoría de cada producto sale sola del nombre (iPhone, iPad, funda, cable…) y de si es nuevo o usado. Las vacías no se muestran.</p>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">La portada muestra cada categoría en este orden, con tres productos a la vista y el resto deslizando. La categoría de cada producto sale sola del nombre y de si es nuevo o usado; en la tabla de arriba la podés cambiar. Las vacías no se muestran.</p>
         <div id="cat-categorias"></div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Qué se va a publicar</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Entran los equipos <b>en stock con precio de venta cargado</b> (propios y de consignación), los artículos del <b>inventario</b> con cantidad y precio sugerido, y los productos de la <b>última lista de precios</b> de cada origen, que salen como "a pedido". Podés sacar cualquiera de la lista sin borrarlo del sistema.</p>
-        <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">Del costo, el IMEI, el proveedor y las notas internas <b>no sale nada</b>: la página se arma con nombre, capacidad, color, batería, estado y precio.</p>
-        <div id="cat-resumen"></div>
-        <div style="overflow-x:auto;margin-top:10px;"><table class="tkh-table">
-          <thead><tr><th style="width:44px;">Sale</th><th>Producto</th><th style="width:70px;">GB</th><th style="width:110px;">Color</th><th style="width:70px;">Batería</th><th style="text-align:right;width:100px;">Precio</th><th>Descripción</th></tr></thead>
-          <tbody id="cat-body"></tbody>
-        </table></div>
-        <div class="pos-actions" style="margin-top:14px;">
-          <button class="pos-btn-checkout" id="btn-cat-publicar" onclick="publicarCatalogo()">🌐 Publicar el catálogo</button>
+        <div class="pos-actions" style="margin-top:10px;">
+          <button class="btn-secondary" onclick="nuevaCategoria()">＋ Nueva categoría</button>
         </div>
       </div>
+
     </div>
 
     <!-- ASISTENTE — habla en castellano y prepara el trabajo -->
@@ -12960,11 +12978,49 @@ const CATEGORIAS_CATALOGO = [
   'Celulares Samsung', 'Celulares Xiaomi', 'Notebooks', 'Otros',
 ];
 const esUsado = p => /usad|refurb|reacond|impecab|\d+\s*\/\s*10/i.test(p.estado || '') || (p.bateria != null && !/nuev|sellad/i.test(p.estado || ''));
+/** Todas las categorías: las fijas más las que creó Juni (cfg.catalogoCategoriasExtra). */
+const todasLasCategorias = () => [...CATEGORIAS_CATALOGO, ...(Array.isArray(cfg.catalogoCategoriasExtra) ? cfg.catalogoCategoriasExtra : [])];
+
 /** El orden de las categorías: el editado si existe, completado con las que falten. */
 function ordenCategorias(){
-  const propio = Array.isArray(cfg.catalogoCategorias) ? cfg.catalogoCategorias.filter(c => CATEGORIAS_CATALOGO.includes(c)) : [];
-  return [...propio, ...CATEGORIAS_CATALOGO.filter(c => !propio.includes(c))];
+  const todas = todasLasCategorias();
+  const propio = Array.isArray(cfg.catalogoCategorias) ? cfg.catalogoCategorias.filter(c => todas.includes(c)) : [];
+  return [...propio, ...todas.filter(c => !propio.includes(c))];
 }
+
+window.nuevaCategoria = function(){
+  const nombre = String(prompt('Nombre de la categoría nueva (por ejemplo "Parlantes"):') || '').trim();
+  if(!nombre) return;
+  if(todasLasCategorias().some(c => c.toLowerCase() === nombre.toLowerCase())){ showToast('Esa categoría ya existe', true); return; }
+  cfg.catalogoCategoriasExtra = [...(cfg.catalogoCategoriasExtra || []), nombre];
+  setDoc(cfgDoc, withUser({ catalogoCategoriasExtra: cfg.catalogoCategoriasExtra }), {merge:true}).catch(()=>{});
+  showToast(`Categoría "${nombre}" creada — asignale productos desde la tabla`);
+  renderCatalogo();
+};
+
+/** Borrar una categoría propia. Los productos que la tenían vuelven a la automática. */
+window.borrarCategoria = function(nombre){
+  if(CATEGORIAS_CATALOGO.includes(nombre)) return;
+  if(!confirm(`¿Borrar la categoría "${nombre}"?\n\nLos productos que la tenían vuelven a su categoría automática. No se borra ningún producto.`)) return;
+  const ajustes = { ...(cfg.catalogoAjustes || {}) };
+  for(const id in ajustes) if(ajustes[id]?.categoria === nombre){ delete ajustes[id].categoria; if(!Object.keys(ajustes[id]).length) delete ajustes[id]; }
+  cfg.catalogoAjustes = ajustes;
+  cfg.catalogoCategoriasExtra = (cfg.catalogoCategoriasExtra || []).filter(c => c !== nombre);
+  cfg.catalogoCategorias = (cfg.catalogoCategorias || []).filter(c => c !== nombre);
+  setDoc(cfgDoc, withUser({ catalogoAjustes: ajustes, catalogoCategoriasExtra: cfg.catalogoCategoriasExtra, catalogoCategorias: cfg.catalogoCategorias }), {merge:true}).catch(()=>{});
+  renderCatalogo();
+};
+
+/** Lo que Juni decidió a mano de un producto: categoría y/o entrega. Vive en cfg.catalogoAjustes[id]. */
+window.ajusteCatalogo = function(id, campo, valor){
+  const ajustes = { ...(cfg.catalogoAjustes || {}) };
+  const aj = { ...(ajustes[id] || {}) };
+  if(valor) aj[campo] = valor; else delete aj[campo];
+  if(Object.keys(aj).length) ajustes[id] = aj; else delete ajustes[id];
+  cfg.catalogoAjustes = ajustes;
+  setDoc(cfgDoc, withUser({ catalogoAjustes: ajustes }), {merge:true}).catch(()=>{});
+  renderCatalogo();
+};
 
 window.moverCategoria = function(nombre, delta){
   const orden = ordenCategorias();
@@ -12987,6 +13043,7 @@ function renderCategoriasCatalogo(){
       <span style="font-size:11.5px;color:var(--text3);">${n ? n+' producto'+(n===1?'':'s') : 'vacía, no se muestra'}</span>
       <button class="btn-secondary" style="padding:3px 8px;font-size:12px;" ${i===0?'disabled':''} onclick="moverCategoria('${escJs(c)}',-1)">▲</button>
       <button class="btn-secondary" style="padding:3px 8px;font-size:12px;" ${i===orden.length-1?'disabled':''} onclick="moverCategoria('${escJs(c)}',1)">▼</button>
+      ${CATEGORIAS_CATALOGO.includes(c) ? '<span style="width:30px;"></span>' : `<button class="btn-secondary" style="padding:3px 8px;font-size:12px;" title="Borrar esta categoría" onclick="borrarCategoria('${escJs(c)}')">✕</button>`}
     </div>`;
   }).join('');
 }
@@ -13034,7 +13091,47 @@ function catalogoCandidatos(){
       items.push({ ...p, _origen: 'Lista ' + KB_ORIGENES[origen] });
     }
   }
-  return items.map(p => ({ ...p, categoria: categoriaDe(p), descripcion: String(notas[p.id] || '').trim(), _sale: p.precioUSD > 0 && !fuera.has(p.id) }));
+  const ajustes = cfg.catalogoAjustes || {};
+  const todas = todasLasCategorias();
+  return items.map(p => {
+    const aj = ajustes[p.id] || {};
+    // La entrega: "pedido" o "inmediato". Por defecto sale de dónde está cargado (las
+    // listas son a pedido, el resto inmediato); lo que se tocó a mano manda.
+    const entregaBase = p.tipo === 'pedido' ? 'pedido' : 'inmediato';
+    const entrega = aj.entrega === 'pedido' || aj.entrega === 'inmediato' ? aj.entrega : entregaBase;
+    const tipo = entrega === 'pedido' ? 'pedido' : (p.tipo === 'pedido' ? 'equipo' : p.tipo);
+    return {
+      ...p, tipo,
+      categoria: (aj.categoria && todas.includes(aj.categoria)) ? aj.categoria : categoriaDe(p),
+      descripcion: String(notas[p.id] || '').trim(),
+      _entrega: entrega, _entregaBase: entregaBase, _catAuto: categoriaDe(p),
+      _sale: p.precioUSD > 0 && !fuera.has(p.id),
+    };
+  });
+}
+
+/** Tildar o destildar todos los productos que se ven en la tabla (según los filtros). */
+window.tildarCatalogo = function(sale){
+  const visibles = catalogoFiltrados().filter(p => p.precioUSD > 0);
+  if(!visibles.length) return;
+  if(!sale && visibles.length > 5 && !confirm(`¿Sacar del catálogo los ${visibles.length} productos que se ven?\n\nNo se borra nada del sistema, solo dejan de publicarse.`)){ renderCatalogo(); return; }
+  const fuera = new Set(cfg.catalogoExcluidos || []);
+  visibles.forEach(p => sale ? fuera.delete(p.id) : fuera.add(p.id));
+  cfg.catalogoExcluidos = [...fuera];
+  setDoc(cfgDoc, withUser({ catalogoExcluidos: cfg.catalogoExcluidos }), {merge:true}).catch(()=>{});
+  renderCatalogo();
+};
+
+/** Los candidatos que pasan los filtros de la barra. */
+function catalogoFiltrados(){
+  const q = (document.getElementById('cat-q')?.value || '').trim().toLowerCase();
+  const fc = document.getElementById('cat-f-cat')?.value || '';
+  const ft = document.getElementById('cat-f-tipo')?.value || '';
+  return catalogoCandidatos().filter(p =>
+    (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) &&
+    (!fc || p.categoria === fc) &&
+    (!ft || (ft === 'inmediato' && p._entrega === 'inmediato' && p.precioUSD > 0) || (ft === 'pedido' && p._entrega === 'pedido' && p.precioUSD > 0)
+          || (ft === 'sinprecio' && !p.precioUSD) || (ft === 'fuera' && p.precioUSD > 0 && !p._sale)));
 }
 
 /** La descripción que escribe Juni para un producto. Vive en la config, por id. */
@@ -13055,7 +13152,7 @@ function renderCatalogo(){
   document.getElementById('cat-resumen').innerHTML = `
     <div class="proveedor-alerta">
       <b>${salen.length}</b> producto${salen.length===1?'':'s'} en la página, de ${items.length} posibles.
-      ${sinPrecio.length ? `<br>⚠️ ${sinPrecio.length} sin precio de venta cargado: esos no se publican aunque los marques.` : ''}
+      ${sinPrecio.length ? `<br>⚠️ ${sinPrecio.length} sin precio de venta cargado: esos no se publican aunque los marques. El precio se carga en Stock o Inventario.` : ''}
     </div>
     ${(()=>{
       // Qué modelos todavía no tienen imagen. La página igual los muestra, con el modelo
@@ -13073,19 +13170,39 @@ function renderCatalogo(){
   renderFotosCatalogo();
   renderCategoriasCatalogo();
 
-  document.getElementById('cat-body').innerHTML = items.map(p => `
-    <tr style="${p._sale?'':'opacity:.5;'}">
+  // El filtro de categoría, con las que hay en la tabla; conserva lo elegido.
+  const selCat = document.getElementById('cat-f-cat');
+  const catElegida = selCat.value;
+  selCat.innerHTML = '<option value="">Todas las categorías</option>' + ordenCategorias().map(c => {
+    const n = items.filter(p => p.categoria === c).length;
+    return `<option value="${esc(c)}" ${c===catElegida?'selected':''}>${esc(c)} (${n})</option>`;
+  }).join('');
+
+  const visibles = catalogoFiltrados();
+  const conPrecio = visibles.filter(p => p.precioUSD > 0);
+  document.getElementById('cat-todos').checked = conPrecio.length > 0 && conPrecio.every(p => p._sale);
+
+  const estilo = 'padding:4px 6px;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%;';
+  document.getElementById('cat-body').innerHTML = visibles.map(p => `
+    <tr style="${p._sale?'':'opacity:.55;'}">
       <td><input type="checkbox" ${p._sale?'checked':''} ${p.precioUSD?'':'disabled title="Sin precio de venta"'}
             onchange="toggleCatalogo('${escJs(p.id)}',this.checked)"></td>
-      <td>${esc(p.nombre)}<div class="sub" style="font-size:10.5px;color:var(--text3);">${esc(p._origen)}${p.estado?' · '+esc(p.estado):''} · <b>${esc(p.categoria)}</b></div></td>
+      <td>${esc(p.nombre)}<div class="sub" style="font-size:10.5px;color:var(--text3);">${esc(p._origen)}${p.estado?' · '+esc(p.estado):''}${p.precioUSD?'':' · <b>sin precio</b>'}</div></td>
+      <td><select onchange="ajusteCatalogo('${escJs(p.id)}','categoria',this.value)" style="${estilo}${p.categoria!==p._catAuto?'border-color:var(--text);':''}">
+        ${ordenCategorias().map(c => `<option value="${esc(c)}" ${c===p.categoria?'selected':''}>${esc(c)}${c===p._catAuto?' (auto)':''}</option>`).join('')}
+      </select></td>
+      <td><select onchange="ajusteCatalogo('${escJs(p.id)}','entrega',this.value)" style="${estilo}${p._entrega!==p._entregaBase?'border-color:var(--text);':''}">
+        <option value="inmediato" ${p._entrega==='inmediato'?'selected':''}>Inmediato</option>
+        <option value="pedido" ${p._entrega==='pedido'?'selected':''}>A pedido</option>
+      </select></td>
       <td>${esc(p.gb)}</td>
       <td>${esc(p.color)}</td>
       <td style="font-family:'DM Mono',monospace;">${p.bateria!=null?p.bateria+'%':'—'}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;">${p.precioUSD?fmtUSD(p.precioUSD):'—'}</td>
-      <td><input type="text" value="${esc(p.descripcion)}" placeholder="Opcional: lo que quieras contar de este producto"
+      <td><input type="text" value="${esc(p.descripcion)}" placeholder="Opcional"
             onchange="notaCatalogo('${escJs(p.id)}',this.value)"
-            style="width:100%;min-width:200px;padding:6px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);"></td>
-    </tr>`).join('') || '<tr><td colspan="7" style="color:var(--text3);">No hay nada para publicar.</td></tr>';
+            style="width:100%;min-width:160px;padding:6px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);"></td>
+    </tr>`).join('') || `<tr><td colspan="9" style="color:var(--text3);">${items.length ? 'Nada coincide con el filtro.' : 'No hay nada para publicar.'}</td></tr>`;
 
   // ¿Lo que se ve en la página coincide con lo que hay ahora?
   const el = document.getElementById('cat-estado');
