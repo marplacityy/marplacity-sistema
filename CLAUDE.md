@@ -103,7 +103,7 @@ Agregar una colección son 4 pasos: `collection(db, ...)` → array global → `
 
 ### Ventana de datos (colecciones acotadas por fecha)
 
-`gastos`, `ingresos` y `cierres` **no se traen completas**: se acotan con `where('fecha','>=', ventanaDesde)` (default 12 meses, configurable en Configuración y guardado en `cfg.ventanaMeses`). Sin esto el arranque lee todo el histórico y agota la cuota diaria de Firebase. Sus listeners viven en `attachListenersVentana()` y se re-arman enteros desde `setVentanaDatos(meses)`.
+`gastos`, `ingresos`, `cierres` y `reparaciones` **no se traen completas**: se acotan con `where('fecha','>=', ventanaDesde)` (default 12 meses, configurable en Configuración y guardado en `cfg.ventanaMeses`). Sin esto el arranque lee todo el histórico y agota la cuota diaria de Firebase. Sus listeners viven en `attachListenersVentana()` y se re-arman enteros desde `setVentanaDatos(meses)`.
 
 Tres reglas que no se pueden violar acá:
 
@@ -111,7 +111,13 @@ Tres reglas que no se pueden violar acá:
 - **Al re-suscribir hay que limpiar `_stores`.** El listener nuevo no emite `removed` de lo que quedó afuera de la ventana, así que los docs viejos sobrevivirían en el `Map` incremental.
 - **Toda vista que muestre totales de esas colecciones debe llamar `avisoVentana()`**, o los números de un período viejo salen incompletos sin que nada lo indique.
 
-**Por qué las demás no se acotan** (no es un olvido): `reparaciones` alimenta `nextRepNum()`, que saca el correlativo del array — acotarla duplicaría números de ticket. `consig`/`pagos_consig` alimentan el FIFO de deuda de `proveedorAging()`, que necesita el historial completo para no mostrar como impaga una deuda ya pagada. El resto son de estado actual (stock, inventario, repuestos, clientes) y no crecen igual.
+**El número de ticket no sale del array.** Como `reparaciones` está acotada, `nextRepNum()` toma el correlativo de `cfg.repUltimoNum` (y por las dudas el mayor entre eso y lo que haya en memoria) y lo persiste al usarlo. Nunca vuelvas a calcularlo desde `reps`.
+
+**`clientes` no se suscribe al arrancar.** Son ~9.000 docs (importación de RepairDesk) y casi nunca hacen falta: `cargarClientes()` la suscribe una sola vez por sesión cuando una pantalla la necesita (Clientes, Facturas, Reparaciones, POS) o al escribir un nombre. Toda función que use `clientesItems` tiene que hacer `await cargarClientes()` antes, o va a operar sobre una lista vacía y, en el peor caso, crear un cliente duplicado.
+
+**Por qué las demás no se acotan** (no es un olvido): `consig`/`pagos_consig` alimentan el FIFO de deuda de `proveedorAging()`, que necesita el historial completo para no mostrar como impaga una deuda ya pagada. El resto son de estado actual (stock, inventario, repuestos) y no crecen igual.
+
+Estas dos reglas salieron de la factura de Google de agosto de 2026 (10,50 USD bajo "App Engine", que es como factura las operaciones de Firestore): el arranque leía ~18.000 documentos, y quedó en ~1.500.
 
 Las consultas acotadas necesitan índices compuestos (`userId` + `fecha`), versionados en `firestore.indexes.json` y desplegados con `firebase deploy --only firestore:indexes`. `subVentana()` cae a la consulta sin acotar si el índice falta, para no dejar la pantalla vacía.
 
