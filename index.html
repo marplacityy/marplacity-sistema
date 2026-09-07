@@ -2872,10 +2872,10 @@
         <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Entran los equipos <b>en stock con precio de venta cargado</b> (propios y de consignación), los artículos del <b>inventario</b> con cantidad y precio sugerido, y los productos de la <b>última lista de precios</b> de cada origen. Del costo, el IMEI, el proveedor y las notas internas <b>no sale nada</b>.</p>
         <div id="cat-resumen"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
-          <input type="search" id="cat-q" placeholder="Buscar…" oninput="renderCatalogo()"
+          <input type="search" id="cat-q" placeholder="Buscar…" oninput="filtrarCatalogo()"
                  style="flex:1;min-width:160px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);">
-          <select id="cat-f-cat" onchange="renderCatalogo()" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);"></select>
-          <select id="cat-f-tipo" onchange="renderCatalogo()" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);">
+          <select id="cat-f-cat" onchange="filtrarCatalogo()" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);"></select>
+          <select id="cat-f-tipo" onchange="filtrarCatalogo()" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);">
             <option value="">Todos</option>
             <option value="inmediato">Stock inmediato</option>
             <option value="pedido">A pedido</option>
@@ -13121,6 +13121,8 @@ window.tildarCatalogo = function(sale){
   setDoc(cfgDoc, withUser({ catalogoExcluidos: cfg.catalogoExcluidos }), {merge:true}).catch(()=>{});
   renderCatalogo();
 };
+
+window.filtrarCatalogo = () => renderCatalogo();
 
 /** Los candidatos que pasan los filtros de la barra. */
 function catalogoFiltrados(){
