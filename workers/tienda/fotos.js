@@ -29,6 +29,25 @@ export const slugFoto = nombre => String(nombre || '')
   .trim().replace(/\s+/g, '-');
 
 /**
+ * El nombre tal como lo entiende Amazon. Las listas de precios vienen con palabras que
+ * Amazon no usa en sus títulos y que hacían fallar la búsqueda y el filtro: "Genuine",
+ * "Serie" (Amazon dice "Series"), tallas de malla ("M/L"), "GPS", separadores "·", el
+ * color de la malla después del punto. Exportado para el test.
+ */
+export function nombreParaAmazon(nombre) {
+  return String(nombre || '')
+    .split('·')[0]                                   // "Silver Aluminio · Denim SB" → "Silver Aluminio"
+    .replace(/[\u200b-\u200f\u2060\ufeff]/g, '')            // caracteres invisibles que traen las listas
+    .replace(/\b(genuine|original|nuevo|nueva|sellado|sellada|caja cerrada)\b/gi, ' ')
+    .replace(/\bserie\b/gi, 'Series')
+    .replace(/\b(gps|cellular|celular|wifi|wi-fi)\b/gi, ' ')
+    .replace(/\b[SML]\/[SML]\b/g, ' ')                // tallas de malla M/L, S/M
+    .replace(/\b\d+\s?gb\s+ram\b/gi, ' ')             // "8GB RAM" no ayuda a encontrar la foto
+    .replace(/\baluminio\b/gi, 'Aluminum')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Elige, entre los resultados de Amazon, los que parecen ser el producto pedido.
  * Exportado para el test.
  *
@@ -39,15 +58,20 @@ export const slugFoto = nombre => String(nombre || '')
  */
 export function elegirImagenes(resultados, { nombre, color, esAccesorio = false, max = 3 } = {}) {
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  const palabras = norm(nombre).split(/[^a-z0-9]+/).filter(w => w && w !== 'apple' && !/^\d+(gb|tb)$/.test(w));
-  const colorN = norm(color).replace(/[^a-z0-9]+/g, ' ').trim();
+  const palabras = norm(nombreParaAmazon(nombre)).split(/[^a-z0-9]+/).filter(w => w && w !== 'apple' && !/^\d+(gb|tb|mm)$/.test(w));
+  // El color también puede venir con "· malla": se compara solo la primera palabra útil.
+  const colorN = norm(nombreParaAmazon(color)).replace(/[^a-z0-9]+/g, ' ').trim().split(' ')[0] || '';
+  // Un equipo tiene que tener TODAS las palabras del modelo; para lo demás (relojes con
+  // medidas, cables con nombres largos) alcanza con la mayoría.
+  const minimo = esAccesorio || /watch|cable|charger|cargador/i.test(nombre) ? Math.ceil(palabras.length * 0.6) : palabras.length;
   const ACCESORIO = /\b(case|cover|funda|cable|charger|cargador|screen protector|glass|protector|holder|mount|stand|adapter|sleeve|skin|strap|band)\b/;
   const vistas = new Set(), out = [];
   for (const r of Array.isArray(resultados) ? resultados : []) {
     const t = norm(r.title);
-    if (!palabras.every(w => t.includes(w))) continue;
+    if (palabras.filter(w => t.includes(w)).length < minimo) continue;
     if (colorN && !t.includes(colorN)) continue;
-    if (!esAccesorio && ACCESORIO.test(t)) continue;
+    // Un reloj se vende con "case" y "band" en el título: ahí ese filtro no aplica.
+    if (!esAccesorio && !/watch/i.test(nombre) && ACCESORIO.test(t)) continue;
     const img = String(r.thumbnail || r.image || '');
     if (!/^https?:\/\//.test(img) || vistas.has(img)) continue;
     vistas.add(img);
@@ -107,7 +131,7 @@ export async function subirAlRepo(env, nombre, bytes) {
  * nombres de archivo subidos (vacío si no encontró nada usable).
  */
 export async function fotosParaProducto(env, { nombre, gb, color, esAccesorio }) {
-  const q = [nombre, gb, color].filter(Boolean).join(' ');
+  const q = [nombreParaAmazon(nombre), gb, nombreParaAmazon(color)].filter(Boolean).join(' ');
   const resultados = await buscarEnAmazon(env, q);
   const urls = elegirImagenes(resultados, { nombre, color, esAccesorio });
   const base = slugFoto(nombre) + (color ? '-' + slugFoto(color) : '');

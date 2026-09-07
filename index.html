@@ -13507,13 +13507,17 @@ window.buscarFotosAmazon = async function(){
     if(vistos.has(k)) continue; vistos.add(k); lista.push(p);
   }
   if(!lista.length) return;
-  if(!confirm(`Buscar fotos en Amazon para ${lista.length} producto${lista.length===1?'':'s'}?\n\nCada uno es una búsqueda (hay 250 gratis por mes). Las fotos que encuentre se suben a fotos/ del repositorio y después la IA las revisa.`)) return;
+  // De a 20: cada producto es una búsqueda paga (250 gratis por mes). Una tanda de
+  // 181 se comió el mes entero de un click el 07/09/2026.
+  const TANDA = 20;
+  const tanda = lista.slice(0, TANDA);
+  if(!confirm(`Buscar fotos en Amazon para ${tanda.length} producto${tanda.length===1?'':'s'}${lista.length > TANDA ? ` (de ${lista.length} sin foto: van de a ${TANDA} por vez)` : ''}?\n\nCada uno es una búsqueda (hay 250 gratis por mes). Las fotos que encuentre se suben a fotos/ del repositorio y después la IA las revisa.`)) return;
   btn.disabled = true;
   let ok = 0, sin = 0, fallo = 0;
   const detalle = [];
-  for(let i = 0; i < lista.length; i++){
-    const p = lista[i];
-    btn.textContent = `Buscando ${i+1} de ${lista.length}: ${p.nombre}…`;
+  for(let i = 0; i < tanda.length; i++){
+    const p = tanda[i];
+    btn.textContent = `Buscando ${i+1} de ${tanda.length}: ${p.nombre}…`;
     try{
       const r = await fetch(TIENDA_URL + '/fotos', {
         method: 'POST', headers: await workerHeaders(),
@@ -13527,7 +13531,7 @@ window.buscarFotosAmazon = async function(){
   }
   btn.disabled = false;
   console.log('Fotos desde Amazon:\n' + detalle.join('\n'));
-  showToast(`Amazon: ${ok} con foto, ${sin} sin resultado${fallo?`, ${fallo} con error`:''}. Ahora tocá "Clasificar fotos nuevas" para que la IA las confirme.`);
+  showToast(`Amazon: ${ok} con foto, ${sin} sin resultado${fallo?`, ${fallo} con error`:''}${lista.length > TANDA ? ` · quedan ${lista.length - tanda.length} sin foto para otra tanda` : ''}. Ahora tocá "Clasificar fotos nuevas" para que la IA las confirme.`);
   renderCatalogo();
 };
 

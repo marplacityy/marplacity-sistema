@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { validarPedido, montoDelPedido, firmaMPValida, firmaStripeValida } from './worker.js';
-import { elegirImagenes, slugFoto } from './fotos.js';
+import { elegirImagenes, slugFoto, nombreParaAmazon } from './fotos.js';
 
 // ── validarPedido ──
 const ok = validarPedido({ productoId: 'stock_1', pago: 'mp', entrega: 'retiro', nombre: 'Ana', whatsapp: '223 555-1234', email: 'ANA@x.com' });
@@ -61,6 +61,14 @@ assert.equal(await firmaMPValida('', 'lo que sea', 'req-1', '123'), true, 'sin c
   assert.deepEqual(elegirImagenes(res, { nombre: 'iPhone 13', color: 'Blue' }), [], 'otro color, nada');
   assert.equal(elegirImagenes([{ title: 'USB-C Cable 2m Apple', thumbnail: 'https://x/y.jpg' }], { nombre: 'USB-C Cable', esAccesorio: true }).length, 1, 'un accesorio no se filtra por ser accesorio');
   assert.equal(slugFoto('iPhone 13 128GB'), 'iphone-13');
+
+  // Nombres de lista → como los escribe Amazon.
+  assert.equal(nombreParaAmazon('Apple Watch Serie 10 46mm GPS M/L Silver Aluminio · Denim SB'), 'Apple Watch Series 10 46mm Silver Aluminum');
+  assert.equal(nombreParaAmazon('Genuine Apple\u200e USB-C to C Cable'), 'Apple USB-C to C Cable');
+  assert.equal(nombreParaAmazon('MacBook NEO A18 13" 8GB RAM 256GB Citrus'), 'MacBook NEO A18 13" 256GB Citrus');
+  // Un reloj con la medida en el título de Amazon pasa aunque falte "aluminum".
+  const reloj = [{ title: 'Apple Watch Series 10 [GPS 46mm] Smartwatch with Silver Aluminum Case', thumbnail: 'https://x/w.jpg' }];
+  assert.equal(elegirImagenes(reloj, { nombre: 'Apple Watch Serie 10 46mm GPS M/L Silver Aluminio · Denim SB', color: '' }).length, 1, 'reloj de lista encontrado');
 }
 
 console.log('Todo verde');
