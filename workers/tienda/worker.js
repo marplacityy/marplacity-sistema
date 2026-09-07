@@ -15,6 +15,7 @@
  *   GET  /pedido/:id     el estado del pedido, para la pantalla de vuelta del pago
  *   POST /mp/webhook     Mercado Pago avisa que un pago cambió
  *   POST /stripe/webhook Stripe avisa que un pago cambió
+ *   POST /fotos          busca en Amazon y sube a fotos/ las imágenes de un producto (solo el dueño)
  *
  * Variables (Settings → Variables del panel de Cloudflare, o `wrangler secret put`):
  *   FIREBASE_PROJECT   (Text)    mis-gastos-21e7b
@@ -26,6 +27,7 @@
  *   MP_WEBHOOK_SECRET  (Secret)  la "clave secreta" de Webhooks de la app de MP (opcional, pero conviene)
  *   STRIPE_SECRET_KEY  (Secret)  clave secreta de Stripe (sk_test_... primero, sk_live_... después)
  *   STRIPE_WEBHOOK_SECRET (Secret) el "signing secret" del endpoint de webhook en Stripe (whsec_...)
+ *   SERPAPI_KEY, GITHUB_TOKEN, GITHUB_REPO  ver fotos.js
  *   CATALOGO_URL       (Text)    a dónde vuelve el cliente después de pagar
  *
  * Los precios NUNCA vienen de la página: se leen de `catalogo/publico`, que es lo que
@@ -33,11 +35,12 @@
  */
 
 import { leerDoc, escribirDoc } from '../facturador/firestore.js';
+import { fotosParaProducto } from './fotos.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Firebase-Token',
 };
 
 const json = (obj, status = 200) =>
@@ -56,6 +59,7 @@ export default {
           TIENDA_EMAIL: !!env.TIENDA_EMAIL, TIENDA_PASSWORD: !!env.TIENDA_PASSWORD,
           MP_ACCESS_TOKEN: !!env.MP_ACCESS_TOKEN, MP_WEBHOOK_SECRET: !!env.MP_WEBHOOK_SECRET,
           STRIPE_SECRET_KEY: !!env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: !!env.STRIPE_WEBHOOK_SECRET,
+          SERPAPI_KEY: !!env.SERPAPI_KEY, GITHUB_TOKEN: !!env.GITHUB_TOKEN,
           CATALOGO_URL: !!env.CATALOGO_URL,
         },
       });
@@ -69,6 +73,7 @@ export default {
 
       if (request.method === 'POST' && url.pathname === '/mp/webhook') return await webhookMP(request, env, ctx, url);
       if (request.method === 'POST' && url.pathname === '/stripe/webhook') return await webhookStripe(request, env, ctx);
+      if (request.method === 'POST' && url.pathname === '/fotos') return await buscarFotos(request, env);
     } catch (e) {
       console.log('error', url.pathname, e.message);
       return json({ error: e.message }, 500);
@@ -209,6 +214,44 @@ async function verPedido(id, env) {
     id, estado: d.estado, pago: d.pago, entrega: d.entrega,
     producto: d.producto?.nombre || '', montoUSD: d.montoUSD, montoARS: d.montoARS,
   });
+}
+
+// ── Fotos desde Amazon ───────────────────────────────────────
+
+/**
+ * Lo llama el sistema (solo el dueño, con su token de Firebase) para un producto sin
+ * foto. Cada llamada es una búsqueda en SerpApi: el sistema las hace de a una, con el
+ * progreso a la vista, para que el dueño pueda frenar.
+ */
+async function buscarFotos(request, env) {
+  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
+  if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'json inválido' }, 400); }
+  const nombre = String(body.nombre || '').trim().slice(0, 120);
+  if (!nombre) return json({ error: 'falta el nombre' }, 400);
+  try {
+    const r = await fotosParaProducto(env, {
+      nombre, gb: String(body.gb || '').trim(), color: String(body.color || '').trim(), esAccesorio: body.tipo === 'accesorio',
+    });
+    console.log('fotos', r.consulta, '->', r.subidos.length, 'subidas de', r.candidatos, 'resultados');
+    return json(r);
+  } catch (e) {
+    console.log('fotos error', nombre, e.message);
+    return json({ error: e.message }, 502);
+  }
+}
+
+/** El uid de un ID token de Firebase, validado contra Google. Null si no vale. */
+async function uidDelToken(idToken, env) {
+  if (!idToken) return null;
+  try {
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${env.FIREBASE_KEY}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }),
+    });
+    if (!r.ok) return null;
+    return (await r.json()).users?.[0]?.localId || null;
+  } catch { return null; }
 }
 
 // ── Mercado Pago ─────────────────────────────────────────────

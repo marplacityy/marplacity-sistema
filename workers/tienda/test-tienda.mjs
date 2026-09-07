@@ -5,6 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { validarPedido, montoDelPedido, firmaMPValida, firmaStripeValida } from './worker.js';
+import { elegirImagenes, slugFoto } from './fotos.js';
 
 // ── validarPedido ──
 const ok = validarPedido({ productoId: 'stock_1', pago: 'mp', entrega: 'retiro', nombre: 'Ana', whatsapp: '223 555-1234', email: 'ANA@x.com' });
@@ -44,6 +45,22 @@ assert.equal(await firmaMPValida('', 'lo que sea', 'req-1', '123'), true, 'sin c
   assert.equal(await firmaStripeValida(secret, `t=${t},v1=${hex}`, cuerpo + ' ', ahora), false, 'otro cuerpo, otra firma');
   assert.equal(await firmaStripeValida(secret, `t=${t},v1=${hex}`, cuerpo, ahora + 10 * 60_000), false, 'un aviso de hace 10 minutos no vale');
   assert.equal(await firmaStripeValida('', `t=${t},v1=${hex}`, cuerpo, ahora), false, 'sin secret no se acepta nada');
+}
+
+// ── elegirImagenes ──
+{
+  const res = [
+    { title: 'Apple iPhone 13, 128GB, Red - Unlocked (Renewed)', thumbnail: 'https://m.media-amazon.com/images/I/a._AC_UY218_.jpg' },
+    { title: 'Silicone Case for iPhone 13 Red with MagSafe', thumbnail: 'https://m.media-amazon.com/images/I/b._AC_UY218_.jpg' },
+    { title: 'Apple iPhone 13 Pro 128GB Graphite', thumbnail: 'https://m.media-amazon.com/images/I/c.jpg' },
+    { title: 'Apple iPhone 13 (Product) RED 256GB', thumbnail: 'https://m.media-amazon.com/images/I/a._AC_UY218_.jpg' },   // misma imagen
+    { title: 'Apple iPhone 13 Red 512GB', thumbnail: 'https://m.media-amazon.com/images/I/d._SX300_.jpg' },
+  ];
+  const u = elegirImagenes(res, { nombre: 'iPhone 13', color: 'Red' });
+  assert.deepEqual(u, ['https://m.media-amazon.com/images/I/a.jpg', 'https://m.media-amazon.com/images/I/d.jpg'], 'sin fundas, sin el Pro, sin repetidas, sin sufijo de tamaño');
+  assert.deepEqual(elegirImagenes(res, { nombre: 'iPhone 13', color: 'Blue' }), [], 'otro color, nada');
+  assert.equal(elegirImagenes([{ title: 'USB-C Cable 2m Apple', thumbnail: 'https://x/y.jpg' }], { nombre: 'USB-C Cable', esAccesorio: true }).length, 1, 'un accesorio no se filtra por ser accesorio');
+  assert.equal(slugFoto('iPhone 13 128GB'), 'iphone-13');
 }
 
 console.log('Todo verde');

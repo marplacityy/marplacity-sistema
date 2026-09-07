@@ -15,6 +15,7 @@ URL de producción: https://tienda.fiwind702050.workers.dev/
 | `GET /pedido/:id` | el estado del pedido, para la pantalla de vuelta del pago |
 | `POST /mp/webhook` | Mercado Pago avisa que un pago cambió |
 | `POST /stripe/webhook` | Stripe avisa que un pago cambió (`checkout.session.*`, `charge.refunded`) |
+| `POST /fotos` | busca en Amazon (SerpApi) las fotos de un producto y las sube a `fotos/` del repo. Solo el dueño, con `X-Firebase-Token`. Ver `fotos.js` |
 
 **El precio no viene de la página.** Se lee de `catalogo/publico` (lo que publicó el
 dueño) y las reglas de cobro (`cobro`: tipo de cambio, recargo de tarjeta, tope de MP)
@@ -58,6 +59,8 @@ Orden la primera vez:
    npx wrangler secret put MP_WEBHOOK_SECRET    # la "clave secreta" de Webhooks de la app de MP
    npx wrangler secret put STRIPE_SECRET_KEY    # sk_test_... primero, sk_live_... después
    npx wrangler secret put STRIPE_WEBHOOK_SECRET # el signing secret (whsec_...) del endpoint
+   npx wrangler secret put SERPAPI_KEY          # serpapi.com, para las fotos desde Amazon
+   npx wrangler secret put GITHUB_TOKEN         # fine-grained, SOLO este repo, Contents: read/write
    ```
 
    Y en el panel (Settings → Variables), las Text: `OWNER_UID` (el uid del dueño, el mismo

@@ -29,4 +29,5 @@ enabled = true
 FIREBASE_PROJECT = "mis-gastos-21e7b"
 FIREBASE_KEY = "AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg"
 CATALOGO_URL = "https://marplacityy.github.io/marplacity-sistema/catalogo.html"
+GITHUB_REPO = "marplacityy/marplacity-sistema"
 TIENDA_EMAIL = "tienda@marplacity.com"
