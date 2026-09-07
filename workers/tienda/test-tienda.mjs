@@ -61,6 +61,13 @@ assert.equal(await firmaMPValida('', 'lo que sea', 'req-1', '123'), true, 'sin c
   assert.deepEqual(elegirImagenes(res, { nombre: 'iPhone 13', color: 'Blue' }), [], 'otro color, nada');
   assert.equal(elegirImagenes([{ title: 'USB-C Cable 2m Apple', thumbnail: 'https://x/y.jpg' }], { nombre: 'USB-C Cable', esAccesorio: true }).length, 1, 'un accesorio no se filtra por ser accesorio');
   assert.equal(slugFoto('iPhone 13 128GB'), 'iphone-13');
+  assert.equal(slugFoto('iPhone 13 (Usado Grado A, 100% Ampsentrix)'), 'iphone-13', 'el estado no es parte del modelo');
+  assert.equal(slugFoto('iPhone 14 Pro (Usado Grado A, 87-89%)'), 'iphone-14-pro');
+  assert.equal(nombreParaAmazon('iPhone 13 Pro Max (Usado Grado A, 100% Ampsentrix)'), 'iPhone 13 Pro Max');
+  assert.equal(nombreParaAmazon('AirPods Max ( USB - C ) Black Black'), 'AirPods Max Black');   // el paréntesis se va entero, y 'Black Black' queda una vez
+  assert.equal(nombreParaAmazon('iPhone 17 Lavander'), 'iPhone 17 Lavender');
+  const verde = [{ title: 'Apple Watch Ultra 2 [GPS + Cellular 49mm] Titanium Case with Green Alpine Loop', thumbnail: 'https://x/g.jpg' }];
+  assert.equal(elegirImagenes(verde, { nombre: 'Apple Watch Ultra 2 49mm', color: 'Dark Green' }).length, 1, 'Dark Green encuentra Green');
 
   // Nombres de lista → como los escribe Amazon.
   assert.equal(nombreParaAmazon('Apple Watch Serie 10 46mm GPS M/L Silver Aluminio · Denim SB'), 'Apple Watch Series 10 46mm Silver Aluminum');

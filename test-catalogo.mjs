@@ -64,4 +64,12 @@ const casos = [
 ];
 for (const [p, esperado] of casos) assert.equal(categoriaDe(p), esperado, `${p.nombre} → ${esperado}`);
 
+// ── slugFoto: el estado entre paréntesis no es parte del modelo ──
+const srcSlug = html.match(/const slugFoto = nombre => [\s\S]*?\.trim\(\)\.replace\(\/\\s\+\/g, '-'\);/)[0];
+const slugFoto = new Function(srcSlug + '; return slugFoto;')();
+assert.equal(slugFoto('iPhone 13 (Usado Grado A, 100% Ampsentrix)'), 'iphone-13');
+assert.equal(slugFoto('iPhone 14 Pro (Usado Grado A, 87-89%)'), 'iphone-14-pro');
+assert.equal(slugFoto('iPhone 15 128GB'), 'iphone-15');
+assert.equal(slugFoto('Apple Watch Ultra 2 49mm'), 'apple-watch-ultra-2-49mm');
+
 console.log('Todo verde');

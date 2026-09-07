@@ -24,6 +24,8 @@ const SERP = 'https://serpapi.com/search.json';
 export const slugFoto = nombre => String(nombre || '')
   .normalize('NFD').replace(/[̀-ͯ]/g, '')
   .toLowerCase()
+  .replace(/\([^)]*\)/g, ' ')
+  .replace(/\b(usado|usada|nuevo|nueva|sellado|sellada|grado\s*[a-c]|refurb\w*|reacondicionad\w*|ampsentrix|\d{2,3}\s?%)\b/g, ' ')
   .replace(/\b\d+\s?(gb|tb)\b/g, ' ')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim().replace(/\s+/g, '-');
@@ -37,6 +39,7 @@ export const slugFoto = nombre => String(nombre || '')
 export function nombreParaAmazon(nombre) {
   return String(nombre || '')
     .split('·')[0]                                   // "Silver Aluminio · Denim SB" → "Silver Aluminio"
+    .replace(/\([^)]*\)/g, ' ')                      // "(Usado Grado A, 100% Ampsentrix)" no es parte del modelo
     .replace(/[\u200b-\u200f\u2060\ufeff]/g, '')            // caracteres invisibles que traen las listas
     .replace(/\b(genuine|original|nuevo|nueva|sellado|sellada|caja cerrada)\b/gi, ' ')
     .replace(/\bserie\b/gi, 'Series')
@@ -44,6 +47,9 @@ export function nombreParaAmazon(nombre) {
     .replace(/\b[SML]\/[SML]\b/g, ' ')                // tallas de malla M/L, S/M
     .replace(/\b\d+\s?gb\s+ram\b/gi, ' ')             // "8GB RAM" no ayuda a encontrar la foto
     .replace(/\baluminio\b/gi, 'Aluminum')
+    .replace(/\blavander\b/gi, 'Lavender')            // como lo escribe Amazon
+    .replace(/\(\s*usb\s*-?\s*c\s*\)/gi, ' USB-C ')    // "( USB - C )" → "USB-C"
+    .replace(/\b(\w+)\s+\1\b/gi, '$1')               // "Black Black" → "Black"
     .replace(/\s+/g, ' ').trim();
 }
 
@@ -60,7 +66,7 @@ export function elegirImagenes(resultados, { nombre, color, esAccesorio = false,
   const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const palabras = norm(nombreParaAmazon(nombre)).split(/[^a-z0-9]+/).filter(w => w && w !== 'apple' && !/^\d+(gb|tb|mm)$/.test(w));
   // El color también puede venir con "· malla": se compara solo la primera palabra útil.
-  const colorN = norm(nombreParaAmazon(color)).replace(/[^a-z0-9]+/g, ' ').trim().split(' ')[0] || '';
+  const colorN = norm(nombreParaAmazon(color)).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').pop() || '';
   // Un equipo tiene que tener TODAS las palabras del modelo; para lo demás (relojes con
   // medidas, cables con nombres largos) alcanza con la mayoría.
   const minimo = esAccesorio || /watch|cable|charger|cargador/i.test(nombre) ? Math.ceil(palabras.length * 0.6) : palabras.length;
