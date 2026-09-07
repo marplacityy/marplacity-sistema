@@ -1294,7 +1294,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-L</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.06-M</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -13114,6 +13114,9 @@ function catalogoCandidatos(){
     const tipo = entrega === 'pedido' ? 'pedido' : (p.tipo === 'pedido' ? 'equipo' : p.tipo);
     return {
       ...p, tipo,
+      // Nuevo o usado. La página agrupa los nuevos de un mismo modelo en una tarjeta
+      // con variantes (capacidad y color); los usados van uno por uno, cada unidad es única.
+      condicion: esUsado(p) ? 'usado' : 'nuevo',
       categoria: (aj.categoria && todas.includes(aj.categoria)) ? aj.categoria : categoriaDe(p),
       descripcion: String(notas[p.id] || '').trim(),
       _entrega: entrega, _entregaBase: entregaBase, _catAuto: categoriaDe(p),

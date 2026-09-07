@@ -103,6 +103,16 @@
   }
   .punto.on{background:var(--text);}
   .prod-nombre{font-size:15px;font-weight:600;line-height:1.3;}
+  .desde{font-size:11px;color:var(--text3);font-family:'DM Sans',sans-serif;font-weight:500;margin-right:3px;}
+  /* Selectores de variante en la ficha: capacidad y color. */
+  .variantes{display:flex;flex-direction:column;gap:8px;}
+  .variantes .t{font-size:12px;color:var(--text2);}
+  .opciones{display:flex;flex-wrap:wrap;gap:6px;}
+  .opc{
+    font-family:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:9px;cursor:pointer;
+    background:var(--surface);border:1px solid var(--border);color:var(--text);
+  }
+  .opc.on{background:var(--acc);border-color:var(--acc);color:var(--acc-fg);}
   .chips{display:flex;flex-wrap:wrap;gap:5px;}
   .chip{
     font-size:11px;padding:3px 9px;border-radius:100px;
@@ -336,10 +346,11 @@ window.abrirFicha = id => {
   if (!p) return;
   const fotos = Array.isArray(p.fotos) ? p.fotos : (p.foto ? [p.foto] : []);
   const wa = linkWhatsApp(p);
+  const grupo = grupoDe(p);   // si es una variante de un modelo, la capacidad y el color van en selectores
   const specs = [
     p.tipo === 'pedido' && '<span class="chip pedido">A pedido</span>',
-    p.gb && `<span class="chip">${esc(p.gb)}</span>`,
-    p.color && `<span class="chip">${esc(p.color)}</span>`,
+    p.gb && !grupo && `<span class="chip">${esc(p.gb)}</span>`,
+    p.color && !grupo && `<span class="chip">${esc(p.color)}</span>`,
     p.bateria != null && `<span class="chip bat">Batería ${p.bateria}%</span>`,
     p.estado && `<span class="chip">${esc(p.estado)}</span>`,
   ].filter(Boolean).join('');
@@ -356,6 +367,7 @@ window.abrirFicha = id => {
       </div>
       <div class="ficha-datos">
         <div class="ficha-nombre">${esc(p.nombre)}</div>
+        ${grupo ? selectoresVariante(p, grupo) : ''}
         <div class="chips">${specs}</div>
         ${p.descripcion ? `<div class="ficha-desc">${esc(p.descripcion)}</div>` : ''}
         ${p.tipo === 'pedido'
@@ -639,6 +651,76 @@ window.filtrar = t => {
 };
 
 const tipoDe = p => p.tipo || 'equipo';
+
+// ── Variantes ────────────────────────────────────────────────
+//
+// Los equipos NUEVOS de un mismo modelo (iPhone 16 en 128 y 256, en cinco colores) se
+// muestran como una sola tarjeta con "desde" y, en la ficha, selectores de capacidad y
+// color. Los usados no: cada unidad es única (batería, estado) y eso es lo que vende.
+// Los productos siguen publicados uno por uno; la agrupación es solo al mostrar.
+let GRUPOS = new Map();   // clave → [productos]
+
+const claveGrupo = p => (p.condicion === 'nuevo' && tipoDe(p) !== 'accesorio')
+  ? `${catDe(p)}|${String(p.nombre || '').trim().toLowerCase()}` : null;
+
+function armarGrupos(){
+  GRUPOS = new Map();
+  for (const p of PRODUCTOS) {
+    const k = claveGrupo(p);
+    if (k) (GRUPOS.get(k) || GRUPOS.set(k, []).get(k)).push(p);
+  }
+  for (const [k, lista] of GRUPOS) if (lista.length < 2) GRUPOS.delete(k);
+}
+const grupoDe = p => { const k = claveGrupo(p); return k && GRUPOS.get(k) || null; };
+const numGb = g => parseFloat(String(g).replace(/[^\d.]/g, '')) * (/tb/i.test(g) ? 1024 : 1) || 0;
+
+/** La tarjeta de un grupo: la foto de la primera variante que tenga, "desde" el precio más bajo. */
+function tarjetaGrupo(lista){
+  const p = lista.find(x => Array.isArray(x.fotos) && x.fotos.length) || lista[0];
+  const gbs = [...new Set(lista.map(x => x.gb).filter(Boolean))].sort((a, b) => numGb(a) - numGb(b));
+  const colores = [...new Set(lista.map(x => x.color).filter(Boolean))];
+  const desde = Math.min(...lista.map(x => Number(x.precioUSD) || Infinity));
+  const foto = (p.fotos || [])[0];
+  return `<article class="prod" onclick="abrirFicha('${esc(p.id)}')">
+    <div class="prod-foto${foto ? ' con-foto' : ''}">${foto ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" onerror="this.remove()">` : esc(inicial(p.nombre))}</div>
+    <div class="prod-nombre">${esc(p.nombre)}</div>
+    <div class="chips">${p.tipo === 'pedido' ? '<span class="chip pedido">A pedido</span>' : ''}${gbs.length ? `<span class="chip">${esc(gbs.join(' · '))}</span>` : ''}${colores.length > 1 ? `<span class="chip">${colores.length} colores</span>` : ''}</div>
+    <div class="precio"><span class="desde">desde</span>${usd(desde)}</div>
+  </article>`;
+}
+
+/** Cuántas tarjetas tiene una lista: los grupos cuentan una vez. */
+const cuenta = lista => new Set(lista.map(p => claveGrupo(p) && GRUPOS.has(claveGrupo(p)) ? claveGrupo(p) : p.id)).size;
+
+/** Las entradas de una lista de productos: cada grupo una sola vez, en el lugar de su primer producto. */
+function entradas(lista){
+  const vistos = new Set(), out = [];
+  for (const p of lista) {
+    const g = grupoDe(p);
+    if (!g) { out.push(tarjeta(p)); continue; }
+    const k = claveGrupo(p);
+    if (vistos.has(k)) continue;
+    vistos.add(k);
+    out.push(tarjetaGrupo(g));
+  }
+  return out.join('');
+}
+
+/** Los selectores de capacidad y color de la ficha, para la variante elegida. */
+function selectoresVariante(p, grupo){
+  const gbs = [...new Set(grupo.map(x => x.gb).filter(Boolean))].sort((a, b) => numGb(a) - numGb(b));
+  const delGb = grupo.filter(x => !p.gb || x.gb === p.gb);
+  const colores = [...new Set(delGb.map(x => x.color).filter(Boolean))];
+  // Al cambiar de capacidad se intenta conservar el color; si no existe, la primera de esa capacidad.
+  const conGb = gb => grupo.find(x => x.gb === gb && x.color === p.color) || grupo.find(x => x.gb === gb);
+  const conColor = c => grupo.find(x => x.gb === p.gb && x.color === c) || grupo.find(x => x.color === c);
+  return `<div class="variantes">
+    ${gbs.length > 1 ? `<div><div class="t">Capacidad</div><div class="opciones">${gbs.map(gb =>
+      `<button class="opc${gb === p.gb ? ' on' : ''}" onclick="abrirFicha('${esc(conGb(gb).id)}')">${esc(gb)}</button>`).join('')}</div></div>` : ''}
+    ${colores.length > 1 ? `<div><div class="t">Color</div><div class="opciones">${colores.map(c =>
+      `<button class="opc${c === p.color ? ' on' : ''}" onclick="abrirFicha('${esc(conColor(c).id)}')">${esc(c)}</button>`).join('')}</div></div>` : ''}
+  </div>`;
+}
 const catDe = p => p.categoria || 'Otros';
 /** Las categorías en el orden publicado, más las que aparezcan sin estar en la lista. */
 function categorias(){
@@ -669,7 +751,7 @@ function pintar(){
     salida.innerHTML = (q ? '' : `<button class="volver-cat" onclick="filtrar('todo')">← Todas las categorías</button>
         <div class="seccion-cab"><div class="seccion-titulo">${esc(FILTRO)}</div></div>`) +
       (lista.length
-        ? `<div class="grilla">${lista.map(tarjeta).join('')}</div>`
+        ? `<div class="grilla">${entradas(lista)}</div>`
         : '<div class="aviso">No encontré nada con esa búsqueda.</div>');
     return;
   }
@@ -681,9 +763,9 @@ function pintar(){
     return `<section class="seccion">
       <div class="seccion-cab">
         <div class="seccion-titulo">${esc(c)}</div>
-        <a class="vertodos" href="#c=${slug(c)}" onclick="event.preventDefault();filtrar('${esc(c)}')">Ver todos (${lista.length}) ›</a>
+        <a class="vertodos" href="#c=${slug(c)}" onclick="event.preventDefault();filtrar('${esc(c)}')">Ver todos (${cuenta(lista)}) ›</a>
       </div>
-      <div class="fila">${lista.map(tarjeta).join('')}</div>
+      <div class="fila">${entradas(lista)}</div>
     </section>`;
   }).join('');
 }
@@ -704,6 +786,7 @@ function hace(iso){
     const d = campos((await r.json()).fields);
 
     PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0);
+    armarGrupos();
     LOCAL = d.local || {};
     COBRO = d.cobro || {};
     CATEGORIAS = Array.isArray(d.categorias) ? d.categorias : [];
