@@ -49,7 +49,7 @@
   .cat-pill{padding:6px 11px;border-radius:100px;border:1px solid var(--border);background:var(--surface);font-family:inherit;font-size:12.5px;color:var(--text2);cursor:pointer;}
   .cat-pill.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);}
   .cat-bulk{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px;}
-  .cat-bulk .btn-secondary{width:auto;padding:6px 10px;font-size:12.5px;}
+  .cat-bulk .btn-secondary,.cat-bulk .btn-danger{width:auto;padding:6px 10px;font-size:12.5px;}
   .cat-bulk select{padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;color:var(--text);}
   .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
   .cat-prod{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;position:relative;transition:border-color .15s,box-shadow .15s;}
@@ -2960,7 +2960,7 @@
             <option value="pedido">A pedido</option>
             <option value="sinfoto">Sin foto</option>
             <option value="sinprecio">Sin precio</option>
-            <option value="fuera">Ocultos</option>
+            <option value="fuera">Eliminados del catálogo</option>
           </select>
           <button class="cat-pill" id="cat-sel-todos-btn" onclick="seleccionarCatalogo(null, catSeleccion.size === 0 || catSeleccion.size < catalogoFiltrados().length)">Seleccionar todo</button>
         </div>
@@ -2970,8 +2970,8 @@
           <select id="cat-bulk-cat" onchange="if(this.value){accionCatalogo('categoria',this.value);this.value='';}"><option value="">Mover a categoría…</option></select>
           <button class="btn-secondary" onclick="accionCatalogo('entrega','inmediato')">Inmediato</button>
           <button class="btn-secondary" onclick="accionCatalogo('entrega','pedido')">A pedido</button>
-          <button class="btn-secondary" onclick="accionCatalogo('sale',false)">Ocultar</button>
-          <button class="btn-secondary" onclick="accionCatalogo('sale',true)">Mostrar</button>
+          <button class="btn-danger" onclick="accionCatalogo('sale',false)">Eliminar del catálogo</button>
+          <button class="btn-secondary" onclick="accionCatalogo('sale',true)">Restaurar</button>
           <button class="btn-secondary" style="margin-left:auto;" onclick="seleccionarCatalogo(null,false)">✕</button>
         </div>
         <div id="cat-grid" class="cat-grid"></div>
@@ -13273,12 +13273,12 @@ window.accionCatalogo = function(campo, valor){
   const ids = [...catSeleccion];
   if(!ids.length) return;
   if(campo === 'sale'){
-    if(!valor && ids.length > 5 && !confirm(`¿Sacar del catálogo los ${ids.length} seleccionados?\n\nNo se borra nada del sistema, solo dejan de publicarse.`)) return;
+    if(!valor && !confirm(`¿Eliminar del catálogo ${ids.length === 1 ? 'el producto seleccionado' : 'los ' + ids.length + ' seleccionados'}?\n\nDejan de publicarse en la tienda. No se borra nada del sistema: siguen en Stock, Inventario o la lista, y podés restaurarlos desde el filtro "Eliminados del catálogo".`)) return;
     const fuera = new Set(cfg.catalogoExcluidos || []);
     ids.forEach(id => valor ? fuera.delete(id) : fuera.add(id));
     cfg.catalogoExcluidos = [...fuera];
     setDoc(cfgDoc, withUser({ catalogoExcluidos: cfg.catalogoExcluidos }), {merge:true}).catch(()=>{});
-    showToast(valor ? `${ids.length} incluidos en el catálogo` : `${ids.length} sacados del catálogo`);
+    showToast(valor ? `${ids.length} restaurado${ids.length===1?'':'s'} en el catálogo` : `${ids.length} eliminado${ids.length===1?'':'s'} del catálogo`);
   }else{
     const ajustes = { ...(cfg.catalogoAjustes || {}) };
     ids.forEach(id => { ajustes[id] = { ...(ajustes[id] || {}), [campo]: valor }; });
@@ -13288,6 +13288,16 @@ window.accionCatalogo = function(campo, valor){
   }
   catSeleccion.clear();
   renderCatalogo();
+};
+
+/** Eliminar del catálogo desde la ficha: pasa al siguiente producto, o cierra si era el último. */
+window.eliminarDelCatalogo = function(id){
+  if(!confirm('¿Eliminar este producto del catálogo?\n\nDeja de publicarse en la tienda. No se borra del sistema y se puede restaurar.')) return;
+  const lista = catalogoFiltrados();
+  const i = lista.findIndex(p => p.id === id);
+  const vecino = lista[i + 1] || lista[i - 1];
+  toggleCatalogo(id, false);
+  if(vecino){ catFichaId = vecino.id; renderFichaCatalogo(); } else cerrarFichaCatalogo();
 };
 
 window.filtrarCatalogo = () => renderCatalogo();
@@ -13300,7 +13310,7 @@ function catalogoFiltrados(){
   return catalogoCandidatos().filter(p =>
     (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) &&
     (!fc || p.categoria === fc) &&
-    (!ft || (ft === 'inmediato' && p._entrega === 'inmediato' && p.precioUSD > 0) || (ft === 'pedido' && p._entrega === 'pedido' && p.precioUSD > 0)
+    ((!ft && (p._sale || !p.precioUSD)) || (ft === 'inmediato' && p._entrega === 'inmediato' && p.precioUSD > 0) || (ft === 'pedido' && p._entrega === 'pedido' && p.precioUSD > 0)
           || (ft === 'sinprecio' && !p.precioUSD) || (ft === 'fuera' && p.precioUSD > 0 && !p._sale) || (ft === 'sinfoto' && !p.fotos.length)));
 }
 
@@ -13362,9 +13372,11 @@ function renderCatalogo(){
   catSeleccion = new Set([...catSeleccion].filter(id => ids.has(id)));
   const sinFoto = salen.filter(p => !p.fotos.length).length;
   const sinPrecio = items.filter(p => !p.precioUSD).length;
+  const eliminados = items.filter(p => p.precioUSD > 0 && !p._sale).length;
   document.getElementById('cat-resumen').textContent =
-    `${visibles.length} de ${items.length} producto${items.length===1?'':'s'}` +
-    (sinFoto ? ` · ${sinFoto} sin foto` : '') + (sinPrecio ? ` · ${sinPrecio} sin precio (se cargan en Stock o Inventario)` : '');
+    `${visibles.length} producto${visibles.length===1?'':'s'}` +
+    (sinFoto ? ` · ${sinFoto} sin foto` : '') + (sinPrecio ? ` · ${sinPrecio} sin precio (se cargan en Stock o Inventario)` : '') +
+    (eliminados && !document.getElementById('cat-f-tipo').value ? ` · ${eliminados} eliminado${eliminados===1?'':'s'} del catálogo (ver con el filtro)` : '');
   document.getElementById('cat-sel-todos-btn').textContent = catSeleccion.size && catSeleccion.size >= visibles.length ? 'Deseleccionar' : 'Seleccionar todo';
   document.getElementById('cat-bulk').style.display = catSeleccion.size ? 'flex' : 'none';
   document.getElementById('cat-bulk-n').textContent = `${catSeleccion.size} seleccionado${catSeleccion.size===1?'':'s'}`;
@@ -13372,7 +13384,7 @@ function renderCatalogo(){
 
   document.getElementById('cat-grid').innerHTML = visibles.map(p => {
     const foto = p.fotos[0];
-    const estado = !p.precioUSD ? ['no','Sin precio'] : !p._sale ? ['','Oculto'] : p._entrega === 'pedido' ? ['ped','A pedido'] : ['ok','Inmediato'];
+    const estado = !p.precioUSD ? ['no','Sin precio'] : !p._sale ? ['no','Eliminado'] : p._entrega === 'pedido' ? ['ped','A pedido'] : ['ok','Inmediato'];
     return `<div class="cat-prod${p._sale?'':' off'}${catSeleccion.has(p.id)?' sel':''}" onclick="abrirFichaCatalogo('${escJs(p.id)}')">
       <input type="checkbox" class="sel-box" ${catSeleccion.has(p.id)?'checked':''} onclick="event.stopPropagation()" onchange="seleccionarCatalogo('${escJs(p.id)}',this.checked)">
       <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : esc((String(p.nombre).match(/\d+/)||[String(p.nombre).slice(0,1)])[0].slice(0,2))}</div>
@@ -13441,10 +13453,10 @@ function renderFichaCatalogo(){
   document.getElementById('cat-panel-cuerpo').innerHTML = `
     <div class="cat-sec">
       <div class="cat-sec-t">Estado</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <label class="cat-pill ${p._sale?'on':''}" style="display:flex;align-items:center;gap:6px;">
-          <input type="checkbox" ${p._sale?'checked':''} ${p.precioUSD?'':'disabled'} onchange="toggleCatalogo('${escJs(p.id)}',this.checked);renderFichaCatalogo()" style="accent-color:var(--accent-fg);"> ${p._sale?'Publicado':'Oculto'}
-        </label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        ${!p.precioUSD ? '<span class="cat-pill">Sin precio</span>'
+          : p._sale ? '<span class="cat-pill on">Publicado en la tienda</span>'
+          : `<span class="cat-pill" style="color:var(--neg);">Eliminado del catálogo</span><button class="btn-secondary" style="width:auto;padding:6px 10px;font-size:12.5px;" onclick="toggleCatalogo('${escJs(p.id)}',true);renderFichaCatalogo()">Restaurar</button>`}
         <select onchange="ajusteCatalogo('${escJs(p.id)}','entrega',this.value);renderFichaCatalogo()" style="${campo}width:auto;">
           <option value="inmediato" ${p._entrega==='inmediato'?'selected':''}>Entrega inmediata</option>
           <option value="pedido" ${p._entrega==='pedido'?'selected':''}>A pedido</option>
@@ -13514,7 +13526,12 @@ function renderFichaCatalogo(){
         <button class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;" onclick="navigator.clipboard.writeText('${escJs(urlProd)}').then(()=>showToast('Link copiado ✓'))">📋 Copiar link del producto</button>
         <a class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;text-decoration:none;text-align:center;" href="${esc(urlProd)}" target="_blank" rel="noopener">↗ Ver en la tienda</a>
       </div>
-    </div>`;
+    </div>
+
+    ${p._sale ? `<div class="cat-sec">
+      <button class="btn-danger" onclick="eliminarDelCatalogo('${escJs(p.id)}')">Eliminar del catálogo</button>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:6px;">Deja de publicarse en la tienda. Sigue en ${esc(p._origen)} y se puede restaurar.</div>
+    </div>` : ''}`;
 }
 
 /**
