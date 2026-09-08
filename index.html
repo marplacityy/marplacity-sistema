@@ -37,6 +37,73 @@
   .medio-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;min-height:28px;}
   .medio-tag{display:flex;align-items:center;gap:5px;padding:4px 10px;background:var(--per-bg);border:1px solid #B5D4F4;border-radius:100px;font-size:12px;color:var(--per);}
   .medio-tag button{background:none;border:none;cursor:pointer;color:var(--per);font-size:14px;line-height:1;padding:0 1px;}
+  /* ── Catálogo web, estilo tienda ── */
+  .cat-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:16px;}
+  .cat-tab{padding:9px 14px;font-size:13.5px;font-weight:500;color:var(--text2);cursor:pointer;border:none;background:none;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;}
+  .cat-tab.on{color:var(--text);border-bottom-color:var(--text);}
+  .cat-head{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .cat-head .btn-secondary,.cat-head .btn-add{width:auto;}
+  .cat-filtros{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .cat-filtros input,.cat-filtros select{padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);outline:none;}
+  .cat-filtros input[type=search]{flex:1;min-width:180px;}
+  .cat-pill{padding:6px 11px;border-radius:100px;border:1px solid var(--border);background:var(--surface);font-family:inherit;font-size:12.5px;color:var(--text2);cursor:pointer;}
+  .cat-pill.on{background:var(--accent);border-color:var(--accent);color:var(--accent-fg);}
+  .cat-bulk{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px;}
+  .cat-bulk .btn-secondary{width:auto;padding:6px 10px;font-size:12.5px;}
+  .cat-bulk select{padding:6px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;color:var(--text);}
+  .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;}
+  .cat-prod{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;position:relative;transition:border-color .15s,box-shadow .15s;}
+  .cat-prod:hover{border-color:var(--text3);box-shadow:0 2px 10px rgba(0,0,0,.05);}
+  .cat-prod.off{opacity:.55;}
+  .cat-prod.sel{border-color:var(--text);box-shadow:0 0 0 2px var(--text);}
+  .cat-prod .sel-box{position:absolute;top:8px;left:8px;width:18px;height:18px;z-index:2;accent-color:var(--text);}
+  .cat-prod .foto{aspect-ratio:1;background:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:var(--text3);border-bottom:1px solid var(--border);}
+  .cat-prod .foto img{width:100%;height:100%;object-fit:contain;padding:8px;}
+  .cat-prod .cuerpo{padding:10px 12px 12px;}
+  .cat-prod .nombre{font-size:13px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:34px;}
+  .cat-prod .sub{font-size:11px;color:var(--text3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cat-prod .pie{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:6px;}
+  .cat-prod .precio{font-family:'DM Mono',monospace;font-size:13.5px;font-weight:600;}
+  .cat-prod .estado{font-size:10px;padding:2px 7px;border-radius:100px;background:var(--bg);border:1px solid var(--border);color:var(--text2);white-space:nowrap;}
+  .cat-prod .estado.ok{background:var(--green-bg);border-color:#A8DFC3;color:var(--green);}
+  .cat-prod .estado.ped{background:#FFF6E5;border-color:#F2D399;color:#8A5A00;}
+  .cat-prod .estado.no{background:var(--neg-bg);border-color:transparent;color:var(--neg);}
+  /* La ficha del producto: panel lateral, como el editor de Shopify. */
+  .cat-panel-fondo{position:fixed;inset:0;background:rgba(26,25,23,.35);z-index:900;display:none;}
+  .cat-panel-fondo.open{display:block;}
+  .cat-panel{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--surface);z-index:901;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.12);transform:translateX(100%);transition:transform .2s ease;}
+  .cat-panel.open{transform:none;}
+  .cat-panel-cab{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);}
+  .cat-panel-cab h2{font-size:16px;font-weight:600;flex:1;line-height:1.3;}
+  .cat-panel-cuerpo{flex:1;overflow-y:auto;padding:18px;}
+  .cat-panel-pie{display:flex;gap:8px;padding:12px 18px;border-top:1px solid var(--border);background:var(--bg);}
+  .cat-panel-pie .btn-secondary,.cat-panel-pie .btn-save{width:auto;flex:1;padding:10px;}
+  .cat-sec{margin-bottom:22px;}
+  .cat-sec-t{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;}
+  .cat-imgs{display:grid;grid-template-columns:repeat(auto-fill,96px);gap:8px;}
+  .cat-img{position:relative;width:96px;}
+  .cat-img img{width:96px;height:96px;object-fit:contain;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);}
+  .cat-img.principal img{border-color:var(--text);box-shadow:0 0 0 2px var(--text);}
+  .cat-img .tag{position:absolute;top:4px;left:4px;font-size:9px;padding:1px 6px;background:var(--text);color:var(--surface);border-radius:100px;border:none;}
+  .cat-img select{width:96px;font-size:10px;padding:3px 4px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);}
+  .cat-kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px;}
+  .cat-kv dt{color:var(--text3);}
+  .cat-kv dd{margin:0;}
+  .cat-seo-prev{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;}
+  .cat-seo-prev .t{color:#1a0dab;font-size:15px;line-height:1.3;}
+  .cat-seo-prev .u{color:#006621;font-size:12px;margin:2px 0;word-break:break-all;}
+  .cat-seo-prev .d{color:var(--text2);font-size:12.5px;line-height:1.4;}
+  .cat-lista-cats{display:flex;flex-direction:column;gap:6px;}
+  .cat-fila-cat{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);}
+  .cat-fila-cat .n{font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);width:22px;}
+  .cat-fila-cat .nombre{flex:1;font-size:13.5px;font-weight:500;}
+  .cat-fila-cat .cnt{font-size:12px;color:var(--text3);}
+  .cat-fila-cat .btn-secondary{width:auto;padding:4px 9px;font-size:12px;}
+  @media(max-width:640px){
+    .cat-grid{grid-template-columns:repeat(2,1fr);gap:8px;}
+    .cat-kv{grid-template-columns:1fr;}
+  }
+
   .permuta-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-top:8px;}
   .profit-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);}
   .profit-row:last-child{border-bottom:none;}
@@ -1294,7 +1361,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.07-F</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.09.08-A</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -2862,82 +2929,87 @@
     </div>
 
     <div id="page-catalogo" class="page">
-      <div class="page-header">
-        <h1>Catálogo web</h1>
-        <p>Una página pública con los equipos que tenés, para mandarle a los clientes. Se publica cuando vos querés: hasta que toques el botón, lo que ve la gente es lo de la última vez.</p>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Qué se va a publicar</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Entran los equipos <b>en stock con precio de venta cargado</b> (propios y de consignación), los artículos del <b>inventario</b> con cantidad y precio sugerido, y los productos de la <b>última lista de precios</b> de cada origen. Del costo, el IMEI, el proveedor y las notas internas <b>no sale nada</b>.</p>
-        <div id="cat-resumen"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px;">
-          <input type="search" id="cat-q" placeholder="Buscar…" oninput="filtrarCatalogo()"
-                 style="flex:1;min-width:160px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);">
-          <select id="cat-f-cat" onchange="filtrarCatalogo()" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);"></select>
-          <select id="cat-f-tipo" onchange="filtrarCatalogo()" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);">
-            <option value="">Todos</option>
-            <option value="inmediato">Stock inmediato</option>
-            <option value="pedido">A pedido</option>
-            <option value="sinprecio">Sin precio</option>
-            <option value="fuera">Sacados del catálogo</option>
-          </select>
+      <div class="page-header" style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:240px;">
+          <h1>Catálogo web</h1>
+          <p>Tu tienda online. Lo que cambiás acá se publica cuando tocás el botón.</p>
         </div>
-        <div id="cat-bulk" style="display:none;margin-top:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);align-items:center;gap:8px;flex-wrap:wrap;">
-          <b id="cat-bulk-n" style="font-size:13px;"></b>
-          <select id="cat-bulk-cat" onchange="if(this.value){accionCatalogo('categoria',this.value);this.value='';}" style="padding:7px 10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;color:var(--text);">
-            <option value="">Mover a categoría…</option>
-          </select>
-          <button class="btn-secondary" style="padding:6px 10px;font-size:12.5px;" onclick="accionCatalogo('entrega','inmediato')">Inmediato</button>
-          <button class="btn-secondary" style="padding:6px 10px;font-size:12.5px;" onclick="accionCatalogo('entrega','pedido')">A pedido</button>
-          <button class="btn-secondary" style="padding:6px 10px;font-size:12.5px;" onclick="accionCatalogo('sale',false)">Sacar del catálogo</button>
-          <button class="btn-secondary" style="padding:6px 10px;font-size:12.5px;" onclick="accionCatalogo('sale',true)">Incluir</button>
-          <button class="btn-secondary" style="padding:6px 10px;font-size:12.5px;margin-left:auto;" onclick="seleccionarCatalogo(null,false)">Deseleccionar</button>
-        </div>
-        <div style="overflow-x:auto;margin-top:10px;"><table class="tkh-table">
-          <thead><tr>
-            <th style="width:36px;"><input type="checkbox" id="cat-sel-todos" title="Seleccionar todos los que se ven" onchange="seleccionarCatalogo(null,this.checked)"></th>
-            <th style="width:44px;">Sale</th>
-            <th>Producto</th><th style="width:170px;">Categoría</th><th style="width:120px;">Entrega</th><th style="width:60px;">GB</th><th style="width:100px;">Color</th><th style="width:60px;">Bat.</th><th style="text-align:right;width:90px;">Precio</th><th>Descripción</th>
-          </tr></thead>
-          <tbody id="cat-body"></tbody>
-        </table></div>
-        <div class="pos-actions" style="margin-top:14px;">
-          <button class="pos-btn-checkout" id="btn-cat-publicar" onclick="publicarCatalogo()">🌐 Publicar el catálogo</button>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">El link</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input type="text" id="cat-link" readonly onclick="this.select()"
-                 style="flex:1;min-width:240px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:'DM Mono',monospace;font-size:12.5px;color:var(--text);">
-          <button class="btn-secondary" onclick="copiarLinkCatalogo()">📋 Copiar</button>
-          <button class="btn-secondary" onclick="window.open(document.getElementById('cat-link').value,'_blank')">↗ Ver</button>
+          <button class="btn-secondary" style="width:auto;" onclick="copiarLinkCatalogo()">📋 Copiar link</button>
+          <button class="btn-secondary" style="width:auto;" onclick="window.open(LINK_CATALOGO_PUBLICO(),'_blank')">↗ Ver tienda</button>
+          <button class="btn-add" id="btn-cat-publicar" onclick="publicarCatalogo()">🌐 Publicar</button>
         </div>
-        <div id="cat-estado" style="margin-top:12px;"></div>
+      </div>
+      <input type="hidden" id="cat-link">
+      <div id="cat-estado" style="margin-bottom:12px;"></div>
+
+      <div class="cat-tabs">
+        <button class="cat-tab on" id="cat-tab-productos" onclick="catTab('productos')">Productos</button>
+        <button class="cat-tab" id="cat-tab-categorias" onclick="catTab('categorias')">Categorías</button>
+        <button class="cat-tab" id="cat-tab-fotos" onclick="catTab('fotos')">Fotos</button>
       </div>
 
-      <div class="card">
-        <div class="card-title">Las fotos</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">Las imágenes viven en la carpeta <code>fotos/</code> del repositorio, y qué foto es de qué modelo se guarda en la base. <b>Lo usan los dos:</b> esta página para publicar, y el bot de Instagram para mandarle la foto al cliente que la pide.</p>
-        <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">Dejá los archivos en <code>fotos/</code> con cualquier nombre y subilos. Después tocá <b>Clasificar</b>: la IA mira cada foto nueva, reconoce modelo, color y si es el frente o el dorso, y la asigna al producto. Lo que no reconozca queda abajo para que lo asignes vos.</p>
+      <!-- Productos -->
+      <div id="cat-vista-productos">
+        <div class="cat-filtros">
+          <input type="search" id="cat-q" placeholder="Buscar producto…" oninput="filtrarCatalogo()">
+          <select id="cat-f-cat" onchange="filtrarCatalogo()"></select>
+          <select id="cat-f-tipo" onchange="filtrarCatalogo()">
+            <option value="">Todos</option>
+            <option value="inmediato">Inmediato</option>
+            <option value="pedido">A pedido</option>
+            <option value="sinfoto">Sin foto</option>
+            <option value="sinprecio">Sin precio</option>
+            <option value="fuera">Ocultos</option>
+          </select>
+          <button class="cat-pill" id="cat-sel-todos-btn" onclick="seleccionarCatalogo(null, catSeleccion.size === 0 || catSeleccion.size < catalogoFiltrados().length)">Seleccionar todo</button>
+        </div>
+        <div id="cat-resumen" style="font-size:12.5px;color:var(--text3);margin-bottom:10px;"></div>
+        <div id="cat-bulk" class="cat-bulk" style="display:none;">
+          <b id="cat-bulk-n" style="font-size:13px;"></b>
+          <select id="cat-bulk-cat" onchange="if(this.value){accionCatalogo('categoria',this.value);this.value='';}"><option value="">Mover a categoría…</option></select>
+          <button class="btn-secondary" onclick="accionCatalogo('entrega','inmediato')">Inmediato</button>
+          <button class="btn-secondary" onclick="accionCatalogo('entrega','pedido')">A pedido</button>
+          <button class="btn-secondary" onclick="accionCatalogo('sale',false)">Ocultar</button>
+          <button class="btn-secondary" onclick="accionCatalogo('sale',true)">Mostrar</button>
+          <button class="btn-secondary" style="margin-left:auto;" onclick="seleccionarCatalogo(null,false)">✕</button>
+        </div>
+        <div id="cat-grid" class="cat-grid"></div>
+      </div>
+
+      <!-- Categorías -->
+      <div id="cat-vista-categorias" style="display:none;">
+        <div class="cat-head">
+          <p style="font-size:13px;color:var(--text2);flex:1;">La portada de la tienda muestra cada categoría en este orden, con tres productos a la vista y el resto deslizando. Las vacías no se muestran. La categoría de cada producto se elige en su ficha.</p>
+          <button class="btn-add" onclick="nuevaCategoria()">＋ Nueva categoría</button>
+        </div>
+        <div id="cat-categorias" class="cat-lista-cats"></div>
+      </div>
+
+      <!-- Fotos -->
+      <div id="cat-vista-fotos" style="display:none;">
+        <div class="cat-head">
+          <p style="font-size:13px;color:var(--text2);flex:1;">Las imágenes viven en la carpeta <code>fotos/</code> del repositorio. Buscá en Amazon las que faltan, o subí archivos con cualquier nombre y dejá que la IA los asigne. El bot de Instagram usa las mismas fotos.</p>
+          <button class="btn-secondary" style="width:auto;" id="btn-cat-amazon" onclick="buscarFotosAmazon()">🛒 Buscar en Amazon</button>
+          <button class="btn-secondary" style="width:auto;" id="btn-cat-ia" onclick="clasificarFotos()">🤖 Clasificar nuevas</button>
+          <button class="btn-secondary" style="width:auto;" id="btn-cat-fotos" onclick="sincronizarFotos()">🔄 Sincronizar</button>
+        </div>
         <div id="cat-fotos"></div>
-        <div class="pos-actions" style="margin-top:14px;">
-          <button class="btn-secondary" id="btn-cat-ia" onclick="clasificarFotos()">🤖 Clasificar fotos nuevas</button>
-          <button class="btn-secondary" id="btn-cat-fotos" onclick="sincronizarFotos()">🔄 Sincronizar con la carpeta</button>
-        </div>
       </div>
+    </div>
 
-      <div class="card">
-        <div class="card-title">Las categorías</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">La portada muestra cada categoría en este orden, con tres productos a la vista y el resto deslizando. La categoría de cada producto sale sola del nombre y de si es nuevo o usado; en la tabla de arriba la podés cambiar. Las vacías no se muestran.</p>
-        <div id="cat-categorias"></div>
-        <div class="pos-actions" style="margin-top:10px;">
-          <button class="btn-secondary" onclick="nuevaCategoria()">＋ Nueva categoría</button>
-        </div>
+    <!-- La ficha de un producto del catálogo -->
+    <div class="cat-panel-fondo" id="cat-panel-fondo" onclick="cerrarFichaCatalogo()"></div>
+    <div class="cat-panel" id="cat-panel">
+      <div class="cat-panel-cab">
+        <h2 id="cat-panel-titulo">Producto</h2>
+        <button class="btn-secondary" style="width:auto;padding:6px 10px;" onclick="cerrarFichaCatalogo()">✕</button>
       </div>
-
+      <div class="cat-panel-cuerpo" id="cat-panel-cuerpo"></div>
+      <div class="cat-panel-pie">
+        <button class="btn-secondary" id="cat-panel-anterior" onclick="fichaCatalogoVecina(-1)">‹ Anterior</button>
+        <button class="btn-secondary" id="cat-panel-siguiente" onclick="fichaCatalogoVecina(1)">Siguiente ›</button>
+      </div>
     </div>
 
     <!-- ASISTENTE — habla en castellano y prepara el trabajo -->
@@ -13099,13 +13171,14 @@ function renderCategoriasCatalogo(){
   const orden = ordenCategorias();
   document.getElementById('cat-categorias').innerHTML = orden.map((c, i) => {
     const n = items.filter(p => p.categoria === c).length;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);${n?'':'opacity:.5;'}">
-      <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);width:22px;">${i+1}</span>
-      <span style="flex:1;font-size:13px;">${esc(c)}</span>
-      <span style="font-size:11.5px;color:var(--text3);">${n ? n+' producto'+(n===1?'':'s') : 'vacía, no se muestra'}</span>
-      <button class="btn-secondary" style="padding:3px 8px;font-size:12px;" ${i===0?'disabled':''} onclick="moverCategoria('${escJs(c)}',-1)">▲</button>
-      <button class="btn-secondary" style="padding:3px 8px;font-size:12px;" ${i===orden.length-1?'disabled':''} onclick="moverCategoria('${escJs(c)}',1)">▼</button>
-      ${CATEGORIAS_CATALOGO.includes(c) ? '<span style="width:30px;"></span>' : `<button class="btn-secondary" style="padding:3px 8px;font-size:12px;" title="Borrar esta categoría" onclick="borrarCategoria('${escJs(c)}')">✕</button>`}
+    return `<div class="cat-fila-cat" style="${n?'':'opacity:.55;'}">
+      <span class="n">${i+1}</span>
+      <span class="nombre">${esc(c)}</span>
+      <span class="cnt">${n ? n+' producto'+(n===1?'':'s') : 'vacía, no se muestra'}</span>
+      <button class="btn-secondary" ${i===0?'disabled':''} onclick="moverCategoria('${escJs(c)}',-1)">▲</button>
+      <button class="btn-secondary" ${i===orden.length-1?'disabled':''} onclick="moverCategoria('${escJs(c)}',1)">▼</button>
+      ${CATEGORIAS_CATALOGO.includes(c) ? '<span style="width:34px;"></span>' : `<button class="btn-secondary" title="Borrar esta categoría" onclick="borrarCategoria('${escJs(c)}')">✕</button>`}
+      ${n ? `<button class="btn-secondary" onclick="catTab('productos');document.getElementById('cat-f-cat').value='${escJs(c)}';renderCatalogo()">Ver</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -13155,8 +13228,10 @@ function catalogoCandidatos(){
   }
   const ajustes = cfg.catalogoAjustes || {};
   const todas = todasLasCategorias();
+  const metas = cfg.catalogoMeta || {};
   return items.map(p => {
     const aj = ajustes[p.id] || {};
+    const meta = metas[p.id] || {};
     // La entrega: "pedido" o "inmediato". Por defecto sale de dónde está cargado (las
     // listas son a pedido, el resto inmediato); lo que se tocó a mano manda.
     const entregaBase = p.tipo === 'pedido' ? 'pedido' : 'inmediato';
@@ -13169,6 +13244,10 @@ function catalogoCandidatos(){
       condicion: esUsado(p) ? 'usado' : 'nuevo',
       categoria: (aj.categoria && todas.includes(aj.categoria)) ? aj.categoria : categoriaDe(p),
       descripcion: String(notas[p.id] || '').trim(),
+      // Lo que Juni escribió para la tienda: título propio, meta description y palabras clave.
+      ...(meta.titulo ? { titulo: meta.titulo } : {}),
+      ...(meta.seoDescripcion ? { seoDescripcion: meta.seoDescripcion } : {}),
+      ...(meta.keywords ? { keywords: meta.keywords } : {}),
       _entrega: entrega, _entregaBase: entregaBase, _catAuto: categoriaDe(p),
       _sale: p.precioUSD > 0 && !fuera.has(p.id),
     };
@@ -13222,7 +13301,7 @@ function catalogoFiltrados(){
     (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) &&
     (!fc || p.categoria === fc) &&
     (!ft || (ft === 'inmediato' && p._entrega === 'inmediato' && p.precioUSD > 0) || (ft === 'pedido' && p._entrega === 'pedido' && p.precioUSD > 0)
-          || (ft === 'sinprecio' && !p.precioUSD) || (ft === 'fuera' && p.precioUSD > 0 && !p._sale)));
+          || (ft === 'sinprecio' && !p.precioUSD) || (ft === 'fuera' && p.precioUSD > 0 && !p._sale) || (ft === 'sinfoto' && !p.fotos.length)));
 }
 
 /** La descripción que escribe Juni para un producto. Vive en la config, por id. */
@@ -13234,89 +13313,208 @@ window.notaCatalogo = function(id, texto){
   setDoc(cfgDoc, withUser({ catalogoNotas: notas }), {merge:true}).catch(()=>{});
 };
 
+// Qué pestaña del catálogo está abierta: productos, categorias, fotos.
+let catVista = 'productos';
+window.catTab = function(v){
+  catVista = v;
+  ['productos','categorias','fotos'].forEach(t => {
+    document.getElementById('cat-vista-'+t).style.display = t===v ? '' : 'none';
+    document.getElementById('cat-tab-'+t).classList.toggle('on', t===v);
+  });
+  renderCatalogo();
+};
+window.LINK_CATALOGO_PUBLICO = () => LINK_CATALOGO;
+
+/** La clave de foto de un producto (modelo + color), la misma que usa la página. */
+const claveFotoDe = p => slugFoto(p.nombre) + (p.color ? '-' + slugFoto(p.color) : '');
+
 function renderCatalogo(){
   document.getElementById('cat-link').value = LINK_CATALOGO;
   const items = catalogoCandidatos();
   const salen = items.filter(p => p._sale);
-  const sinPrecio = items.filter(p => !p.precioUSD);
-
-  document.getElementById('cat-resumen').innerHTML = `
-    <div class="proveedor-alerta">
-      <b>${salen.length}</b> producto${salen.length===1?'':'s'} en la página, de ${items.length} posibles.
-      ${sinPrecio.length ? `<br>⚠️ ${sinPrecio.length} sin precio de venta cargado: esos no se publican aunque los marques. El precio se carga en Stock o Inventario.` : ''}
-    </div>
-    ${(()=>{
-      // Qué modelos todavía no tienen imagen. La página igual los muestra, con el modelo
-      // en grande; esto es para saber qué falta bajar.
-      const faltan = [...new Set(salen.filter(p => !p.fotos.length)
-        .map(p => slugFoto(p.nombre) + (p.color ? '-' + slugFoto(p.color) : '')))];
-      return faltan.length ? `<div class="proveedor-alerta alerta-atencion" style="margin-top:8px;">
-        📷 <b>${faltan.length} modelo${faltan.length===1?'':'s'} sin foto.</b> Se muestran igual, con el modelo en grande.
-        Podés buscarlas en Amazon con el botón de abajo, o dejar el archivo en <code>fotos/</code> con este nombre:
-        <ul style="margin:6px 0 0 18px;font-family:'DM Mono',monospace;font-size:11.5px;">
-          ${faltan.map(f=>`<li>${esc(f)}.jpg</li>`).join('')}
-        </ul>
-        <div class="pos-actions" style="margin-top:10px;">
-          <button class="btn-secondary" id="btn-cat-amazon" onclick="buscarFotosAmazon()">🛒 Buscar fotos en Amazon (${faltan.length})</button>
-        </div></div>` : '';
-    })()}`;
-
-  renderFotosCatalogo();
-  renderCategoriasCatalogo();
-
-  // El filtro de categoría, con las que hay en la tabla; conserva lo elegido.
-  const selCat = document.getElementById('cat-f-cat');
-  const catElegida = selCat.value;
-  selCat.innerHTML = '<option value="">Todas las categorías</option>' + ordenCategorias().map(c => {
-    const n = items.filter(p => p.categoria === c).length;
-    return `<option value="${esc(c)}" ${c===catElegida?'selected':''}>${esc(c)} (${n})</option>`;
-  }).join('');
-
-  const visibles = catalogoFiltrados();
-  // La selección solo vale sobre productos que existen todavía.
-  const ids = new Set(items.map(p => p.id));
-  catSeleccion = new Set([...catSeleccion].filter(id => ids.has(id)));
-  document.getElementById('cat-sel-todos').checked = visibles.length > 0 && visibles.every(p => catSeleccion.has(p.id));
-  const bulk = document.getElementById('cat-bulk');
-  bulk.style.display = catSeleccion.size ? 'flex' : 'none';
-  document.getElementById('cat-bulk-n').textContent = `${catSeleccion.size} seleccionado${catSeleccion.size===1?'':'s'}:`;
-  document.getElementById('cat-bulk-cat').innerHTML = '<option value="">Mover a categoría…</option>' + ordenCategorias().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-
-  const estilo = 'padding:4px 6px;font-size:11.5px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);width:100%;';
-  document.getElementById('cat-body').innerHTML = visibles.map(p => `
-    <tr style="${p._sale?'':'opacity:.55;'}${catSeleccion.has(p.id)?'background:var(--bg);':''}">
-      <td><input type="checkbox" ${catSeleccion.has(p.id)?'checked':''} onchange="seleccionarCatalogo('${escJs(p.id)}',this.checked)"></td>
-      <td><input type="checkbox" ${p._sale?'checked':''} ${p.precioUSD?'':'disabled title="Sin precio de venta"'}
-            onchange="toggleCatalogo('${escJs(p.id)}',this.checked)"></td>
-      <td>${esc(p.nombre)}<div class="sub" style="font-size:10.5px;color:var(--text3);">${esc(p._origen)}${p.estado?' · '+esc(p.estado):''}${p.precioUSD?'':' · <b>sin precio</b>'}</div></td>
-      <td><select onchange="ajusteCatalogo('${escJs(p.id)}','categoria',this.value)" style="${estilo}${p.categoria!==p._catAuto?'border-color:var(--text);':''}">
-        ${ordenCategorias().map(c => `<option value="${esc(c)}" ${c===p.categoria?'selected':''}>${esc(c)}${c===p._catAuto?' (auto)':''}</option>`).join('')}
-      </select></td>
-      <td><select onchange="ajusteCatalogo('${escJs(p.id)}','entrega',this.value)" style="${estilo}${p._entrega!==p._entregaBase?'border-color:var(--text);':''}">
-        <option value="inmediato" ${p._entrega==='inmediato'?'selected':''}>Inmediato</option>
-        <option value="pedido" ${p._entrega==='pedido'?'selected':''}>A pedido</option>
-      </select></td>
-      <td>${esc(p.gb)}</td>
-      <td>${esc(p.color)}</td>
-      <td style="font-family:'DM Mono',monospace;">${p.bateria!=null?p.bateria+'%':'—'}</td>
-      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;">${p.precioUSD?fmtUSD(p.precioUSD):'—'}</td>
-      <td><input type="text" value="${esc(p.descripcion)}" placeholder="Opcional"
-            onchange="notaCatalogo('${escJs(p.id)}',this.value)"
-            style="width:100%;min-width:160px;padding:6px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);"></td>
-    </tr>`).join('') || `<tr><td colspan="10" style="color:var(--text3);">${items.length ? 'Nada coincide con el filtro.' : 'No hay nada para publicar.'}</td></tr>`;
 
   // ¿Lo que se ve en la página coincide con lo que hay ahora?
   const el = document.getElementById('cat-estado');
   if(!catPublicado){
-    el.innerHTML = '<div class="proveedor-alerta alerta-atencion">Todavía no publicaste nunca. El link no muestra nada hasta que lo hagas.</div>';
-    return;
+    el.innerHTML = '<div class="proveedor-alerta alerta-atencion">Todavía no publicaste nunca. La tienda no muestra nada hasta que lo hagas.</div>';
+  }else{
+    const ahora = JSON.stringify(salen.map(p => { const {_sale,_origen,_entrega,_entregaBase,_catAuto,...q} = p; return q; })) + JSON.stringify(ordenCategorias());
+    const antes = JSON.stringify(catPublicado.productos || []) + JSON.stringify(catPublicado.categorias || []);
+    const cuando = catPublicado.actualizado ? new Date(catPublicado.actualizado).toLocaleString('es-AR') : '';
+    el.innerHTML = ahora === antes
+      ? `<div class="proveedor-alerta">✅ La tienda está al día · ${salen.length} producto${salen.length===1?'':'s'} publicado${salen.length===1?'':'s'} · ${esc(cuando)}</div>`
+      : `<div class="proveedor-alerta alerta-atencion">🔔 <b>Hay cambios sin publicar.</b> La tienda muestra lo de ${esc(cuando)}. Tocá Publicar para actualizarla.</div>`;
   }
-  const ahora = JSON.stringify(salen.map(p => { const {_sale,_origen,...q} = p; return q; })) + JSON.stringify(ordenCategorias());
-  const antes = JSON.stringify(catPublicado.productos || []) + JSON.stringify(catPublicado.categorias || []);
-  const cuando = catPublicado.actualizado ? new Date(catPublicado.actualizado).toLocaleString('es-AR') : '';
-  el.innerHTML = ahora === antes
-    ? `<div class="proveedor-alerta">✅ La página está al día. Última publicación: ${esc(cuando)}.</div>`
-    : `<div class="proveedor-alerta alerta-atencion">🔔 <b>Hay cambios sin publicar.</b> La página muestra lo de ${esc(cuando)}; tocá Publicar para actualizarla.</div>`;
+
+  if(catVista === 'categorias'){ renderCategoriasCatalogo(); return; }
+  if(catVista === 'fotos'){ renderFotosCatalogo(); return; }
+
+  // El filtro de categoría, con las que hay; conserva lo elegido.
+  const selCat = document.getElementById('cat-f-cat');
+  const catElegida = selCat.value;
+  selCat.innerHTML = '<option value="">Todas las categorías</option>' + ordenCategorias().map(c => {
+    const n = items.filter(p => p.categoria === c).length;
+    return n ? `<option value="${esc(c)}" ${c===catElegida?'selected':''}>${esc(c)} (${n})</option>` : '';
+  }).join('');
+
+  const visibles = catalogoFiltrados();
+  const ids = new Set(items.map(p => p.id));
+  catSeleccion = new Set([...catSeleccion].filter(id => ids.has(id)));
+  const sinFoto = salen.filter(p => !p.fotos.length).length;
+  const sinPrecio = items.filter(p => !p.precioUSD).length;
+  document.getElementById('cat-resumen').textContent =
+    `${visibles.length} de ${items.length} producto${items.length===1?'':'s'}` +
+    (sinFoto ? ` · ${sinFoto} sin foto` : '') + (sinPrecio ? ` · ${sinPrecio} sin precio (se cargan en Stock o Inventario)` : '');
+  document.getElementById('cat-sel-todos-btn').textContent = catSeleccion.size && catSeleccion.size >= visibles.length ? 'Deseleccionar' : 'Seleccionar todo';
+  document.getElementById('cat-bulk').style.display = catSeleccion.size ? 'flex' : 'none';
+  document.getElementById('cat-bulk-n').textContent = `${catSeleccion.size} seleccionado${catSeleccion.size===1?'':'s'}`;
+  document.getElementById('cat-bulk-cat').innerHTML = '<option value="">Mover a categoría…</option>' + ordenCategorias().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+
+  document.getElementById('cat-grid').innerHTML = visibles.map(p => {
+    const foto = p.fotos[0];
+    const estado = !p.precioUSD ? ['no','Sin precio'] : !p._sale ? ['','Oculto'] : p._entrega === 'pedido' ? ['ped','A pedido'] : ['ok','Inmediato'];
+    return `<div class="cat-prod${p._sale?'':' off'}${catSeleccion.has(p.id)?' sel':''}" onclick="abrirFichaCatalogo('${escJs(p.id)}')">
+      <input type="checkbox" class="sel-box" ${catSeleccion.has(p.id)?'checked':''} onclick="event.stopPropagation()" onchange="seleccionarCatalogo('${escJs(p.id)}',this.checked)">
+      <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : esc((String(p.nombre).match(/\d+/)||[String(p.nombre).slice(0,1)])[0].slice(0,2))}</div>
+      <div class="cuerpo">
+        <div class="nombre">${esc(p.nombre)}</div>
+        <div class="sub">${esc([p.gb, p.color, p.categoria].filter(Boolean).join(' · '))}</div>
+        <div class="pie"><span class="precio">${p.precioUSD?fmtUSD(p.precioUSD):'—'}</span><span class="estado ${estado[0]}">${estado[1]}</span></div>
+      </div>
+    </div>`;
+  }).join('') || `<div class="empty" style="grid-column:1/-1;">${items.length ? 'Nada coincide con el filtro.' : 'No hay productos para publicar.'}</div>`;
+}
+
+// ── La ficha de un producto ──────────────────────────────────
+let catFichaId = null;
+
+window.abrirFichaCatalogo = function(id){
+  catFichaId = id;
+  renderFichaCatalogo();
+  document.getElementById('cat-panel-fondo').classList.add('open');
+  document.getElementById('cat-panel').classList.add('open');
+};
+window.cerrarFichaCatalogo = function(){
+  catFichaId = null;
+  document.getElementById('cat-panel-fondo').classList.remove('open');
+  document.getElementById('cat-panel').classList.remove('open');
+};
+/** Pasar al producto anterior o siguiente de la grilla, sin cerrar la ficha. */
+window.fichaCatalogoVecina = function(delta){
+  const lista = catalogoFiltrados();
+  const i = lista.findIndex(p => p.id === catFichaId);
+  const j = i + delta;
+  if(j < 0 || j >= lista.length) return;
+  catFichaId = lista[j].id;
+  renderFichaCatalogo();
+};
+
+/** Lo que Juni escribió a mano de un producto: descripción, título SEO, etc. Vive en cfg.catalogoNotas[id] (texto) y cfg.catalogoMeta[id] (objeto). */
+window.metaCatalogo = function(id, campo, valor){
+  const meta = { ...(cfg.catalogoMeta || {}) };
+  const m = { ...(meta[id] || {}) };
+  valor = String(valor || '').trim();
+  if(valor) m[campo] = valor; else delete m[campo];
+  if(Object.keys(m).length) meta[id] = m; else delete meta[id];
+  cfg.catalogoMeta = meta;
+  setDoc(cfgDoc, withUser({ catalogoMeta: meta }), {merge:true}).catch(()=>{});
+  if(campo === 'titulo' || campo === 'seoDescripcion') renderFichaCatalogo();   // para la vista previa
+};
+
+function renderFichaCatalogo(){
+  const lista = catalogoFiltrados();
+  const p = catalogoCandidatos().find(x => x.id === catFichaId);
+  if(!p){ cerrarFichaCatalogo(); return; }
+  const i = lista.findIndex(x => x.id === p.id);
+  document.getElementById('cat-panel-anterior').disabled = i <= 0;
+  document.getElementById('cat-panel-siguiente').disabled = i < 0 || i >= lista.length - 1;
+  document.getElementById('cat-panel-titulo').textContent = p.nombre;
+
+  const meta = (cfg.catalogoMeta || {})[p.id] || {};
+  const clave = claveFotoDe(p);
+  const archivos = FOTOS[clave] || [];
+  const tituloSeo = meta.titulo || [p.nombre, p.gb, p.color].filter(Boolean).join(' ');
+  const descSeo = meta.seoDescripcion || p.descripcion || `${p.nombre}${p.gb?' '+p.gb:''}${p.color?' '+p.color:''} a ${fmtUSD(p.precioUSD)} en MarplaCity, Mar del Plata.`;
+  const urlProd = LINK_CATALOGO + '#p=' + encodeURIComponent(p.id);
+  const campo = 'width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13.5px;color:var(--text);';
+
+  document.getElementById('cat-panel-cuerpo').innerHTML = `
+    <div class="cat-sec">
+      <div class="cat-sec-t">Estado</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <label class="cat-pill ${p._sale?'on':''}" style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" ${p._sale?'checked':''} ${p.precioUSD?'':'disabled'} onchange="toggleCatalogo('${escJs(p.id)}',this.checked);renderFichaCatalogo()" style="accent-color:var(--accent-fg);"> ${p._sale?'Publicado':'Oculto'}
+        </label>
+        <select onchange="ajusteCatalogo('${escJs(p.id)}','entrega',this.value);renderFichaCatalogo()" style="${campo}width:auto;">
+          <option value="inmediato" ${p._entrega==='inmediato'?'selected':''}>Entrega inmediata</option>
+          <option value="pedido" ${p._entrega==='pedido'?'selected':''}>A pedido</option>
+        </select>
+      </div>
+      ${p.precioUSD ? '' : '<div class="proveedor-alerta alerta-atencion" style="margin-top:8px;">Sin precio de venta: no se publica. El precio se carga en Stock o Inventario.</div>'}
+    </div>
+
+    <div class="cat-sec">
+      <div class="cat-sec-t">Título y descripción</div>
+      <div class="field"><label>Título en la tienda</label>
+        <input type="text" value="${esc(meta.titulo||'')}" placeholder="${esc(tituloSeo)}" onchange="metaCatalogo('${escJs(p.id)}','titulo',this.value)"></div>
+      <div class="field"><label>Descripción</label>
+        <textarea rows="4" placeholder="Lo que quieras contar: estado, qué incluye, garantía…" onchange="notaCatalogo('${escJs(p.id)}',this.value)">${esc(p.descripcion)}</textarea></div>
+    </div>
+
+    <div class="cat-sec">
+      <div class="cat-sec-t">Imágenes <span style="font-weight:400;text-transform:none;letter-spacing:0;">· ${archivos.length ? archivos.length + ' foto' + (archivos.length===1?'':'s') : 'sin foto'}</span></div>
+      ${archivos.length ? `<div class="cat-imgs">${archivos.map((a, k) => { const c = FOTOS_CLAS[a] || {}; return `
+        <div class="cat-img${k===0?' principal':''}">
+          <img src="${esc(FOTOS_BASE + a)}" loading="lazy" alt="">
+          ${k===0 ? '<span class="tag">Principal</span>' : ''}
+          <select onchange="vistaFoto('${escJs(a)}',this.value)" title="Qué muestra (la de frente y dorso va primera)">
+            <option value="">vista ?</option>
+            ${Object.entries(VISTAS).map(([v,t]) => `<option value="${v}" ${v===c.vista?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>`; }).join('')}</div>
+        <div style="font-size:11.5px;color:var(--text3);margin-top:8px;">La principal es la de "frente y dorso"; después la de frente. Para sacar una foto o moverla a otro producto, pestaña Fotos.</div>`
+      : `<div class="proveedor-alerta alerta-atencion">Sin foto. Buscala en Amazon desde la pestaña Fotos, o subí un archivo llamado <code>${esc(clave)}.jpg</code> a <code>fotos/</code>.</div>`}
+    </div>
+
+    <div class="cat-sec">
+      <div class="cat-sec-t">Organización</div>
+      <div class="field"><label>Categoría</label>
+        <select onchange="ajusteCatalogo('${escJs(p.id)}','categoria',this.value);renderFichaCatalogo()">
+          ${ordenCategorias().map(c => `<option value="${esc(c)}" ${c===p.categoria?'selected':''}>${esc(c)}${c===p._catAuto?' (automática)':''}</option>`).join('')}
+        </select></div>
+    </div>
+
+    <div class="cat-sec">
+      <div class="cat-sec-t">Datos del producto</div>
+      <dl class="cat-kv">
+        <dt>Precio</dt><dd style="font-family:'DM Mono',monospace;font-weight:600;">${p.precioUSD ? fmtUSD(p.precioUSD) : '—'}</dd>
+        ${p.gb ? `<dt>Capacidad</dt><dd>${esc(p.gb)}</dd>` : ''}
+        ${p.color ? `<dt>Color</dt><dd>${esc(p.color)}</dd>` : ''}
+        ${p.bateria!=null ? `<dt>Batería</dt><dd>${p.bateria}%</dd>` : ''}
+        ${p.estado ? `<dt>Estado</dt><dd>${esc(p.estado)}</dd>` : ''}
+        <dt>Condición</dt><dd>${p.condicion==='usado'?'Usado':'Nuevo'}</dd>
+        <dt>Origen</dt><dd>${esc(p._origen)}</dd>
+        <dt>Id</dt><dd style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text3);">${esc(p.id)}</dd>
+      </dl>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Precio, capacidad, color y batería se editan donde está cargado el producto (Stock, Inventario o la lista de precios).</div>
+    </div>
+
+    <div class="cat-sec">
+      <div class="cat-sec-t">SEO y metadatos</div>
+      <div class="field"><label>Descripción para buscadores (meta description)</label>
+        <textarea rows="2" maxlength="160" placeholder="${esc(descSeo)}" onchange="metaCatalogo('${escJs(p.id)}','seoDescripcion',this.value)">${esc(meta.seoDescripcion||'')}</textarea></div>
+      <div class="field"><label>Palabras clave <span style="color:var(--text3);font-weight:400;">(separadas por coma)</span></label>
+        <input type="text" value="${esc(meta.keywords||'')}" placeholder="iphone 13, usado, mar del plata" onchange="metaCatalogo('${escJs(p.id)}','keywords',this.value)"></div>
+      <div class="cat-seo-prev">
+        <div class="t">${esc(tituloSeo)} — MarplaCity</div>
+        <div class="u">${esc(urlProd)}</div>
+        <div class="d">${esc(descSeo.slice(0,160))}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;" onclick="navigator.clipboard.writeText('${escJs(urlProd)}').then(()=>showToast('Link copiado ✓'))">📋 Copiar link del producto</button>
+        <a class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;text-decoration:none;text-align:center;" href="${esc(urlProd)}" target="_blank" rel="noopener">↗ Ver en la tienda</a>
+      </div>
+    </div>`;
 }
 
 /**
@@ -13369,9 +13567,12 @@ function renderFotosCatalogo(){
         </div>`; }).join('')}
     </div>`;
 
+  const faltan = [...new Set(catalogoCandidatos().filter(p => p._sale && !p.fotos.length).map(claveFotoDe))];
+  const btnAmz = document.getElementById('btn-cat-amazon');
+  if(btnAmz && !btnAmz.disabled) btnAmz.textContent = faltan.length ? `🛒 Buscar en Amazon (${faltan.length} sin foto)` : '🛒 Buscar en Amazon';
   document.getElementById('cat-fotos').innerHTML = (!claves.length && !sueltas.length)
     ? '<div class="proveedor-alerta alerta-atencion">La base de fotos está vacía. Subí archivos a <code>fotos/</code> y tocá Clasificar.</div>'
-    : `<div class="proveedor-alerta" style="margin-bottom:10px;"><b>${total}</b> imagen${total===1?'':'es'} de <b>${claves.length}</b> modelo${claves.length===1?'':'s'}. Tocá una para ver sus fotos y moverlas.</div>
+    : `<div class="proveedor-alerta" style="margin-bottom:10px;"><b>${total}</b> imagen${total===1?'':'es'} de <b>${claves.length}</b> modelo${claves.length===1?'':'s'}${faltan.length ? ` · <b>${faltan.length}</b> producto${faltan.length===1?'':'s'} sin foto` : ''}. Tocá una para ver sus fotos y moverlas.</div>
        <div style="display:grid;grid-template-columns:repeat(auto-fill,82px);gap:10px;">${claves.map(k=>`
          <div style="width:82px;text-align:center;cursor:pointer;" onclick="abrirFotoCat('${escJs(k)}')">
            <img src="${esc(FOTOS_BASE + FOTOS[k][0])}" loading="lazy"
@@ -13684,7 +13885,7 @@ window.publicarCatalogo = async function(){
     }), {merge:false});
     showToast(`Catálogo publicado ✓ — ${salen.length} producto${salen.length===1?'':'s'}`);
   }catch(e){ showToast('Error al publicar: '+e.message, true); setSyncDot('error'); }
-  btn.disabled = false; btn.textContent = '🌐 Publicar el catálogo';
+  btn.disabled = false; btn.textContent = '🌐 Publicar';
 };
 
 // ══ Asistente ════════════════════════════════════════════════

@@ -322,7 +322,7 @@ function tarjeta(p){
 
   return `<article class="prod" onclick="abrirFicha('${esc(p.id)}')">
     <div class="prod-foto${fotos.length ? ' con-foto' : ''}">${galeria}</div>
-    <div class="prod-nombre">${esc(p.nombre)}</div>
+    <div class="prod-nombre">${esc(p.titulo || p.nombre)}</div>
     <div class="chips">${p.tipo === 'pedido' ? '<span class="chip pedido">A pedido</span>' : ''}${specs}</div>
     <div class="precio">${usd(p.precioUSD)}</div>
     ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Consultar</a>` : ''}
@@ -366,7 +366,7 @@ window.abrirFicha = id => {
           `<img src="${esc(f)}" class="${k === 0 ? 'on' : ''}" alt="" onclick="verGrande(this,'${esc(f)}')" onerror="this.remove()">`).join('')}</div>` : ''}
       </div>
       <div class="ficha-datos">
-        <div class="ficha-nombre">${esc(p.nombre)}</div>
+        <div class="ficha-nombre">${esc(p.titulo || p.nombre)}</div>
         ${grupo ? selectoresVariante(p, grupo) : ''}
         <div class="chips">${specs}</div>
         ${p.descripcion ? `<div class="ficha-desc">${esc(p.descripcion)}</div>` : ''}
@@ -386,12 +386,28 @@ window.abrirFicha = id => {
   const d = document.getElementById('ficha');
   if (!d.open) d.showModal();
   if (location.hash !== '#p=' + id) history.replaceState(null, '', '#p=' + encodeURIComponent(id));
+  metaDeProducto(p);
 };
+
+// Los metadatos de la página siguen al producto abierto: sirven al compartir el link y a
+// los buscadores. Al cerrar vuelven los del catálogo.
+const META_BASE = { title: document.title, desc: document.querySelector('meta[name="description"]')?.content || '' };
+function metaDeProducto(p){
+  const titulo = p ? `${p.titulo || p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} — ${usd(p.precioUSD)} · MarplaCity` : META_BASE.title;
+  const desc = p ? (p.seoDescripcion || p.descripcion || `${p.titulo || p.nombre} a ${usd(p.precioUSD)} en MarplaCity, Mar del Plata.`).slice(0, 160) : META_BASE.desc;
+  document.title = titulo;
+  for (const sel of ['meta[name="description"]', 'meta[property="og:description"]']) { const m = document.querySelector(sel); if (m) m.content = desc; }
+  const og = document.querySelector('meta[property="og:title"]'); if (og) og.content = titulo;
+  let kw = document.querySelector('meta[name="keywords"]');
+  if (p?.keywords) { if (!kw) { kw = document.createElement('meta'); kw.name = 'keywords'; document.head.appendChild(kw); } kw.content = p.keywords; }
+  else if (kw) kw.remove();
+}
 
 window.cerrarFicha = () => document.getElementById('ficha').close();
 // Al cerrar —por el botón, Escape o tocando afuera— el link vuelve a ser el del catálogo.
 document.getElementById('ficha').addEventListener('close', () => {
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  metaDeProducto(null);
 });
 
 window.verGrande = (mini, src) => {
@@ -734,7 +750,7 @@ function categorias(){
  */
 function pintar(){
   const q = document.getElementById('q').value.trim().toLowerCase();
-  const coincide = p => !q || `${p.nombre} ${p.gb} ${p.color} ${p.estado}`.toLowerCase().includes(q);
+  const coincide = p => !q || `${p.titulo || ''} ${p.nombre} ${p.gb} ${p.color} ${p.estado}`.toLowerCase().includes(q);
   const salida = document.getElementById('salida');
   const conteo = document.getElementById('conteo');
 
