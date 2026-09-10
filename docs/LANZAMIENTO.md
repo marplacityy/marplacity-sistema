@@ -58,17 +58,17 @@ Al trasladarlos, desactivar primero el cron de Cloudflare y después usar
 `SEGUIMIENTOS_ACTIVOS=true` con Instagram en modo local. Debe existir una única
 instancia encargada de estos seguimientos.
 
-## Publicación posterior
+## Publicación desde main
 
-Esta rama no publica automáticamente ni reemplaza la web actual. GitHub Pages
-no puede ejecutar el servidor Node.js. Para publicar esta versión se necesita un
-hosting compatible con Node o contenedores y configurar sus variables, dominio,
-HTTPS y webhooks. El `Dockerfile` prepara una imagen que ejecuta el servidor con
-un usuario sin privilegios; no incluye `.env`, certificados ni material de prueba.
+GitHub Pages se configura con **GitHub Actions**. El workflow
+`.github/workflows/verificar.yml` verifica el proyecto y publica el resultado de
+`npm run build:pages` desde `dist-pages/`. Cada publicación requiere incrementar
+el sello `vAAAA.MM.DD-<letra>` de `index.html` y comprobar que la web lo muestra.
 
-No mezclar esta rama con `main` conservando el despliegue directo de GitHub Pages:
-primero hay que definir el nuevo destino. La versión publicada actual permanece
-en la revisión anterior y los Workers conservan entradas compatibles.
+La web pública mantiene Firebase y los Workers existentes. El servidor Node
+sigue ejecutándose en esta PC. Subir el código no despliega reglas de Firebase,
+secretos, certificados fiscales ni Workers: consultar el informe de seguridad.
 
-El contenedor está preparado como opción de despliegue; la validación realizada
-en esta PC corresponde a Node ejecutado directamente, no a Docker.
+Para alojar también el servidor Node fuera de esta PC, sigue siendo necesario
+un hosting compatible, variables de entorno, HTTPS y webhooks públicos. El
+`Dockerfile` prepara una imagen sin privilegios; Docker no fue validado en esta PC.

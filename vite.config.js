@@ -6,6 +6,7 @@ import { huellaFuentes } from './scripts/huella.mjs';
 const raiz = import.meta.dirname;
 export default defineConfig(({ mode }) => ({
   root: raiz,
+  base: mode === 'pages' ? '/marplacity-sistema/' : '/',
   publicDir: 'public',
   resolve: {
     alias: mode === 'prueba' ? [{ find: /^firebase\/(app|auth|firestore)$/, replacement: resolve(raiz, 'tests/fixtures/firebase.js') }] : [],
@@ -27,13 +28,14 @@ export default defineConfig(({ mode }) => ({
     async closeBundle() {
       // Las fotos conservan su carpeta original, compartida con la integración de GitHub.
       if (mode !== 'prueba') {
-        await cp(resolve(raiz, 'fotos'), resolve(raiz, 'dist/fotos'), { recursive: true });
-        await writeFile(resolve(raiz, 'dist/compilacion.json'), JSON.stringify({ huella: await huellaFuentes(raiz), fecha: new Date().toISOString() }));
+        const salida = mode === 'pages' ? 'dist-pages' : 'dist';
+        await cp(resolve(raiz, 'fotos'), resolve(raiz, salida, 'fotos'), { recursive: true });
+        await writeFile(resolve(raiz, salida, 'compilacion.json'), JSON.stringify({ huella: await huellaFuentes(raiz), fecha: new Date().toISOString() }));
       }
     },
   }],
   build: {
-    outDir: 'dist',
+    outDir: mode === 'pages' ? 'dist-pages' : 'dist',
     sourcemap: false,
     rollupOptions: {
       input: Object.fromEntries(['index', 'catalogo', 'ver', 'privacidad', 'condiciones', 'eliminacion-datos'].map(nombre => [nombre, resolve(raiz, nombre + '.html')])),

@@ -50,9 +50,16 @@ conservar sus credenciales y webhooks. Sus implementaciones también pueden
 correr dentro de Node configurando el modo `local`. Firebase y las cuentas
 actuales se mantienen. No se migraron ni modificaron datos del negocio.
 
-**Esta migración se prepara en una rama local.** No se debe mezclar con `main`
-hasta cambiar el destino de publicación: GitHub Pages no ejecuta Node.js y
-actualmente todo push a `main` publica la raíz directamente.
+## Publicación en GitHub Pages
+
+Cada push a `main` ejecuta las pruebas y publica **solo la interfaz compilada**
+con GitHub Actions. `npm run build:pages` genera `dist-pages/` con el prefijo
+`/marplacity-sistema/` y conexiones a los Workers existentes. Pages no ejecuta
+el servidor Node: la PC conserva `npm run abrir` y sus APIs locales.
+
+El repositorio conserva las fuentes; no se publican `server/`, pruebas ni
+archivos de configuración privados como parte del sitio. La publicación exige
+que Settings → Pages use **GitHub Actions**, no publicación directa de la raíz.
 
 `firestore.rules` y `firestore.indexes.json` siguen siendo las fuentes
 versionadas de permisos e índices. Sus despliegues son independientes del

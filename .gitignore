@@ -19,6 +19,7 @@
 # Dependencias, compilación y ejecución local de Node.js.
 node_modules/
 dist/
+dist-pages/
 .runtime/
 playwright-report/
 test-results/
