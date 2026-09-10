@@ -24,17 +24,20 @@ import { populateProveedoresDL, populateConsigFilters, renderConsig, renderProve
 import { renderReporte } from '../modulos/reportes.js';
 import { renderAmort } from '../modulos/amortizaciones.js';
 
-export function escJs(s) {
-  return String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
-export function esc(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+import { esc, escJs } from '../../shared/seguridad.js';
+export { esc, escJs };
 export function showToast(msg, err = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'toast show' + (err ? ' err' : '');
   setTimeout(() => t.className = 'toast', 2500);
+}
+
+/** Ayuda de interfaz; los permisos reales siguen aplicándose en Firebase y Workers. */
+export function requiereDuenoDelLocal() {
+  if (contextoApp.puedeAdministrarLocal) return true;
+  showToast('Esta cuenta administra sus propios datos. El catálogo y el bot publicados pertenecen a otra cuenta.', true);
+  return false;
 }
 
 // ── Pérdida extraordinaria (carga rápida) ──

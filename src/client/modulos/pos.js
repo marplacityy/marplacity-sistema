@@ -157,7 +157,7 @@ export function renderPosGrid() {
   if (!fBus && !contextoApp.posNav) {
     bc.innerHTML = '<span>⌂ Categorías</span>';
     const grupos = posGrupos(todos);
-    document.getElementById('pos-grid').innerHTML = grupos.length ? grupos.map(g => `<div class="pos-cat-tile" onclick="posGoCat('${g.tipo}',${g.cat ? `'${esc(g.cat).replace(/'/g, "\\'")}'` : 'null'})">
+    document.getElementById('pos-grid').innerHTML = grupos.length ? grupos.map(g => `<div class="pos-cat-tile" onclick="posGoCat('${g.tipo}',${g.cat ? `'${escJs(g.cat)}'` : 'null'})">
           <div class="pos-cat-icon">${g.icon}</div>
           <div class="pos-cat-nombre">${esc(g.nombre)}</div>
           <div class="pos-cat-count">${g.n} ${g.n === 1 ? 'item' : 'items'}</div>
@@ -325,7 +325,7 @@ export function renderCart() {
         <div class="cart-qty">
           <button onclick="cartQty(${i},-1)">−</button><span>${ci.qty}</span><button onclick="cartQty(${i},1)">+</button>
         </div>` : ''}
-      <input type="number" class="cart-precio" value="${ci.precio}" step="0.01" min="0" onchange="cartPrecio(${i},this.value)" title="Precio en ${ci.moneda}">
+      <input type="number" class="cart-precio" value="${esc(ci.precio)}" step="0.01" min="0" onchange="cartPrecio(${i},this.value)" title="Precio en ${ci.moneda}">
       <span style="font-size:10px;color:var(--text3);">${ci.moneda}</span>
       <button class="cart-del" onclick="cartDel(${i})">×</button>
     </div>

@@ -239,7 +239,7 @@ export function inicializarArca() {
 
     // Los selectores se llenan con las tablas vivas de ARCA, no con listas escritas acá.
     const sel = (id, filas, valor) => {
-      document.getElementById(id).innerHTML = filas.map(f => `<option value="${f.id}" ${String(f.id) === String(valor) ? 'selected' : ''}>${esc(f.desc)}</option>`).join('');
+      document.getElementById(id).innerHTML = filas.map(f => `<option value="${esc(f.id)}" ${String(f.id) === String(valor) ? 'selected' : ''}>${esc(f.desc)}</option>`).join('');
     };
     const cli = contextoApp.clientesItems.find(c => c.id === v.clienteId);
     sel('fea-cond', contextoApp.arcaTablas.condiciones, cli?.condicionIvaId ?? 5);
@@ -256,12 +256,12 @@ export function inicializarArca() {
       <td>${esc(r.descripcion)}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;">${r.cantidad}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;">
-        <input type="number" class="fea-precio" data-i="${i}" value="${r.precioUnitario ?? ''}" step="0.01" oninput="feaTotales()"
+        <input type="number" class="fea-precio" data-i="${i}" value="${esc(r.precioUnitario ?? '')}" step="0.01" oninput="feaTotales()"
                style="width:110px;text-align:right;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:12.5px;color:var(--text);">
       </td>
       <td>
         <select class="fea-alic" data-i="${i}" onchange="feaTotales()" style="width:100px;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:12.5px;color:var(--text);">
-          ${contextoApp.arcaTablas.iva.map(a => `<option value="${parseFloat(a.desc)}" ${parseFloat(a.desc) === 21 ? 'selected' : ''}>${esc(a.desc)}</option>`).join('')}
+          ${contextoApp.arcaTablas.iva.map(a => `<option value="${esc(parseFloat(a.desc))}" ${parseFloat(a.desc) === 21 ? 'selected' : ''}>${esc(a.desc)}</option>`).join('')}
         </select>
       </td>
     </tr>`).join('');

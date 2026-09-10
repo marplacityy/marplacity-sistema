@@ -57,3 +57,5 @@ actualmente todo push a `main` publica la raíz directamente.
 `firestore.rules` y `firestore.indexes.json` siguen siendo las fuentes
 versionadas de permisos e índices. Sus despliegues son independientes del
 servidor y no forman parte de `npm run build` ni de `npm start`.
+
+Revisión y pendientes de seguridad: [informe OWASP](docs/SEGURIDAD-OWASP.md).

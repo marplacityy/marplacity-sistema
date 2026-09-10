@@ -1,3 +1,4 @@
+import { esc, escJs } from '../shared/seguridad.js';
 import { cargarConfiguracion } from './core/config-publica.js';
 const configuracion = await cargarConfiguracion();
 // La página es pública y no tiene login: lee un solo documento que el sistema publica
@@ -17,7 +18,6 @@ let FILTRO = 'todo';   // qué tipo se ve: todo, equipo, accesorio, pedido
 
 const TIPOS = { equipo: 'Equipos', accesorio: 'Accesorios', pedido: 'A pedido' };
 
-const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd = n => 'u$s ' + Math.round(n).toLocaleString('es-AR');
 
 // Los valores de Firestore vienen envueltos por tipo ({stringValue:"x"}).
@@ -42,7 +42,7 @@ function tarjeta(p){
   const specs = [
     p.gb && `<span class="chip">${esc(p.gb)}</span>`,
     p.color && `<span class="chip">${esc(p.color)}</span>`,
-    p.bateria != null && `<span class="chip bat">Batería ${p.bateria}%</span>`,
+    p.bateria != null && `<span class="chip bat">Batería ${esc(p.bateria)}%</span>`,
     p.estado && `<span class="chip">${esc(p.estado)}</span>`,
   ].filter(Boolean).join('');
 
@@ -59,7 +59,7 @@ function tarjeta(p){
         `<button class="punto${k === 0 ? ' on' : ''}" aria-label="Foto ${k+1}" onclick="event.stopPropagation();verFoto(this,${k})"></button>`).join('')}</div>` : ''}
   ` : esc(inicial(p.nombre));
 
-  return `<article class="prod" onclick="abrirFicha('${esc(p.id)}')">
+  return `<article class="prod" onclick="abrirFicha('${escJs(p.id)}')">
     <div class="prod-foto${fotos.length ? ' con-foto' : ''}">${galeria}</div>
     <div class="prod-nombre">${esc(p.titulo || p.nombre)}</div>
     <div class="chips">${p.tipo === 'pedido' ? '<span class="chip pedido">A pedido</span>' : ''}${specs}</div>
@@ -73,7 +73,7 @@ function linkWhatsApp(p){
   if (!LOCAL.whatsapp) return null;
   const texto = encodeURIComponent(`Hola! Me interesa el ${p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} que vi en el catálogo` +
     (p.tipo === 'pedido' ? ' (a pedido)' : ''));
-  return `https://wa.me/${LOCAL.whatsapp}?text=${texto}`;
+  return `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${texto}`;
 }
 
 /**
@@ -90,7 +90,7 @@ window.abrirFicha = id => {
     p.tipo === 'pedido' && '<span class="chip pedido">A pedido</span>',
     p.gb && !grupo && `<span class="chip">${esc(p.gb)}</span>`,
     p.color && !grupo && `<span class="chip">${esc(p.color)}</span>`,
-    p.bateria != null && `<span class="chip bat">Batería ${p.bateria}%</span>`,
+    p.bateria != null && `<span class="chip bat">Batería ${esc(p.bateria)}%</span>`,
     p.estado && `<span class="chip">${esc(p.estado)}</span>`,
   ].filter(Boolean).join('');
 
@@ -99,10 +99,10 @@ window.abrirFicha = id => {
     <div class="ficha-cuerpo">
       <div class="ficha-galeria">
         <div class="ficha-grande" id="ficha-grande">${fotos.length
-          ? `<img src="${esc(fotos[0])}" alt="${esc(p.nombre)}" onerror="this.parentNode.textContent='${esc(inicial(p.nombre))}'">`
+          ? `<img src="${esc(fotos[0])}" alt="${esc(p.nombre)}" onerror="this.parentNode.textContent='${escJs(inicial(p.nombre))}'">`
           : esc(inicial(p.nombre))}</div>
         ${fotos.length > 1 ? `<div class="ficha-mini">${fotos.map((f, k) =>
-          `<img src="${esc(f)}" class="${k === 0 ? 'on' : ''}" alt="" onclick="verGrande(this,'${esc(f)}')" onerror="this.remove()">`).join('')}</div>` : ''}
+          `<img src="${esc(f)}" class="${k === 0 ? 'on' : ''}" alt="" onclick="verGrande(this,'${escJs(f)}')" onerror="this.remove()">`).join('')}</div>` : ''}
       </div>
       <div class="ficha-datos">
         <div class="ficha-nombre">${esc(p.titulo || p.nombre)}</div>
@@ -115,9 +115,9 @@ window.abrirFicha = id => {
         <div class="ficha-precio">${usd(p.precioUSD)}</div>
         <div class="ficha-nota">Precio en dólar billete, válido pagando en efectivo. Por otros medios de pago, consultá.</div>
         <div class="ficha-acciones">
-          <button class="consultar" onclick="abrirPedido('${esc(p.id)}')">Comprar</button>
+          <button class="consultar" onclick="abrirPedido('${escJs(p.id)}')">Comprar</button>
           ${wa ? `<a class="btn-sec" href="${wa}" target="_blank" rel="noopener">Preguntar por WhatsApp</a>` : ''}
-          <button class="btn-sec" onclick="compartirFicha('${esc(p.id)}')">Compartir</button>
+          <button class="btn-sec" onclick="compartirFicha('${escJs(p.id)}')">Compartir</button>
         </div>
       </div>
     </div>`;
@@ -210,12 +210,12 @@ window.abrirPedido = id => {
   PEDIDO_ID = id;
   const foto = (Array.isArray(p.fotos) ? p.fotos : [])[0];
   const formas = formasDePago(p);
-  const specs = [p.gb, p.color, p.estado, p.bateria != null && `Batería ${p.bateria}%`].filter(Boolean).join(' · ');
+  const specs = [p.gb, p.color, p.estado, p.bateria != null && `Batería ${esc(p.bateria)}%`].filter(Boolean).join(' · ');
 
   document.getElementById('ficha-contenido').innerHTML = `
     <button class="ficha-cerrar" onclick="cerrarFicha()" aria-label="Cerrar">×</button>
     <form class="pedido-form" id="form-pedido" onsubmit="mandarPedido(event,'${esc(p.id)}')">
-      <button type="button" class="volver" onclick="abrirFicha('${esc(p.id)}')">← Volver al producto</button>
+      <button type="button" class="volver" onclick="abrirFicha('${escJs(p.id)}')">← Volver al producto</button>
       <div class="pedido-titulo">Tu pedido</div>
       <div class="pedido-prod">
         ${foto ? `<img src="${esc(foto)}" alt="">` : ''}
@@ -225,7 +225,7 @@ window.abrirPedido = id => {
 
       <div class="pedido-sec">¿Cómo querés pagar?</div>
       ${formas.map((f, k) => `<label class="opcion">
-        <input type="radio" name="pago" value="${f.id}" ${k === 0 ? 'checked' : ''} onchange="pintarTotal()">
+        <input type="radio" name="pago" value="${esc(f.id)}" ${k === 0 ? 'checked' : ''} onchange="pintarTotal()">
         <div><div class="t">${f.titulo}</div><div class="d">${f.detalle}</div></div>
       </label>`).join('')}
 
@@ -243,7 +243,7 @@ window.abrirPedido = id => {
 
       <div class="pedido-total"><span class="s" id="total-titulo">Total</span><span class="m" id="total-monto"></span></div>
       <button class="consultar" type="submit" id="btn-pedido"></button>
-      <button class="btn-sec" type="button" onclick="pedidoPorWhatsApp('${esc(p.id)}')">Seguir por WhatsApp</button>
+      <button class="btn-sec" type="button" onclick="pedidoPorWhatsApp('${escJs(p.id)}')">Seguir por WhatsApp</button>
       <div class="ficha-nota">Al confirmar te escribimos por WhatsApp para coordinar.</div>
     </form>`;
 
@@ -288,7 +288,7 @@ function textoPedido(p, f){
 window.pedidoPorWhatsApp = id => {
   const p = PRODUCTOS.find(x => x.id === id);
   if (!LOCAL.whatsapp) { alert('El local todavía no cargó su WhatsApp. Escribinos por Instagram.'); return; }
-  window.open(`https://wa.me/${LOCAL.whatsapp}?text=${encodeURIComponent(textoPedido(p, document.getElementById('form-pedido')))}`, '_blank', 'noopener');
+  window.open(`https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(textoPedido(p, document.getElementById('form-pedido')))}`, '_blank', 'noopener');
 };
 
 /**
@@ -334,7 +334,7 @@ function pantallaPedido(d){
   };
   const [titulo, detalle] = MENSAJES[d.estado] || ['Pedido recibido', ''];
   const wa = LOCAL.whatsapp
-    ? `https://wa.me/${LOCAL.whatsapp}?text=${encodeURIComponent(`Hola! Hice el pedido ${d.id.slice(0, 8)} (${d.producto}) desde el catálogo`)}`
+    ? `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(`Hola! Hice el pedido ${d.id.slice(0, 8)} (${d.producto}) desde el catálogo`)}`
     : null;
   document.getElementById('ficha-contenido').innerHTML = `
     <button class="ficha-cerrar" onclick="cerrarFicha()" aria-label="Cerrar">×</button>
@@ -436,7 +436,7 @@ function tarjetaGrupo(lista){
   const colores = [...new Set(lista.map(x => x.color).filter(Boolean))];
   const desde = Math.min(...lista.map(x => Number(x.precioUSD) || Infinity));
   const foto = (p.fotos || [])[0];
-  return `<article class="prod" onclick="abrirFicha('${esc(p.id)}')">
+  return `<article class="prod" onclick="abrirFicha('${escJs(p.id)}')">
     <div class="prod-foto${foto ? ' con-foto' : ''}">${foto ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" onerror="this.remove()">` : esc(inicial(p.nombre))}</div>
     <div class="prod-nombre">${esc(p.nombre)}</div>
     <div class="chips">${p.tipo === 'pedido' ? '<span class="chip pedido">A pedido</span>' : ''}${gbs.length ? `<span class="chip">${esc(gbs.join(' · '))}</span>` : ''}${colores.length > 1 ? `<span class="chip">${colores.length} colores</span>` : ''}</div>
@@ -471,9 +471,9 @@ function selectoresVariante(p, grupo){
   const conColor = c => grupo.find(x => x.gb === p.gb && x.color === c) || grupo.find(x => x.color === c);
   return `<div class="variantes">
     ${gbs.length > 1 ? `<div><div class="t">Capacidad</div><div class="opciones">${gbs.map(gb =>
-      `<button class="opc${gb === p.gb ? ' on' : ''}" onclick="abrirFicha('${esc(conGb(gb).id)}')">${esc(gb)}</button>`).join('')}</div></div>` : ''}
+      `<button class="opc${gb === p.gb ? ' on' : ''}" onclick="abrirFicha('${escJs(conGb(gb).id)}')">${esc(gb)}</button>`).join('')}</div></div>` : ''}
     ${colores.length > 1 ? `<div><div class="t">Color</div><div class="opciones">${colores.map(c =>
-      `<button class="opc${c === p.color ? ' on' : ''}" onclick="abrirFicha('${esc(conColor(c).id)}')">${esc(c)}</button>`).join('')}</div></div>` : ''}
+      `<button class="opc${c === p.color ? ' on' : ''}" onclick="abrirFicha('${escJs(conColor(c).id)}')">${esc(c)}</button>`).join('')}</div></div>` : ''}
   </div>`;
 }
 const catDe = p => p.categoria || 'Otros';
@@ -518,7 +518,7 @@ function pintar(){
     return `<section class="seccion">
       <div class="seccion-cab">
         <div class="seccion-titulo">${esc(c)}</div>
-        <a class="vertodos" href="#c=${slug(c)}" onclick="event.preventDefault();filtrar('${esc(c)}')">Ver todos (${cuenta(lista)}) ›</a>
+        <a class="vertodos" href="#c=${slug(c)}" onclick="event.preventDefault();filtrar('${escJs(c)}')">Ver todos (${cuenta(lista)}) ›</a>
       </div>
       <div class="fila">${entradas(lista)}</div>
     </section>`;
@@ -553,7 +553,7 @@ function hace(iso){
     document.getElementById('pie').innerHTML = [
       LOCAL.direccion ? `📍 ${esc(LOCAL.direccion)}` : '',
       LOCAL.horarios ? `🕗 ${esc(LOCAL.horarios)}` : '',
-      LOCAL.whatsapp ? `<a href="https://wa.me/${LOCAL.whatsapp}" target="_blank" rel="noopener">Escribinos por WhatsApp</a>` : '',
+      LOCAL.whatsapp ? `<a href="https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}" target="_blank" rel="noopener">Escribinos por WhatsApp</a>` : '',
       'Precios en dólar billete. Sujetos a disponibilidad.',
     ].filter(Boolean).join('<br>');
 

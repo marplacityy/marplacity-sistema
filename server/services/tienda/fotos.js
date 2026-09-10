@@ -19,6 +19,16 @@
  */
 
 const SERP = 'https://serpapi.com/search.json';
+const MAX_IMAGEN = 8 * 1024 * 1024;
+
+/** SerpApi es externo: sus resultados no autorizan a consultar la red interna. */
+export function urlImagenPermitida(valor) {
+  try {
+    const url = new URL(valor);
+    return url.protocol === 'https:' && !url.username && !url.password && !url.port
+      && ['m.media-amazon.com', 'images-na.ssl-images-amazon.com', 'images-eu.ssl-images-amazon.com', 'images-fe.ssl-images-amazon.com'].includes(url.hostname);
+  } catch { return false; }
+}
 
 /** Igual que slugFoto() del sistema: "iPhone 13" + "Red" → iphone-13-red. Exportado para el test. */
 export const slugFoto = nombre => String(nombre || '')
@@ -79,7 +89,7 @@ export function elegirImagenes(resultados, { nombre, color, esAccesorio = false,
     // Un reloj se vende con "case" y "band" en el título: ahí ese filtro no aplica.
     if (!esAccesorio && !/watch/i.test(nombre) && ACCESORIO.test(t)) continue;
     const img = String(r.thumbnail || r.image || '');
-    if (!/^https?:\/\//.test(img) || vistas.has(img)) continue;
+    if (!urlImagenPermitida(img) || vistas.has(img)) continue;
     vistas.add(img);
     // Amazon sirve miniaturas con sufijo de tamaño (._AC_UY218_.); sin el sufijo viene la grande.
     out.push(img.replace(/\._[^.]*_\./, '.'));
@@ -99,12 +109,29 @@ export async function buscarEnAmazon(env, q) {
 
 /** Baja una imagen. Devuelve {bytes, ext} o null si no es una imagen. */
 export async function bajarImagen(url) {
-  const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!urlImagenPermitida(url)) return null;
+  const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
   if (!r.ok) return null;
   const tipo = r.headers.get('content-type') || '';
   const ext = tipo.includes('png') ? 'png' : tipo.includes('webp') ? 'webp' : tipo.includes('jpeg') || tipo.includes('jpg') ? 'jpg' : null;
   if (!ext) return null;
-  const bytes = new Uint8Array(await r.arrayBuffer());
+  if (Number(r.headers.get('content-length')) > MAX_IMAGEN) { await r.body?.cancel(); return null; }
+  if (!r.body) return null;
+  const lector = r.body.getReader();
+  const partes = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      total += value.length;
+      if (total > MAX_IMAGEN) { await lector.cancel(); return null; }
+      partes.push(value);
+    }
+  } finally { lector.releaseLock(); }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const parte of partes) { bytes.set(parte, offset); offset += parte.length; }
   if (bytes.length < 5000) return null;   // un placeholder, no una foto
   return { bytes, ext };
 }

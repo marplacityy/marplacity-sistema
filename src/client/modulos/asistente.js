@@ -74,7 +74,7 @@ function agPintarFichas() {
         <div class="field"><label>Categoría</label><select id="ag-f${i}-categoria">${(contextoApp.cats || []).map(x => `<option ${x === f.datos.categoria ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
       </div>
       <div class="grid2">
-        <div class="field"><label>Monto</label><input type="number" step="0.01" id="ag-f${i}-monto" value="${f.datos.monto ?? ''}"></div>
+        <div class="field"><label>Monto</label><input type="number" step="0.01" id="ag-f${i}-monto" value="${esc(f.datos.monto ?? '')}"></div>
         <div class="field"><label>Moneda</label><select id="ag-f${i}-moneda"><option value="ARS" ${f.datos.moneda !== 'USD' ? 'selected' : ''}>ARS $</option><option value="USD" ${f.datos.moneda === 'USD' ? 'selected' : ''}>USD u$s</option></select></div>
       </div>
       <div class="field"><label>Fecha</label><input type="date" id="ag-f${i}-fecha" value="${esc(f.datos.fecha || contextoApp.today())}"></div>

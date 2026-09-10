@@ -2,7 +2,7 @@ import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe } f
 import { configuracion } from '../core/config-publica.js';
 /** modulos/catalogo: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { esc, escJs, showToast } from '../core/interfaz.js';
+import { esc, escJs, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { updateDoc, doc, setDoc } from 'firebase/firestore';
 import { kbUltimaLista } from './conocimiento.js';
@@ -173,7 +173,9 @@ export function renderCatalogo() {
 
   // ¿Lo que se ve en la página coincide con lo que hay ahora?
   const el = document.getElementById('cat-estado');
-  if (!contextoApp.catPublicado) {
+  if (!contextoApp.puedeAdministrarLocal) {
+    el.innerHTML = '<div class="proveedor-alerta alerta-atencion">Esta cuenta administra sus propios productos. El catálogo publicado pertenece a otra cuenta.</div>';
+  } else if (!contextoApp.catPublicado) {
     el.innerHTML = '<div class="proveedor-alerta alerta-atencion">Todavía no publicaste nunca. La tienda no muestra nada hasta que lo hagas.</div>';
   } else {
     const ahora = JSON.stringify(salen.map(p => {
@@ -283,7 +285,7 @@ export function renderFichaCatalogo() {
           ${k === 0 ? '<span class="tag">Principal</span>' : ''}
           <select onchange="vistaFoto('${escJs(a)}',this.value)" title="Qué muestra (la de frente y dorso va primera)">
             <option value="">vista ?</option>
-            ${Object.entries(contextoApp.VISTAS).map(([v, t]) => `<option value="${v}" ${v === c.vista ? 'selected' : ''}>${t}</option>`).join('')}
+            ${Object.entries(contextoApp.VISTAS).map(([v, t]) => `<option value="${esc(v)}" ${v === c.vista ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
         </div>`;
   }).join('')}</div>
@@ -398,6 +400,7 @@ export async function archivosDeFotos() {
 
 /** Guarda el mapa y las decisiones. Solo se conservan decisiones de archivos que existen. */
 export async function guardarFotos(archivos) {
+  if (!requiereDuenoDelLocal()) return;
   const vivos = new Set(archivos);
   const clasificacion = Object.fromEntries(Object.entries(contextoApp.FOTOS_CLAS).filter(([a]) => vivos.has(a)));
   const mapa = armarMapaFotos(archivos, clasificacion);
@@ -811,7 +814,7 @@ export function inicializarCatalogo() {
   contextoApp.selectVista = (archivo, actual) => `<select onchange="vistaFoto('${escJs(archivo)}',this.value)"
       style="width:100%;font-size:11px;padding:4px 6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);">
     <option value="">vista: ?</option>
-    ${Object.entries(contextoApp.VISTAS).map(([k, v]) => `<option value="${k}" ${k === actual ? 'selected' : ''}>vista: ${v}</option>`).join('')}
+    ${Object.entries(contextoApp.VISTAS).map(([k, v]) => `<option value="${esc(k)}" ${k === actual ? 'selected' : ''}>vista: ${v}</option>`).join('')}
   </select>`;
   contextoApp.selectClave = (archivo, actual) => {
     const opciones = [...new Set([...clavesDeProductos(), ...Object.keys(contextoApp.FOTOS)])].sort();
@@ -828,6 +831,7 @@ export function inicializarCatalogo() {
 
   /** Corregir qué muestra una foto. Cambia el orden dentro del producto: "ambos" pasa a ser la principal. */
   window.vistaFoto = async function (archivo, vista) {
+    if (!requiereDuenoDelLocal()) return;
     const previa = contextoApp.FOTOS_CLAS[archivo] || {};
     // Si el archivo no tenía decisión, la clave sigue saliendo del nombre: se conserva la que tiene hoy.
     const clave = 'clave' in previa ? previa.clave : Object.keys(contextoApp.FOTOS).find(k => contextoApp.FOTOS[k].includes(archivo)) || null;
@@ -846,6 +850,7 @@ export function inicializarCatalogo() {
 
   /** Mover una foto a un producto (o sacarla). Lo que se decide a mano pisa a la IA y al nombre. */
   window.asignarFoto = async function (archivo, clave) {
+    if (!requiereDuenoDelLocal()) return;
     contextoApp.FOTOS_CLAS = {
       ...contextoApp.FOTOS_CLAS,
       [archivo]: {
@@ -858,6 +863,7 @@ export function inicializarCatalogo() {
     await guardarFotos(archivos);
   };
   window.buscarFotosAmazon = async function () {
+    if (!requiereDuenoDelLocal()) return;
     const btn = document.getElementById('btn-cat-amazon');
     if (!btn) return;
     const salen = catalogoCandidatos().filter(p => p._sale && !p.fotos.length);
@@ -916,6 +922,7 @@ export function inicializarCatalogo() {
     renderCatalogo();
   };
   window.clasificarFotos = async function () {
+    if (!requiereDuenoDelLocal()) return;
     const btn = document.getElementById('btn-cat-ia');
     btn.disabled = true;
     btn.textContent = 'Leyendo la carpeta…';
@@ -1044,6 +1051,7 @@ Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
    * no romper un modelo que de verdad termine en número.
    */
   window.sincronizarFotos = async function () {
+    if (!requiereDuenoDelLocal()) return;
     const btn = document.getElementById('btn-cat-fotos');
     btn.disabled = true;
     btn.textContent = 'Leyendo la carpeta…';
@@ -1073,6 +1081,7 @@ Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
     navigator.clipboard.writeText(contextoApp.LINK_CATALOGO).then(() => showToast('Link copiado ✓')).catch(() => showToast('No pude copiar — seleccionalo a mano', true));
   };
   window.publicarCatalogo = async function () {
+    if (!requiereDuenoDelLocal()) return;
     const salen = catalogoCandidatos().filter(p => p._sale).map(p => {
       const {
         _sale,

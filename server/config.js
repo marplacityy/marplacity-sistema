@@ -4,6 +4,7 @@ const esquema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
   HOST: z.string().default('127.0.0.1'),
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
+  API_LIMITE_POR_MINUTO: z.coerce.number().int().min(1).max(10000).default(120),
   LOG_LEVEL: z.enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug']).default('info'),
   PUBLIC_BASE_URL: z.url().default('https://marplacityy.github.io/marplacity-sistema/'),
   SERVICIO_TIENDA: z.enum(['remoto', 'local']).default('remoto'),

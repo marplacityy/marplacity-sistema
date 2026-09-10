@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
+import { rateLimit } from 'express-rate-limit';
 import { configPublica } from './config.js';
 import { adaptarServicio, crearTareas } from './http/servicios.js';
 import tienda from './services/tienda/worker.js';
@@ -35,23 +36,49 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
   }));
   app.use(helmet({
     // Los onclick existentes se conservan durante la migración modular.
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: desarrollo ? false : {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
+        imgSrc: ["'self'", 'https:', 'data:', 'blob:'],
+        connectSrc: ["'self'", 'https:'],
+        frameSrc: ["'self'", 'blob:', 'https://mis-gastos-21e7b.firebaseapp.com'],
+        workerSrc: ["'self'", 'blob:'],
+        objectSrc: ["'none'"], baseUri: ["'none'"],
+        frameAncestors: ["'none'"], formAction: ["'self'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
     strictTransportSecurity: false,
     crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   }));
   app.use((req, res, next) => {
-    if (config.HOST === '127.0.0.1' || config.HOST === 'localhost') {
+    if (['127.0.0.1', 'localhost', '::1'].includes(config.HOST)) {
       const host = req.hostname;
       if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) return res.sendStatus(403);
     }
     const origen = req.get('origin');
+    if (req.get('sec-fetch-site') === 'cross-site') return res.sendStatus(403);
     if (origen && origen !== `${req.protocol}://${req.get('host')}`) {
       return res.status(403).json({ error: 'Origen no permitido.' });
     }
     next();
   });
   app.use('/api', (_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
+  app.use('/api', rateLimit({
+    windowMs: 60_000, limit: config.API_LIMITE_POR_MINUTO,
+    standardHeaders: 'draft-8', legacyHeaders: false,
+    skip: req => ['/salud', '/config', '/apagar'].includes(req.path),
+    message: { error: 'Demasiadas solicitudes. Esperá un minuto y volvé a intentar.' },
+  }));
+  app.post('/api/tienda/pedido', rateLimit({
+    windowMs: 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false,
+    message: { error: 'Demasiados pedidos. Esperá un minuto y volvé a intentar.' },
+  }));
   app.get('/api/salud', (_req, res) => res.json({
     ok: true, aplicacion: 'MarplaCity', version, runtime: 'Node.js',
     servicios: Object.fromEntries(Object.keys(requeridos).map(nombre => [nombre, {

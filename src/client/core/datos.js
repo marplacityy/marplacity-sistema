@@ -385,22 +385,30 @@ export async function init() {
       if (contextoApp.currentPage === 'bandeja') deb('bd', renderBandeja);
       setSyncDot('ok');
     }, snapErr);
-    // El interruptor del bot. Sin doc = encendido, que es el estado inicial.
-    onSnapshot(contextoApp.botDoc, snap => {
-      const d = snap.exists() ? snap.data() : {};
-      contextoApp.botCfg = {
-        activo: d.activo !== false,
-        modo: d.modo === 'prueba' ? 'prueba' : 'todos',
-        cuentasPrueba: Array.isArray(d.cuentasPrueba) ? d.cuentasPrueba.map(String) : []
+    // Los documentos globales del bot pertenecen al dueño del local publicado.
+    // Una cuenta nueva nunca debe intentar leerlos ni mostrar el bot como activo.
+    let cancelarConfiguracionLocal = [];
+    const suscribirConfiguracionLocal = () => {
+      cancelarConfiguracionLocal.push(onSnapshot(contextoApp.botDoc, snap => {
+        const d = snap.exists() ? snap.data() : {};
+        contextoApp.botCfg = {
+          activo: d.activo !== false,
+          modo: d.modo === 'prueba' ? 'prueba' : 'todos',
+          cuentasPrueba: Array.isArray(d.cuentasPrueba) ? d.cuentasPrueba.map(String) : []
       };
-      if (contextoApp.currentPage === 'bandeja') deb('bd', renderBandeja);
-      setSyncDot('ok');
-    }, snapErr);
-    onSnapshot(contextoApp.mensajesDoc, snap => {
-      contextoApp.mensajesFijos = snap.exists() ? snap.data() : {};
-      if (contextoApp.currentPage === 'conocimiento') pintarConocimiento();
-      setSyncDot('ok');
-    }, snapErr);
+        if (contextoApp.currentPage === 'bandeja') deb('bd', renderBandeja);
+        setSyncDot('ok');
+      }, snapErr));
+      cancelarConfiguracionLocal.push(onSnapshot(contextoApp.mensajesDoc, snap => {
+        contextoApp.mensajesFijos = snap.exists() ? snap.data() : {};
+        if (contextoApp.currentPage === 'conocimiento') pintarConocimiento();
+        setSyncDot('ok');
+      }, snapErr));
+      cancelarConfiguracionLocal.push(onSnapshot(contextoApp.promptDoc, snap => {
+        contextoApp.promptBot = snap.exists() ? snap.data() : {};
+        if (contextoApp.currentPage === 'conocimiento') pintarPromptBot();
+      }, snapErr));
+    };
     onSnapshot(contextoApp.conocDoc, snap => {
       contextoApp.conoc = snap.exists() ? snap.data() : {};
       if (contextoApp.currentPage === 'conocimiento') pintarConocimiento();
@@ -416,7 +424,18 @@ export async function init() {
     }, snapErr);
     onSnapshot(contextoApp.catalogoDoc, snap => {
       contextoApp.catPublicado = snap.exists() ? snap.data() : null;
+      contextoApp.puedeAdministrarLocal = contextoApp.catPublicado?.userId === contextoApp.uid;
+      if (contextoApp.puedeAdministrarLocal && !cancelarConfiguracionLocal.length) suscribirConfiguracionLocal();
+      if (!contextoApp.puedeAdministrarLocal) {
+        cancelarConfiguracionLocal.forEach(cancelar => cancelar());
+        cancelarConfiguracionLocal = [];
+        contextoApp.botCfg = { activo: false, modo: 'todos', cuentasPrueba: [] };
+        contextoApp.mensajesFijos = {};
+        contextoApp.promptBot = {};
+      }
       if (contextoApp.currentPage === 'catalogo') renderCatalogo();
+      if (contextoApp.currentPage === 'bandeja') renderBandeja();
+      if (contextoApp.currentPage === 'conocimiento') pintarConocimiento();
     }, snapErr);
     onSnapshot(contextoApp.myQ(contextoApp.pedidosCol), snap => {
       contextoApp.pedidosItems = snap.docs.map(d => ({
@@ -427,10 +446,6 @@ export async function init() {
       pintarBadgePedidos();
       if (contextoApp.currentPage === 'pedidos') deb('pedidos', renderPedidos);
       setSyncDot('ok');
-    }, snapErr);
-    onSnapshot(contextoApp.promptDoc, snap => {
-      contextoApp.promptBot = snap.exists() ? snap.data() : {};
-      if (contextoApp.currentPage === 'conocimiento') pintarPromptBot();
     }, snapErr);
     onSnapshot(contextoApp.cfgDoc, snap => {
       if (snap.exists()) {
@@ -622,8 +637,9 @@ export function inicializarDatos() {
   contextoApp.convsItems = []; // conversaciones que necesitan atención (la bandeja del bot)
   contextoApp.pedidosItems = []; // pedidos del catálogo web, del más nuevo al más viejo
   contextoApp.pedidosFiltro = 'abiertos';
+  contextoApp.puedeAdministrarLocal = false;
   contextoApp.botCfg = {
-    activo: true,
+    activo: false,
     modo: 'todos',
     cuentasPrueba: []
   }; // config/bot: el interruptor

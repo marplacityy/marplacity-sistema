@@ -40,6 +40,24 @@ service cloud.firestore {
       return loggedIn() && request.resource.data.userId == request.auth.uid;
     }
 
+    // Los documentos compartidos del local no pertenecen a cualquier cuenta nueva.
+    // El dueño vigente del catálogo es la identidad que puede administrarlos.
+    // Si no hay catálogo, se inicializa con una credencial administrativa, nunca
+    // mediante el registro público de usuarios.
+    function esDuenoDelLocal() {
+      return loggedIn()
+        && exists(/databases/$(database)/documents/catalogo/publico)
+        && get(/databases/$(database)/documents/catalogo/publico).data.userId == request.auth.uid;
+    }
+
+    function datoDelLocal() {
+      return resource.data.userId == get(/databases/$(database)/documents/catalogo/publico).data.userId;
+    }
+
+    function escribeParaElLocal() {
+      return request.resource.data.userId == get(/databases/$(database)/documents/catalogo/publico).data.userId;
+    }
+
     // El usuario de servicio del bot de Instagram (bot@marplacity.com).
     // Definido una sola vez: si algún día se regenera el usuario, se cambia acá
     // y en ningún otro lado.
@@ -102,8 +120,9 @@ service cloud.firestore {
     // Nadie tiene delete: un comprobante con CAE no se borra, ni desde el sistema ni
     // desde el Worker.
     match /comprobantes/{docId} {
-      allow read:           if owns() || esFacturador();
-      allow create, update: if esFacturador();
+      allow read:   if owns() || (esFacturador() && datoDelLocal());
+      allow create: if esFacturador() && escribeParaElLocal();
+      allow update: if esFacturador() && datoDelLocal() && escribeParaElLocal();
     }
 
     // Config del usuario: un doc por uid, la clave del doc ES el uid.
@@ -119,7 +138,7 @@ service cloud.firestore {
     // que la clave del doc sea el uid del que pide.
     match /config/mensajes {
       allow read:   if esBot() || noExiste(/databases/$(database)/documents/config/mensajes) || owns();
-      allow create: if writesAsSelf();
+      allow create: if esDuenoDelLocal() && writesAsSelf();
       allow update: if owns() && writesAsSelf();
     }
 
@@ -129,7 +148,7 @@ service cloud.firestore {
     // El dueño lo escribe; el bot solo lo lee, en cada mensaje.
     match /config/prompt {
       allow read:   if esBot() || noExiste(/databases/$(database)/documents/config/prompt) || owns();
-      allow create: if writesAsSelf();
+      allow create: if esDuenoDelLocal() && writesAsSelf();
       allow update: if owns() && writesAsSelf();
     }
 
@@ -140,7 +159,7 @@ service cloud.firestore {
     // El dueño lo escribe; el bot solo lo lee, en cada mensaje y en cada corrida del cron.
     match /config/bot {
       allow read:   if esBot() || noExiste(/databases/$(database)/documents/config/bot) || owns();
-      allow create: if writesAsSelf();
+      allow create: if esDuenoDelLocal() && writesAsSelf();
       allow update: if owns() && writesAsSelf();
     }
 
@@ -149,7 +168,7 @@ service cloud.firestore {
     // El dueño escribe; el bot solo lee.
     match /conocimiento/{uid} {
       allow read, write: if loggedIn() && request.auth.uid == uid;
-      allow read:        if esBot();
+      allow read: if esBot() && uid == get(/databases/$(database)/documents/catalogo/publico).data.userId;
     }
 
     // Conversaciones de Instagram: un doc por cliente, con su id de Instagram como id
@@ -188,23 +207,23 @@ service cloud.firestore {
         return request.resource.data.userId == resource.data.userId;
       }
 
-      allow read:           if esBot() || owns();
-      allow create:         if esBot();
-      allow update:         if esBot() && soloCamposDelBot() && mismoDueno();
+      allow read:           if (esBot() && datoDelLocal()) || owns();
+      allow create:         if esBot() && escribeParaElLocal();
+      allow update:         if esBot() && datoDelLocal() && soloCamposDelBot() && mismoDueno();
       allow update, delete: if owns();
     }
 
     // Listas de precios de proveedores. El dueño las carga desde el sistema
     // (ver esColeccionDeDatos); el bot solo las lee para cotizar.
     match /listas_precios/{docId} {
-      allow read: if esBot();
+      allow read: if esBot() && datoDelLocal();
     }
 
     // Stock. El bot solo lee, para saber que hay disponible en el local.
     // OJO: estos documentos incluyen el costo. El Worker filtra y solo le pasa
     // a la IA el precio de venta, pero el permiso es sobre el doc entero.
     match /stock/{docId} {
-      allow read: if esBot();
+      allow read: if esBot() && datoDelLocal();
     }
 
     // Consignacion: equipos de un proveedor que estan en el local para vender. Para el
@@ -214,7 +233,7 @@ service cloud.firestore {
     // OJO: estos documentos incluyen el costo y el proveedor. El Worker filtra y solo le
     // pasa a la IA el precio de venta, pero el permiso es sobre el doc entero.
     match /consig/{docId} {
-      allow read: if esBot();
+      allow read: if esBot() && datoDelLocal();
     }
 
     // Inventario: accesorios (cargadores, fundas, vidrios, cables). El bot solo lee,
@@ -223,7 +242,7 @@ service cloud.firestore {
     // OJO: igual que stock, estos documentos incluyen el costo. El Worker filtra y solo
     // le pasa a la IA el precio de venta, pero el permiso es sobre el doc entero.
     match /inventario/{docId} {
-      allow read: if esBot();
+      allow read: if esBot() && datoDelLocal();
     }
 
     // Colecciones de datos: todas siguen el mismo patron userId.
@@ -250,8 +269,12 @@ service cloud.firestore {
     // Por eso el filtrado va del lado del que escribe y no del que lee: aca no hay forma
     // de "mostrar solo algunos campos". Lo que este en el doc, se ve.
     match /catalogo/{docId} {
-      allow read:  if true;
-      allow write: if writesAsSelf();
+      allow get: if docId in ['publico', 'fotos'];
+      allow create: if docId in ['publico', 'fotos'] && esDuenoDelLocal() && writesAsSelf();
+      allow update: if docId in ['publico', 'fotos'] && esDuenoDelLocal() && owns() && writesAsSelf();
+      // Eliminar publico quitaría la identidad del dueño; se vacía su lista de
+      // productos desde el sistema. El borrado definitivo requiere administración.
+      allow delete: if docId == 'fotos' && esDuenoDelLocal() && owns();
     }
 
     // Documentos compartidos por link de WhatsApp (facturas y ordenes en PDF).
@@ -265,11 +288,13 @@ service cloud.firestore {
     // precio lo lee del catalogo publicado, no del cliente); el dueño los lee desde el
     // sistema. Nadie los borra: un pedido pagado es un registro contable.
     match /pedidos/{docId} {
-      allow read:   if owns() || esTienda();
-      allow create: if esTienda();
+      allow read:   if owns() || (esTienda() && datoDelLocal());
+      allow create: if esTienda() && escribeParaElLocal();
       // El dueño los cierra desde el sistema (entregado / cancelado); el Worker los
       // actualiza cuando MP avisa del pago.
-      allow update: if esTienda() || (owns() && writesAsSelf());
+      allow update: if (esTienda() && datoDelLocal() && escribeParaElLocal()) || (owns() && writesAsSelf()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado', 'actualizado', 'cerradoPor'])
+        && request.resource.data.estado in ['entregado', 'cancelado']);
     }
 
     match /docs_publicos/{token} {

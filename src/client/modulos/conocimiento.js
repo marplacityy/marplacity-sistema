@@ -1,7 +1,7 @@
 import { SYSTEM_PROMPT } from '../../../server/services/ig-bot/prompt.js';
 /** modulos/conocimiento: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { showToast, esc, escJs } from '../core/interfaz.js';
+import { showToast, esc, escJs, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { setDoc, serverTimestamp, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { workerHeaders, textoDeIA } from './reportes.js';
@@ -14,6 +14,7 @@ function pintarConocimiento() {
   // El mensaje del canal vive en otro doc (config/mensajes), no en el de conocimiento:
   // el bot lo lee aparte porque lo manda textual.
   const canal = document.getElementById('kb-canal');
+  if (canal) canal.readOnly = !contextoApp.puedeAdministrarLocal;
   if (canal && canal !== document.activeElement) {
     const v = contextoApp.mensajesFijos.invitacionCanal || '';
     if (canal.value !== v) canal.value = v;
@@ -39,6 +40,12 @@ export function pintarPromptBot() {
   const el = document.getElementById('kb-prompt');
   if (!el) return;
   const est = document.getElementById('kb-prompt-estado');
+  el.readOnly = !contextoApp.puedeAdministrarLocal;
+  if (!contextoApp.puedeAdministrarLocal) {
+    el.value = '';
+    est.textContent = 'El bot publicado pertenece a otra cuenta. Su configuración es privada.';
+    return;
+  }
   const propio = (contextoApp.promptBot.texto || '').trim();
   if (propio) {
     const f = contextoApp.promptBot.updatedAt?.toDate ? contextoApp.promptBot.updatedAt.toDate().toLocaleString('es-AR') : null;
@@ -205,9 +212,9 @@ export function pintarTramosProv() {
   const t = contextoApp.tramosProv();
   tb.innerHTML = t.map((x, i) => `
     <tr>
-      <td>${x.hasta == null ? 'de ahí en adelante' : `hasta <input type="number" value="${x.hasta}" step="1" min="0" oninput="setTramoProv(${i},'hasta',this.value)"
+      <td>${x.hasta == null ? 'de ahí en adelante' : `hasta <input type="number" value="${esc(x.hasta)}" step="1" min="0" oninput="setTramoProv(${i},'hasta',this.value)"
              style="width:110px;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"> u$s de costo`}</td>
-      <td style="text-align:right;"><input type="number" value="${x.suma}" step="1" min="0" oninput="setTramoProv(${i},'suma',this.value)"
+      <td style="text-align:right;"><input type="number" value="${esc(x.suma)}" step="1" min="0" oninput="setTramoProv(${i},'suma',this.value)"
             style="width:90px;text-align:right;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
       <td>${t.length > 1 && x.hasta != null ? `<button class="ei-btn del" onclick="quitarTramoProv(${i})" title="Quitar">×</button>` : ''}</td>
     </tr>`).join('');
@@ -247,6 +254,7 @@ export function inicializarConocimiento() {
     }
   };
   window.guardarCanal = async function () {
+    if (!requiereDuenoDelLocal()) return;
     const btn = document.getElementById('btn-kb-guardar-canal');
     const texto = (document.getElementById('kb-canal').value || '').trim();
     if (/https?:\/\/|ig\.me/i.test(texto) && !confirm('Ese texto tiene un link.\n\nInstagram rechaza los mensajes con enlaces de invitación: no le va a llegar al cliente y encima va a cortar la respuesta a la mitad.\n\n¿Guardar igual?')) return;
@@ -295,6 +303,7 @@ export function inicializarConocimiento() {
     }
   };
   window.guardarPromptBot = async function () {
+    if (!requiereDuenoDelLocal()) return;
     const btn = document.getElementById('btn-kb-guardar-prompt');
     const texto = (document.getElementById('kb-prompt').value || '').trim();
     if (!texto) {
@@ -327,6 +336,7 @@ export function inicializarConocimiento() {
   // Vaciar el campo alcanza: el Worker, cuando lo encuentra vacío, cae al prompt.js del
   // repo. Así se vuelve atrás sin tener que reescribir el original a mano.
   window.volverAlPromptOriginal = async function () {
+    if (!requiereDuenoDelLocal()) return;
     if (!(contextoApp.promptBot.texto || '').trim()) {
       showToast('Ya está usando el original.');
       return;
@@ -521,7 +531,7 @@ export function inicializarConocimiento() {
     <td>${esc(it.color || '')}</td>
     <td style="text-align:right;white-space:nowrap;">
       <span style="font-size:11px;color:var(--text3);">${simbolo}</span>
-      <input type="number" step="0.01" min="0" value="${it.precioPublico != null ? esc(String(it.precioPublico)) : ''}" placeholder="—"
+      <input type="number" step="0.01" min="0" value="${esc(it.precioPublico != null ? esc(String(it.precioPublico)) : '')}" placeholder="—"
              onchange="editarPrecioKb('${escJs(origen)}', ${i}, this.value)"
              style="width:88px;text-align:right;font-weight:600;font-family:'DM Mono',monospace;padding:5px 7px;">
     </td>

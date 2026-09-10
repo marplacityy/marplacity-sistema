@@ -1,7 +1,7 @@
 import { configuracion } from '../core/config-publica.js';
 /** modulos/instagram: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { esc, escJs, showToast } from '../core/interfaz.js';
+import { esc, escJs, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { setDoc, serverTimestamp, updateDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
 import { workerHeaders } from './reportes.js';
@@ -28,6 +28,10 @@ export function haceCuanto(ms) {
 // Lo que se está editando, por conversación. Sin esto, un snapshot que llegue mientras
 // escribís te borra lo tipeado: el render reemplaza el innerHTML entero.
 export function renderSwitchBot() {
+  if (!contextoApp.puedeAdministrarLocal) {
+    document.getElementById('bd-switch').innerHTML = '<div class="proveedor-alerta alerta-atencion">El bot de Instagram publicado pertenece a otra cuenta. Esta cuenta no puede administrarlo.</div>';
+    return;
+  }
   const modo = contextoApp.modoBotActual();
   const m = contextoApp.MODOS_BOT[modo];
   const borde = modo === 'todos' ? '' : modo === 'prueba' ? 'border-color:#FAC775;background:#FEF9E7;' : 'border-color:#F09595;background:#FDECEC;';
@@ -307,6 +311,7 @@ export function inicializarInstagram() {
   };
   contextoApp.modoBotActual = () => !contextoApp.botCfg.activo ? 'apagado' : contextoApp.botCfg.modo === 'prueba' ? 'prueba' : 'todos';
   window.setModoBot = async function (modo) {
+    if (!requiereDuenoDelLocal()) return;
     if (modo === 'todos' && !confirm('¿Poner el bot a contestarle a TODOS?\n\nDesde ahora responde solo cualquier DM que entre y vuelve a mandar los seguimientos automáticos.')) return;
     await guardarCfgBot({
       activo: modo !== 'apagado',
@@ -314,6 +319,7 @@ export function inicializarInstagram() {
     }, modo === 'apagado' ? 'Bot apagado — sigue anotando en la bandeja' : modo === 'prueba' ? 'Modo prueba: solo contesta a las cuentas autorizadas' : 'El bot le contesta a todos');
   };
   window.agregarCuentaPrueba = async function (igUserId) {
+    if (!requiereDuenoDelLocal()) return;
     const ya = contextoApp.botCfg.cuentasPrueba;
     if (ya.includes(String(igUserId))) {
       showToast('Esa cuenta ya estaba autorizada');
@@ -324,6 +330,7 @@ export function inicializarInstagram() {
     }, 'Cuenta autorizada para las pruebas');
   };
   window.quitarCuentaPrueba = async function (igUserId) {
+    if (!requiereDuenoDelLocal()) return;
     await guardarCfgBot({
       cuentasPrueba: contextoApp.botCfg.cuentasPrueba.filter(x => x !== String(igUserId))
     }, 'Cuenta sacada de las pruebas');

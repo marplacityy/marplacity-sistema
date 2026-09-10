@@ -1,6 +1,6 @@
 /** modulos/consignacion: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { esc, showToast, escJs } from '../core/interfaz.js';
+import { esc, escJs, showToast } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { addDoc, serverTimestamp, updateDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { printTicket80 } from './pos.js';
@@ -217,7 +217,7 @@ export function renderProveedores() {
     if (aPagar > 0 && dias != null) {
       if (dias >= 7) alerta = `<div class="proveedor-alerta alerta-urgente">⚠️ Hay deuda de hace <b>${dias} días</b> sin pagar — se está juntando.</div>`;else if (dias >= 3) alerta = `<div class="proveedor-alerta alerta-atencion">🔔 Deuda de hace ${dias} días — conviene ir pagando.</div>`;
     }
-    return `<div class="proveedor-card" onclick="abrirCuentaCorriente('${esc(prov).replace(/'/g, "\\'")}')">
+    return `<div class="proveedor-card" onclick="abrirCuentaCorriente('${escJs(prov)}')">
       <div class="proveedor-header">
         <div>
           <div class="proveedor-nombre">${esc(prov)} ${esFijo ? '<span class="tipo-tag tipo-fijo">🔁 Fijo</span>' : '<span class="tipo-tag tipo-casual">👤 Casual</span>'}</div>
@@ -234,7 +234,7 @@ export function renderProveedores() {
         <div class="proveedor-stat">Pagado: <strong style="color:#237A4B">${contextoApp.fmtUSD(pagado)}</strong>${pagadoARS ? ` <span style="color:var(--text3)">(incluye ${contextoApp.fmtARS(pagadoARS)})</span>` : ''}</div>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;">
-        <button class="btn-pagar-outline" onclick="event.stopPropagation();abrirCuentaCorriente('${esc(prov).replace(/'/g, "\\'")}')">📋 Cuenta corriente</button>
+        <button class="btn-pagar-outline" onclick="event.stopPropagation();abrirCuentaCorriente('${escJs(prov)}')">📋 Cuenta corriente</button>
         <button class="btn-pagar-outline" onclick="event.stopPropagation();imprimirComprobanteConsig('${escJs(prov)}')">🖨 Comprobante</button>
       </div>
     </div>`;

@@ -307,7 +307,7 @@ export function inicializarRepuestos() {
     if (!td || td.dataset.editing) return;
     td.dataset.editing = '1';
     const actual = p.valorRef != null ? p.valorRef : '';
-    td.innerHTML = `<input type="number" class="rp-precio-input" id="rpi-${pid}" value="${actual}" step="0.01" min="0" placeholder="0">`;
+    td.innerHTML = `<input type="number" class="rp-precio-input" id="rpi-${pid}" value="${esc(actual)}" step="0.01" min="0" placeholder="0">`;
     const inp = document.getElementById('rpi-' + pid);
     inp.focus();
     inp.select();

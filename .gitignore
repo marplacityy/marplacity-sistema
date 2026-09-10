@@ -23,4 +23,8 @@ dist/
 playwright-report/
 test-results/
 coverage/
+.firebase/
+firebase-debug*.log
+firestore-debug.log
+ui-debug.log
 !.env.example

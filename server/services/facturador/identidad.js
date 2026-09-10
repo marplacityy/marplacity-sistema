@@ -65,7 +65,7 @@ const deB64Url = s => {
  */
 export async function verificarTokenDelDueño(env, token) {
   try {
-    if (!token || token.split('.').length !== 3) return null;
+    if (typeof token !== 'string' || token.length > 10000 || token.split('.').length !== 3) return null;
     const [cab64, cuerpo64, firma64] = token.split('.');
     const cab = JSON.parse(new TextDecoder().decode(deB64Url(cab64)));
     const cuerpo = JSON.parse(new TextDecoder().decode(deB64Url(cuerpo64)));
@@ -88,12 +88,14 @@ export async function verificarTokenDelDueño(env, token) {
     const ahora = Math.floor(Date.now() / 1000);
     if (cuerpo.aud !== proj) return null;
     if (cuerpo.iss !== `https://securetoken.google.com/${proj}`) return null;
-    if (!cuerpo.exp || cuerpo.exp < ahora) return null;
-    if (!cuerpo.sub) return null;
+    if (!Number.isFinite(cuerpo.exp) || cuerpo.exp <= ahora) return null;
+    if (!Number.isFinite(cuerpo.iat) || cuerpo.iat > ahora) return null;
+    if (!Number.isFinite(cuerpo.auth_time) || cuerpo.auth_time > ahora) return null;
+    if (typeof cuerpo.sub !== 'string' || !cuerpo.sub || cuerpo.sub.length > 128) return null;
 
     return cuerpo.sub;
   } catch (e) {
-    console.log('token invalido:', e.message);
+    console.log('Token inválido.');
     return null;
   }
 }

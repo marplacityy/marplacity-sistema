@@ -13,6 +13,57 @@ test('las 23 pantallas cargan y los controles mantienen sus funciones', async ({
   expect(errores).toEqual([]);
 });
 
+test('los campos importados no pueden crear atributos ni ejecutar JavaScript', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  const ataque = `Modelo " onmouseover="window.__ataque=1" x="`;
+  await page.evaluate(async ataque => {
+    const cfg = window.__datosPrueba.leer('config/usuario-prueba');
+    await window.__datosPrueba.cargar('config/usuario-prueba', { ...cfg, catalogoMeta: { 'eq-equipo-1': { titulo: ataque } } });
+    const equipo = window.__datosPrueba.leer('stock/equipo-1');
+    await window.__datosPrueba.cargar('stock/equipo-1', { ...equipo, nombre: ataque });
+    await window.__datosPrueba.cargar('clientes/cliente-xss', { nombre: ataque });
+  }, ataque);
+  await ir(page, 'catalogo');
+  await page.locator('.cat-prod').first().click();
+  expect(await page.locator('[onmouseover*="__ataque"]').count()).toBe(0);
+  await ir(page, 'clientes');
+  expect(await page.locator('[onmouseover*="__ataque"]').count()).toBe(0);
+  expect(await page.evaluate(() => window.__ataque)).toBeUndefined();
+  expect(errores).toEqual([]);
+});
+
+test('una cuenta nueva no escucha configuraciones privadas ni publica sobre otro local', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  const globales = ['config/bot', 'config/prompt', 'config/mensajes'];
+  const activas = () => page.evaluate(() => window.__datosPrueba.suscripciones());
+  expect((await activas()).filter(path => globales.includes(path))).toEqual([]);
+  await ir(page, 'bandeja');
+  await expect(page.locator('#bd-switch')).toContainText('pertenece a otra cuenta');
+  await page.evaluate(() => window.publicarCatalogo());
+  await expect(page.locator('#toast')).toContainText('otra cuenta');
+  expect(await page.evaluate(() => window.__datosPrueba.leer('catalogo/publico'))).toBeUndefined();
+  await page.evaluate(() => window.__datosPrueba.cargar('catalogo/publico', { productos: [] }));
+  await expect.poll(async () => (await activas()).filter(path => globales.includes(path)).length).toBe(3);
+  await page.evaluate(() => window.__datosPrueba.cargar('catalogo/publico', { userId: 'otra-cuenta', productos: [] }));
+  await expect.poll(async () => (await activas()).filter(path => globales.includes(path)).length).toBe(0);
+  expect(errores).toEqual([]);
+});
+
+test('la etiqueta dibuja barras y QR e invoca impresión con la política de seguridad', async ({ page, context }) => {
+  await preparar(page);
+  await context.addInitScript(() => { window.print = () => { window.__impresionSolicitada = true; }; });
+  await entrar(page);
+  const emergente = page.waitForEvent('popup');
+  await page.evaluate(() => window.labelEquipo('equipo-1'));
+  const etiqueta = await emergente;
+  await etiqueta.waitForURL(url => url.protocol === 'blob:', { waitUntil: 'load' });
+  await expect.poll(() => etiqueta.evaluate(() => !!window.__impresionSolicitada)).toBe(true);
+  expect(await etiqueta.locator('svg[data-bc] rect').count()).toBeGreaterThan(0);
+  expect(await etiqueta.locator('canvas[data-qr]').count()).toBeGreaterThan(0);
+});
+
 test('guardar un gasto lo lleva al listado y al cierre de caja', async ({ page }) => {
   const errores = await preparar(page);
   await entrar(page);

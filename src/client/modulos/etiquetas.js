@@ -1,3 +1,4 @@
+import imprimirDocumentoUrl from '../core/imprimir-documento.js?url&no-inline';
 import codigoBarrasUrl from 'jsbarcode/dist/JsBarcode.all.min.js?url';
 import codigoQrUrl from 'qrious/dist/qrious.min.js?url';
 /** modulos/etiquetas: lógica preservada de la aplicación original. */
@@ -8,8 +9,8 @@ export
 // ── Etiquetas Brother QL-800 (62 x 100 mm) ────────────
 function labelDoc(inner) {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <script src="${new URL(codigoBarrasUrl, location.href).href}"><\/script>
-  <script src="${new URL(codigoQrUrl, location.href).href}"><\/script>
+  <script defer src="${new URL(codigoBarrasUrl, location.href).href}"><\/script>
+  <script defer src="${new URL(codigoQrUrl, location.href).href}"><\/script>
   <style>
     @page{size:100mm 62mm;margin:0;}
     html,body{margin:0;padding:0;background:#fff;}
@@ -40,21 +41,7 @@ function labelDoc(inner) {
     .lb-precio{font-size:14pt;font-weight:700;}
     .lb-qr{width:14mm;height:14mm;}
   </style></head><body>${inner}
-  <script>
-    window.addEventListener('load', function(){
-      try{
-        document.querySelectorAll('svg[data-bc]').forEach(function(el){
-          JsBarcode(el, el.getAttribute('data-bc'), {format:'CODE128', displayValue:false, margin:0, height:34, width:1.4});
-        });
-      }catch(e){}
-      try{
-        document.querySelectorAll('canvas[data-qr]').forEach(function(el){
-          new QRious({element:el, value:el.getAttribute('data-qr'), size:160, level:'M'});
-        });
-      }catch(e){}
-      setTimeout(function(){ window.print(); }, 450);
-    });
-  <\/script></body></html>`;
+  <script defer src="${new URL(imprimirDocumentoUrl, location.href).href}"><\/script></body></html>`;
 }
 export function abrirLabel(html) {
   const w = window.open('', '_blank', 'width=520,height=380');
@@ -62,8 +49,9 @@ export function abrirLabel(html) {
     showToast('El navegador bloqueó la ventana. Permití pop-ups.', true);
     return;
   }
-  w.document.write(labelDoc(html));
-  w.document.close();
+  const url = URL.createObjectURL(new Blob([labelDoc(html)], { type: 'text/html;charset=utf-8' }));
+  w.location.replace(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ── Etiqueta 62x100 de EQUIPO ──

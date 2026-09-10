@@ -22,9 +22,9 @@ export function initRepForm() {
   const med = document.getElementById('r-medio');
   if (med) med.innerHTML = '<option value="">— opcional —</option>' + contextoApp.medios.map(m => `<option>${esc(m)}</option>`).join('');
   const fl = document.getElementById('rep-fl-estado');
-  if (fl && fl.options.length <= 1) fl.innerHTML = '<option value="">Todos los estados</option>' + contextoApp.ESTADOS.map(e => `<option value="${e.k}">${e.label}</option>`).join('');
+  if (fl && fl.options.length <= 1) fl.innerHTML = '<option value="">Todos los estados</option>' + contextoApp.ESTADOS.map(e => `<option value="${esc(e.k)}">${e.label}</option>`).join('');
   const rm = document.getElementById('rm-estado');
-  if (rm && !rm.options.length) rm.innerHTML = contextoApp.ESTADOS.map(e => `<option value="${e.k}">${e.label}</option>`).join('');
+  if (rm && !rm.options.length) rm.innerHTML = contextoApp.ESTADOS.map(e => `<option value="${esc(e.k)}">${e.label}</option>`).join('');
   if (contextoApp.cfg.tc && !document.getElementById('r-tc').value) document.getElementById('r-tc').value = contextoApp.cfg.tc;
   populateClientesDL();
   populateRepuestoSelects();

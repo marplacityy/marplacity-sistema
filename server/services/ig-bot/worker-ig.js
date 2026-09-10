@@ -93,7 +93,8 @@ export default {
 
       // Verificar que el POST venga realmente de Meta
       const sig = request.headers.get('x-hub-signature-256') || '';
-      if (env.IG_APP_SECRET && !(await firmaValida(raw, sig, env.IG_APP_SECRET))) {
+      if (!env.IG_APP_SECRET) return new Response('Webhook sin configurar', { status: 503 });
+      if (!(await firmaValida(raw, sig, env.IG_APP_SECRET))) {
         return new Response('firma invalida', { status: 401 });
       }
 

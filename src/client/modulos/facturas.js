@@ -7,6 +7,7 @@ import { setSyncDot } from '../core/datos.js';
 import { updateDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { resolverCliente } from './clientes.js';
 import { waNumber } from './whatsapp.js';
+import imprimirDocumentoUrl from '../core/imprimir-documento.js?url&no-inline';
 
 export function renderFE() {
   document.getElementById('fe-items').innerHTML = contextoApp.feItems.length ? contextoApp.feItems.map((it, i) => `
@@ -16,7 +17,7 @@ export function renderFE() {
         <div class="cart-qty">
           <button onclick="feQty(${i},-1)">−</button><span>${it.qty || 1}</span><button onclick="feQty(${i},1)">+</button>
         </div>` : `<span style="font-size:11px;color:var(--text3);">×1</span>`}
-      <input type="number" class="cart-precio" value="${it.precio}" step="0.01" min="0" onchange="feSetPrecio(${i},this.value)">
+      <input type="number" class="cart-precio" value="${esc(it.precio)}" step="0.01" min="0" onchange="feSetPrecio(${i},this.value)">
       <span style="font-size:10px;color:var(--text3);">${it.moneda}</span>
       <button class="cart-del" onclick="feDel(${i})">×</button>
     </div>`).join('') : '<div class="home-empty">Sin items — agregá al menos uno.</div>';
@@ -369,15 +370,16 @@ export function imprimirFacturaA4(v) {
     ${v.tc ? `<div class="meta">TC del día: ${v.tc}</div>` : ''}
     ${tieneImei ? `<div class="terms"><b>TÉRMINOS Y GARANTÍA</b>${terms}</div>` : ''}
     <div class="sig"><div>Firma del cliente</div><div>Firma y sello del local</div></div>
-    <script>window.onload=()=>window.print();<\/script>
+    <script defer src="${new URL(imprimirDocumentoUrl, location.href).href}"><\/script>
   </body></html>`;
   const w = window.open('', '_blank');
   if (!w) {
     showToast('Permití las ventanas emergentes para imprimir.', true);
     return;
   }
-  w.document.write(html);
-  w.document.close();
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  w.location.replace(url);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // ── Gastos Fijos ──────────────────────────────────────

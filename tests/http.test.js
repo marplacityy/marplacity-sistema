@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { get } from 'node:http';
 import { crearApp } from '../server/app.js';
 import { cargarConfig, configPublica } from '../server/config.js';
 import { crearTareas } from '../server/http/servicios.js';
@@ -34,6 +35,26 @@ test('el servidor expone salud y configuración, sin publicar el repositorio', a
   }
   const origenAjeno = await fetch(base + '/api/config', { headers: { Origin: 'https://sitio-ajeno.invalid' } });
   assert.equal(origenAjeno.status, 403);
+});
+
+test('bloquea sitios cruzados sin Origin, host falso y embebido; limita abuso', async t => {
+  let llamadas = 0;
+  const base = await levantar(t, { API_LIMITE_POR_MINUTO: '2' }, { fetchImpl: async () => { llamadas++; return Response.json({ ok: true }); } });
+  const cab = (await fetch(base)).headers;
+  assert.match(cab.get('content-security-policy'), /object-src 'none'/);
+  assert.match(cab.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.equal(cab.get('x-content-type-options'), 'nosniff');
+  assert.equal((await fetch(base + '/api/config', { headers: { 'Sec-Fetch-Site': 'cross-site' } })).status, 403);
+  const hostFalso = await new Promise((resolve, reject) => {
+    get(base + '/api/config', { headers: { Host: 'atacante.invalid' } }, res => { res.resume(); resolve(res.statusCode); }).on('error', reject);
+  });
+  assert.equal(hostFalso, 403);
+  for (let i = 0; i < 2; i++) assert.equal((await fetch(base + '/api/tienda/pedido', { method: 'POST', body: '{}' })).status, 200);
+  const bloqueada = await fetch(base + '/api/tienda/pedido', { method: 'POST', body: '{}' });
+  assert.equal(bloqueada.status, 429);
+  assert.ok(bloqueada.headers.get('retry-after'));
+  assert.equal(llamadas, 2);
+  assert.equal((await fetch(base + '/api/salud')).status, 200);
 });
 
 test('el proxy conserva cuerpo, token y ruta pero nunca reenvía cookies o credenciales del host', async t => {

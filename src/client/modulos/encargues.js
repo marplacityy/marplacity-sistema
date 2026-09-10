@@ -181,7 +181,7 @@ export function inicializarEncargues() {
   `;
     const sel = document.getElementById('ent-equipo');
     const cand = contextoApp.stockItems.filter(s => s.status === 'en_stock');
-    sel.innerHTML = '<option value="">— sin vincular (item manual, sin costo) —</option>' + cand.map(s => `<option value="${s.id}">${esc([s.nombre, s.color].filter(Boolean).join(' '))}${s.imei ? ' · ' + s.imei.slice(-6) : ''} (costo u$s ${s.valorUSD || 0})</option>`).join('');
+    sel.innerHTML = '<option value="">— sin vincular (item manual, sin costo) —</option>' + cand.map(s => `<option value="${esc(s.id)}">${esc([s.nombre, s.color].filter(Boolean).join(' '))}${s.imei ? ' · ' + s.imei.slice(-6) : ''} (costo u$s ${s.valorUSD || 0})</option>`).join('');
     // preseleccionar si algún equipo matchea el producto
     const match = cand.find(s => (s.nombre || '').toLowerCase().includes((x.producto || '').toLowerCase().slice(0, 12)));
     if (match) sel.value = match.id;

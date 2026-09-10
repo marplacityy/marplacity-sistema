@@ -74,4 +74,4 @@ export async function signInWithEmailAndPassword() {
   return { user: autenticacion.currentUser };
 }
 export async function signOut() { autenticacion.currentUser = null; for (const callback of authListeners) await callback(null); }
-window.__datosPrueba = { leer: path => copiar(docs.get(path)), listar: nombre => seleccion(collection(null, nombre)).map(d => ({ id: d.id, ...d.data() })), cargar: (path, datos) => setDoc({ path }, { userId: UID, ...datos }), fecha };
+window.__datosPrueba = { suscripciones: () => [...suscripciones].map(s => s.ref.path), leer: path => copiar(docs.get(path)), listar: nombre => seleccion(collection(null, nombre)).map(d => ({ id: d.id, ...d.data() })), cargar: (path, datos) => setDoc({ path }, { userId: UID, ...datos }), fecha };

@@ -75,8 +75,8 @@ export default {
       if (request.method === 'POST' && url.pathname === '/stripe/webhook') return await webhookStripe(request, env, ctx);
       if (request.method === 'POST' && url.pathname === '/fotos') return await buscarFotos(request, env);
     } catch (e) {
-      console.log('error', url.pathname, e.message);
-      return json({ error: e.message }, 500);
+      console.log('error en tienda', url.pathname, e.name);
+      return json({ error: 'No se pudo completar la operación de la tienda.' }, 500);
     }
 
     return json({ error: 'no existe' }, 404);
@@ -124,7 +124,8 @@ export function montoDelPedido(producto, pago, cobro) {
   const rec = Number(cobro?.recargoTarjetaPct) || 0;
   const recMp = Number(cobro?.recargoMpPct) || 0;
   const mpMax = Number(cobro?.mpMaxUSD) || 0;
-  if (usd <= 0) return { error: 'el producto no tiene precio' };
+  if (!Number.isFinite(usd) || usd <= 0) return { error: 'el producto no tiene precio válido' };
+  if (![tc, rec, recMp, mpMax].every(Number.isFinite) || tc < 0 || rec < 0 || recMp < 0 || rec > 100 || recMp > 100) return { error: 'configuración de cobro inválida' };
   if (pago === 'mp') {
     if (!tc) return { error: 'el catálogo no tiene tipo de cambio: hay que volver a publicarlo' };
     if (mpMax && usd > mpMax) return { error: `Mercado Pago solo para productos de hasta u$s ${mpMax}` };
@@ -298,16 +299,15 @@ async function preferenciaMP(env, pedidoId, pedido, origin) {
  * Exportado para el test.
  */
 export async function firmaMPValida(secret, xSignature, xRequestId, dataId) {
-  if (!secret) return true;   // sin clave cargada no se puede verificar: se confía en el fetch del pago
+  if (!secret) return false;
   const partes = Object.fromEntries(String(xSignature || '').split(',').map(s => s.trim().split('=')));
   const ts = partes.ts, v1 = partes.v1;
-  if (!ts || !v1) return false;
+  if (!/^\d+$/.test(ts || '') || !/^[a-f0-9]{64}$/i.test(v1 || '') || !xRequestId) return false;
   const id = /^[a-zA-Z0-9]+$/.test(dataId || '') ? String(dataId).toLowerCase() : String(dataId || '');
   const manifest = `id:${id};request-id:${xRequestId || ''};ts:${ts};`;
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(manifest));
-  const hex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).join('');
-  return hex === v1;
+  const firma = Uint8Array.from(v1.match(/../g), par => parseInt(par, 16));
+  const claveVerificar = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  return crypto.subtle.verify('HMAC', claveVerificar, firma, new TextEncoder().encode(manifest));
 }
 
 const ESTADO_MP = { approved: 'pagado', pending: 'pendiente', in_process: 'pendiente', authorized: 'pendiente',
@@ -325,15 +325,14 @@ async function webhookMP(request, env, ctx, url) {
   const dataId = body.data?.id || url.searchParams.get('data.id') || url.searchParams.get('id') || '';
   console.log('webhook MP', tipo, dataId);
 
-  // La firma se chequea y se loguea, pero NO frena: lo que vale es consultar el pago a la
-  // API de MP con nuestro token. Un aviso falso solo puede hacernos releer un pago real.
-  // Se loguean las piezas (no la clave) para poder ajustar el formato si MP lo cambia.
+  // Rechazar antes de consultar APIs o encolar trabajo. Nunca registrar firmas.
+  if (!env.MP_WEBHOOK_SECRET) return json({ error: 'Webhook sin configurar.' }, 503);
   const firmaOk = await firmaMPValida(env.MP_WEBHOOK_SECRET, request.headers.get('x-signature'), request.headers.get('x-request-id'), dataId);
   if (!firmaOk) {
-    console.log('webhook MP: firma inválida —', 'x-signature:', request.headers.get('x-signature') || '(sin header)',
-      '| x-request-id:', request.headers.get('x-request-id') || '(sin header)', '| data.id:', dataId, '| query:', url.search);
+    console.log('webhook MP: firma inválida');
+    return json({ error: 'firma inválida' }, 401);
   }
-  if (tipo !== 'payment' || !dataId) return json({ ok: true, ignorado: tipo });
+  if (tipo !== 'payment' || !/^\d+$/.test(String(dataId))) return json({ ok: true, ignorado: true });
 
   ctx.waitUntil(actualizarPago(env, dataId).catch(e => console.log('webhook MP falló:', e.message)));
   return json({ ok: true });
@@ -352,16 +351,17 @@ async function actualizarPago(env, paymentId) {
   if (!r.ok) throw new Error(`MP no devolvió el pago ${paymentId} (${r.status})`);
   const pago = await r.json();
   const pedidoId = pago.external_reference || pago.metadata?.pedido;
-  if (!pedidoId) { console.log('pago sin pedido', paymentId); return; }
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(pedidoId || '')) return;
 
   const idToken = await tokenDeLaTienda(env);
   if (!idToken) throw new Error('la tienda no se pudo loguear a Firebase');
   const pedido = await leerDoc(env, idToken, `pedidos/${pedidoId}`);
   if (!pedido) { console.log('pedido no existe', pedidoId); return; }
+  if (!pagoCorresponde(pedido, pago, 'mp', env.OWNER_UID)) throw new Error('El pago no coincide con el pedido.');
 
   const estado = ESTADO_MP[pago.status] || 'pendiente';
   // Un pago aprobado no vuelve a "pendiente" por un aviso viejo que llegue después.
-  if (pedido.estado === 'pagado' && estado === 'pendiente') return;
+  if (['pagado', 'entregado', 'cancelado', 'devuelto'].includes(pedido.estado) && estado !== 'devuelto') return;
 
   await escribirDoc(env, idToken, `pedidos/${pedidoId}`, {
     estado,
@@ -432,12 +432,15 @@ export async function firmaStripeValida(secret, header, cuerpo, ahora = Date.now
   const partes = {};
   for (const s of String(header || '').split(',')) { const [k, v] = s.trim().split('='); if (k && v) (partes[k] ||= []).push(v); }
   const t = partes.t?.[0];
-  if (!t || !partes.v1?.length) return false;
+  if (!/^\d+$/.test(t || '') || !partes.v1?.length) return false;
   if (Math.abs(ahora / 1000 - Number(t)) > 300) return false;   // 5 minutos de tolerancia
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${t}.${cuerpo}`));
-  const hex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).join('');
-  return partes.v1.includes(hex);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']);
+  for (const hex of partes.v1) {
+    if (!/^[a-f0-9]{64}$/i.test(hex)) continue;
+    const firma = Uint8Array.from(hex.match(/../g), par => parseInt(par, 16));
+    if (await crypto.subtle.verify('HMAC', key, firma, new TextEncoder().encode(`${t}.${cuerpo}`))) return true;
+  }
+  return false;
 }
 
 /**
@@ -470,17 +473,18 @@ async function actualizarSesionStripe(env, sessionId) {
   if (!r.ok) throw new Error(`Stripe no devolvió la sesión ${sessionId} (${r.status})`);
   const ses = await r.json();
   const pedidoId = ses.client_reference_id || ses.metadata?.pedido;
-  if (!pedidoId) { console.log('sesión sin pedido', sessionId); return; }
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(pedidoId || '')) return;
 
   const idToken = await tokenDeLaTienda(env);
   if (!idToken) throw new Error('la tienda no se pudo loguear a Firebase');
   const pedido = await leerDoc(env, idToken, `pedidos/${pedidoId}`);
   if (!pedido) { console.log('pedido no existe', pedidoId); return; }
+  if (!pagoCorresponde(pedido, ses, 'tarjeta', env.OWNER_UID)) throw new Error('La sesión de pago no coincide con el pedido.');
 
   // Una sesión que venció o se canceló sin pagar: el pedido vuelve a "rechazado" solo si nunca se pagó.
   let estado = ESTADO_STRIPE[ses.payment_status] || 'pendiente';
   if (ses.status === 'expired' && estado !== 'pagado') estado = 'rechazado';
-  if (pedido.estado === 'pagado' && estado !== 'pagado') return;
+  if (['pagado', 'entregado', 'cancelado', 'devuelto'].includes(pedido.estado)) return;
 
   await escribirDoc(env, idToken, `pedidos/${pedidoId}`, {
     estado,
@@ -501,14 +505,27 @@ async function marcarDevueltoStripe(env, paymentIntent) {
   if (!r.ok) throw new Error(`Stripe no devolvió la sesión del pago ${paymentIntent} (${r.status})`);
   const ses = (await r.json()).data?.[0];
   const pedidoId = ses?.client_reference_id || ses?.metadata?.pedido;
-  if (!pedidoId) { console.log('reembolso sin pedido', paymentIntent); return; }
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(pedidoId || '')) return;
   const idToken = await tokenDeLaTienda(env);
   if (!idToken) throw new Error('la tienda no se pudo loguear a Firebase');
+  const pedido = await leerDoc(env, idToken, `pedidos/${pedidoId}`);
+  if (!pagoCorresponde(pedido, ses, 'tarjeta', env.OWNER_UID) || pedido.stripe?.paymentIntent !== paymentIntent) return;
   await escribirDoc(env, idToken, `pedidos/${pedidoId}`, { estado: 'devuelto', actualizado: new Date().toISOString() });
   console.log('pedido', pedidoId, '-> devuelto (Stripe)');
 }
 
 // ── Firebase ─────────────────────────────────────────────────
+
+/** Un pago auténtico también debe pertenecer a este pedido y cubrir su importe. */
+export function pagoCorresponde(pedido, pago, metodo, ownerUid) {
+  if (!pedido || !ownerUid || pedido.userId !== ownerUid || pedido.pago !== metodo) return false;
+  const centavos = valor => Math.round(Number(valor) * 100);
+  const esperado = centavos(metodo === 'mp' ? pedido.montoARS : pedido.montoUSD);
+  const recibido = metodo === 'mp' ? centavos(pago.transaction_amount) : pago.amount_total;
+  if (!Number.isSafeInteger(esperado) || esperado <= 0 || recibido !== esperado) return false;
+  if (metodo === 'mp') return pago.currency_id === 'ARS' && (!pedido.mp?.paymentId || pedido.mp.paymentId === String(pago.id));
+  return pago.currency === 'usd' && !!pedido.stripe?.sessionId && pedido.stripe.sessionId === pago.id;
+}
 
 let tokenCache = { idToken: null, vence: 0 };
 

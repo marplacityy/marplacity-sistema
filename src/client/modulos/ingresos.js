@@ -27,7 +27,7 @@ export function populateIncCatFilter() {
   const meses = [...new Set(contextoApp.ingresos.map(g => (g.fecha || '').slice(0, 7)).filter(Boolean))].sort().reverse();
   const selM = document.getElementById('inc-fl-mes');
   const prevM = selM.value;
-  selM.innerHTML = '<option value="">Todos los meses</option>' + meses.map(m => `<option value="${m}">${contextoApp.fmtMes(m)}</option>`).join('');
+  selM.innerHTML = '<option value="">Todos los meses</option>' + meses.map(m => `<option value="${esc(m)}">${contextoApp.fmtMes(m)}</option>`).join('');
   selM.value = prevM;
 }
 export function renderIncMedioTags() {

@@ -26,7 +26,7 @@ export async function initFacturador() {
   const sel = (id, filas, valor) => {
     const el = document.getElementById(id);
     if (el.options.length && el.value) return false; // no pisar lo que ya eligió
-    el.innerHTML = filas.map(f => `<option value="${f.id}" ${String(f.id) === String(valor) ? 'selected' : ''}>${esc(f.desc)}</option>`).join('');
+    el.innerHTML = filas.map(f => `<option value="${esc(f.id)}" ${String(f.id) === String(valor) ? 'selected' : ''}>${esc(f.desc)}</option>`).join('');
     return true;
   };
   const primeraVez = sel('fac-cond', contextoApp.arcaTablas.condiciones, 5);
@@ -49,15 +49,15 @@ function facRenderRenglones() {
     <tr>
       <td><input type="text" value="${esc(r.descripcion || '')}" placeholder="Ej: Service de iPhone" oninput="facSet(${i},'descripcion',this.value)"
             style="width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;color:var(--text);"></td>
-      <td><input type="number" value="${r.cantidad}" min="1" step="1" oninput="facSet(${i},'cantidad',this.value)"
+      <td><input type="number" value="${esc(r.cantidad)}" min="1" step="1" oninput="facSet(${i},'cantidad',this.value)"
             style="width:100%;text-align:right;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
-      <td><input type="number" value="${r.precioUnitario ?? ''}" step="0.01" min="0" placeholder="0" oninput="facSet(${i},'precioUnitario',this.value)"
+      <td><input type="number" value="${esc(r.precioUnitario ?? '')}" step="0.01" min="0" placeholder="0" oninput="facSet(${i},'precioUnitario',this.value)"
             style="width:100%;text-align:right;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
       <td><select onchange="facSet(${i},'alicuotaIva',this.value)"
             style="width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text);">
             ${alics.map(a => {
     const v = parseFloat(a.desc);
-    return `<option value="${v}" ${v === Number(r.alicuotaIva) ? 'selected' : ''}>${esc(a.desc)}</option>`;
+    return `<option value="${esc(v)}" ${v === Number(r.alicuotaIva) ? 'selected' : ''}>${esc(a.desc)}</option>`;
   }).join('')}
           </select></td>
       <td>${contextoApp.facRenglones.length > 1 ? `<button class="ei-btn del" onclick="facQuitarRenglon(${i})" title="Quitar">×</button>` : ''}</td>

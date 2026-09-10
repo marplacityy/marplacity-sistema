@@ -17,10 +17,12 @@
     "test:dominio": "node test-catalogo.mjs && node workers/tienda/test-tienda.mjs && node workers/ig-bot/test-parseo.mjs",
     "test:browser": "playwright test",
     "lint": "eslint src server scripts tests vite.config.js playwright.config.js",
-    "check": "npm run lint && npm test && npm run test:dominio && npm run build && npm run test:browser"
+    "check": "npm run lint && npm test && npm run test:dominio && npm run build && npm run test:browser",
+    "test:reglas": "npx --yes firebase-tools@15.30.0 emulators:exec --only firestore --project demo-marplacity \"node --test tests/reglas/*.test.js\""
   },
   "dependencies": {
     "express": "5.2.1",
+    "express-rate-limit": "8.7.0",
     "firebase": "12.19.0",
     "helmet": "8.3.0",
     "jsbarcode": "3.12.3",
@@ -34,6 +36,7 @@
   "devDependencies": {
     "@babel/parser": "8.0.5",
     "@babel/traverse": "8.0.5",
+    "@firebase/rules-unit-testing": "5.0.2",
     "@playwright/test": "1.63.0",
     "eslint": "10.10.0",
     "globals": "17.12.0",

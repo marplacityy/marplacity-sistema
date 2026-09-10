@@ -32,7 +32,7 @@ const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode('id:1
 const v1 = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, '0')).join('');
 assert.equal(await firmaMPValida('clave-de-prueba', `ts=1700000000,v1=${v1}`, 'req-1', '123'), true);
 assert.equal(await firmaMPValida('clave-de-prueba', `ts=1700000000,v1=${v1}`, 'req-1', '124'), false, 'otro id, otra firma');
-assert.equal(await firmaMPValida('', 'lo que sea', 'req-1', '123'), true, 'sin clave cargada no se verifica');
+assert.equal(await firmaMPValida('', 'lo que sea', 'req-1', '123'), false, 'sin clave cargada se rechaza');
 
 // ── firmaStripeValida ──
 {
@@ -59,14 +59,14 @@ assert.equal(await firmaMPValida('', 'lo que sea', 'req-1', '123'), true, 'sin c
   const u = elegirImagenes(res, { nombre: 'iPhone 13', color: 'Red' });
   assert.deepEqual(u, ['https://m.media-amazon.com/images/I/a.jpg', 'https://m.media-amazon.com/images/I/d.jpg'], 'sin fundas, sin el Pro, sin repetidas, sin sufijo de tamaño');
   assert.deepEqual(elegirImagenes(res, { nombre: 'iPhone 13', color: 'Blue' }), [], 'otro color, nada');
-  assert.equal(elegirImagenes([{ title: 'USB-C Cable 2m Apple', thumbnail: 'https://x/y.jpg' }], { nombre: 'USB-C Cable', esAccesorio: true }).length, 1, 'un accesorio no se filtra por ser accesorio');
+  assert.equal(elegirImagenes([{ title: 'USB-C Cable 2m Apple', thumbnail: 'https://m.media-amazon.com/images/I/y.jpg' }], { nombre: 'USB-C Cable', esAccesorio: true }).length, 1, 'un accesorio no se filtra por ser accesorio');
   assert.equal(slugFoto('iPhone 13 128GB'), 'iphone-13');
   assert.equal(slugFoto('iPhone 13 (Usado Grado A, 100% Ampsentrix)'), 'iphone-13', 'el estado no es parte del modelo');
   assert.equal(slugFoto('iPhone 14 Pro (Usado Grado A, 87-89%)'), 'iphone-14-pro');
   assert.equal(nombreParaAmazon('iPhone 13 Pro Max (Usado Grado A, 100% Ampsentrix)'), 'iPhone 13 Pro Max');
   assert.equal(nombreParaAmazon('AirPods Max ( USB - C ) Black Black'), 'AirPods Max Black');   // el paréntesis se va entero, y 'Black Black' queda una vez
   assert.equal(nombreParaAmazon('iPhone 17 Lavander'), 'iPhone 17 Lavender');
-  const verde = [{ title: 'Apple Watch Ultra 2 [GPS + Cellular 49mm] Titanium Case with Green Alpine Loop', thumbnail: 'https://x/g.jpg' }];
+  const verde = [{ title: 'Apple Watch Ultra 2 [GPS + Cellular 49mm] Titanium Case with Green Alpine Loop', thumbnail: 'https://m.media-amazon.com/images/I/g.jpg' }];
   assert.equal(elegirImagenes(verde, { nombre: 'Apple Watch Ultra 2 49mm', color: 'Dark Green' }).length, 1, 'Dark Green encuentra Green');
 
   // Nombres de lista → como los escribe Amazon.
@@ -74,7 +74,7 @@ assert.equal(await firmaMPValida('', 'lo que sea', 'req-1', '123'), true, 'sin c
   assert.equal(nombreParaAmazon('Genuine Apple\u200e USB-C to C Cable'), 'Apple USB-C to C Cable');
   assert.equal(nombreParaAmazon('MacBook NEO A18 13" 8GB RAM 256GB Citrus'), 'MacBook NEO A18 13" 256GB Citrus');
   // Un reloj con la medida en el título de Amazon pasa aunque falte "aluminum".
-  const reloj = [{ title: 'Apple Watch Series 10 [GPS 46mm] Smartwatch with Silver Aluminum Case', thumbnail: 'https://x/w.jpg' }];
+  const reloj = [{ title: 'Apple Watch Series 10 [GPS 46mm] Smartwatch with Silver Aluminum Case', thumbnail: 'https://m.media-amazon.com/images/I/w.jpg' }];
   assert.equal(elegirImagenes(reloj, { nombre: 'Apple Watch Serie 10 46mm GPS M/L Silver Aluminio · Denim SB', color: '' }).length, 1, 'reloj de lista encontrado');
 }
 
