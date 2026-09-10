@@ -1,17 +1,13 @@
 /**
- * Chequeo sin red de la lógica del catálogo que vive en index.html: el mapa de fotos.
+ * Chequeo sin red de la lógica compartida del catálogo: fotos y categorías.
  *
  *   node test-catalogo.mjs
  *
- * Saca la función del HTML con una expresión regular en vez de importarla, porque el
- * módulo de index.html arranca Firebase al cargarse.
+ * Importa funciones puras, sin arrancar Firebase ni depender del formato del HTML.
  */
-import { readFileSync } from 'node:fs';
+import { armarMapaFotos, categoriaDe, slugFoto } from './src/shared/catalogo.js';
 import assert from 'node:assert/strict';
 
-const html = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-const src = html.match(/function armarMapaFotos\(archivos, clasificacion\)\{[\s\S]*?\n\}/)[0];
-const armarMapaFotos = new Function(src + '; return armarMapaFotos;')();
 
 // Sin decisiones: la clave sale del nombre, y el sufijo -2 solo si existe el base.
 assert.deepEqual(
@@ -38,12 +34,6 @@ assert.deepEqual(
 );
 
 // ── categoriaDe ──
-const srcCat = [
-  html.match(/const CATEGORIAS_CATALOGO = \[[\s\S]*?\];/)[0],
-  html.match(/const esUsado = .*;\n/)[0],
-  html.match(/function categoriaDe\(p\)\{[\s\S]*?return 'Otros';\n\}/)[0],
-].join('\n');
-const categoriaDe = new Function(srcCat + '; return categoriaDe;')();
 const casos = [
   [{ nombre: 'iPhone 15 128GB Black', estado: '9/10', bateria: 87 }, 'iPhone usados'],
   [{ nombre: 'iPhone 16 Pro Max 256GB White', estado: 'Nuevo' }, 'iPhone nuevos'],
@@ -65,8 +55,6 @@ const casos = [
 for (const [p, esperado] of casos) assert.equal(categoriaDe(p), esperado, `${p.nombre} → ${esperado}`);
 
 // ── slugFoto: el estado entre paréntesis no es parte del modelo ──
-const srcSlug = html.match(/const slugFoto = nombre => [\s\S]*?\.trim\(\)\.replace\(\/\\s\+\/g, '-'\);/)[0];
-const slugFoto = new Function(srcSlug + '; return slugFoto;')();
 assert.equal(slugFoto('iPhone 13 (Usado Grado A, 100% Ampsentrix)'), 'iphone-13');
 assert.equal(slugFoto('iPhone 14 Pro (Usado Grado A, 87-89%)'), 'iphone-14-pro');
 assert.equal(slugFoto('iPhone 15 128GB'), 'iphone-15');

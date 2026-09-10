@@ -1,0 +1,49 @@
+<div id="page-reportes" class="page">
+      <div class="page-header">
+        <h1>Reportes ✨</h1>
+        <p>Análisis inteligente de tu negocio con IA.</p>
+      </div>
+
+      <!-- Period selector -->
+      <div class="period-tabs">
+        <button class="ptab" onclick="setPeriod('semana',this)">Esta semana</button>
+        <button class="ptab active" onclick="setPeriod('hoy',this)">Hoy</button>
+        <button class="ptab" onclick="setPeriod('semana',this)">Semana</button>
+        <button class="ptab" onclick="setPeriod('mes',this)">Este mes</button>
+        <button class="ptab" onclick="setPeriod('mesant',this)">Mes anterior</button>
+        <button class="ptab" onclick="setPeriod('anio',this)">Este año</button>
+        <button class="ptab" onclick="setPeriod('todo',this)">Todo</button>
+        <button class="ptab" onclick="setPeriod('custom',this)">Personalizado</button>
+      </div>
+      <div class="date-range" id="rep-date-range" style="display:none;margin-bottom:1rem;">
+        <label>Desde</label>
+        <input type="date" id="rep-desde" onchange="renderReporte()">
+        <label>Hasta</label>
+        <input type="date" id="rep-hasta" onchange="renderReporte()">
+      </div>
+
+      <!-- Quick stats (always visible) -->
+      <div id="reporte-content"></div>
+
+      <!-- AI Report section -->
+      <div class="card" style="margin-top:1rem;">
+        <div class="card-title">Análisis con IA</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">La IA analiza todos tus datos del período seleccionado y genera un reporte completo con insights, comparativas y recomendaciones.</p>
+        <button class="btn-save" id="btn-generar-reporte" onclick="generarReporteIA()">
+          ✨ Generar reporte del período
+        </button>
+      </div>
+
+      <!-- Chat + report output -->
+      <div id="ai-report-section" style="display:none;">
+        <div class="card">
+          <div class="card-title">Reporte generado</div>
+          <div class="report-period-label" id="report-period-label"></div>
+          <div id="ai-chat-messages"></div>
+          <div class="chat-input-row">
+            <input type="text" id="ai-chat-input" placeholder="Preguntá algo más sobre tus datos..." onkeydown="if(event.key==='Enter')enviarPreguntaIA()">
+            <button class="chat-send-btn" id="ai-chat-send" onclick="enviarPreguntaIA()">→</button>
+          </div>
+        </div>
+      </div>
+    </div>

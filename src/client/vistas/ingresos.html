@@ -1,0 +1,174 @@
+<div id="page-ingresos" class="page">
+      <div class="page-header"><h1>Ventas</h1><p>Punto de venta y registro de ingresos.</p></div>
+
+      <div class="tab-btns">
+        <button class="tab-btn active" onclick="setPosTab('vender',this)">🛒 Vender</button>
+        <button class="tab-btn" onclick="setPosTab('manual',this)">+ Carga manual</button>
+      </div>
+
+      <!-- ═══ TAB POS ═══ -->
+      <div id="pos-tab-vender">
+        <div class="pos-layout">
+          <!-- CARRITO -->
+          <div class="pos-cart plegado" id="pos-cart">
+            <button class="pos-handle" id="pos-handle" onclick="togglePosCajon()">
+              <span class="ph-izq"><span id="ph-cant">🛒 Carrito vacío</span></span>
+              <span class="ph-tot" id="ph-total"></span>
+              <span class="ph-flecha">⌃</span>
+            </button>
+            <div class="card" style="margin-bottom:12px;padding:14px 16px;">
+              <div class="grid2" style="margin-bottom:0;">
+                <div class="field" style="margin-bottom:0;"><label>Cliente <span style="color:var(--text3);font-weight:400">(vacío = Cons. final)</span></label><input type="text" id="pos-cliente" placeholder="Nombre y apellido" list="clientes-global-dl" autocomplete="off" onchange="autofillTelCliente('pos')"></div>
+                <div class="field" style="margin-bottom:0;"><label>Teléfono</label><input type="tel" id="pos-cliente-tel" placeholder="Opcional"></div>
+              </div>
+              <datalist id="clientes-global-dl"></datalist>
+            </div>
+            <div class="card" style="margin-bottom:0;">
+              <div class="card-title">Carrito</div>
+              <div id="pos-cart-items"><div class="empty" style="padding:1.5rem 0;">Tocá un producto para agregarlo →</div></div>
+              <div class="pos-totales" id="pos-totales" style="display:none;">
+                <div class="field" style="margin:12px 0 8px;"><label>TC del día</label><input type="number" id="pos-tc" step="1" placeholder="1410" oninput="renderCart()"></div>
+                <div class="profit-row"><span class="profit-label">Total</span><span class="profit-val tk-b" id="pos-total">—</span></div>
+
+                <div class="cortesia-box">
+                  <div class="cortesia-title">🎁 Cortesías</div>
+                  <div class="cortesia-btns">
+                    <button class="cortesia-btn" id="cort-vidrio" onclick="toggleCortesia('vidrio')">Vidrio templado</button>
+                    <button class="cortesia-btn" id="cort-funda" onclick="toggleCortesia('funda')">Funda silicone case</button>
+                  </div>
+                </div>
+
+                <div class="field" style="margin-top:12px;">
+                  <label>Medios de cobro</label>
+                  <div style="display:flex;gap:6px;margin-bottom:8px;">
+                    <select id="pos-medio-sel" style="flex:1;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"></select>
+                    <input type="number" id="pos-medio-val" placeholder="Monto" step="0.01" min="0" style="width:100px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;" onkeydown="if(event.key==='Enter')addPosMedio()">
+                    <select id="pos-medio-moneda" style="width:75px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="ARS">ARS</option><option value="USD">USD</option></select>
+                    <button class="btn-add" style="background:#237A4B;" onclick="completarPago()" title="Completar con lo que falta">⚡</button>
+                    <button class="btn-add" onclick="addPosMedio()">+</button>
+                  </div>
+                  <div class="medio-tags" id="pos-medios-tags"></div>
+                </div>
+
+                <div class="field">
+                  <label class="check-item" style="margin-bottom:8px;"><input type="checkbox" id="pos-permuta" onchange="togglePosPermuta()"><span style="font-size:13px;color:var(--text2);margin-left:8px;">💱 Parte del pago en permuta</span></label>
+                  <div id="pos-permuta-wrap" style="display:none" class="permuta-box">
+                    <div class="grid2">
+                      <div class="field" style="margin-bottom:8px;"><label>Descripción</label><input type="text" id="pos-permuta-desc" placeholder="Ej: iPhone 12 en parte de pago"></div>
+                      <div class="field" style="margin-bottom:8px;"><label>Valor</label>
+                        <div style="display:flex;gap:6px;">
+                          <input type="number" id="pos-permuta-val" step="0.01" min="0" style="flex:1" oninput="renderCart()">
+                          <select id="pos-permuta-moneda" onchange="renderCart()" style="width:75px;padding:9px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="USD">USD</option><option value="ARS">ARS</option></select>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="field" style="margin-bottom:0;"><label>IMEI del bien recibido</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="pos-permuta-imei" placeholder="Opcional"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" onclick="checkImei('pos-permuta-imei')" title="Chequear IMEI online">🔍</button></div></div>
+                  </div>
+                </div>
+
+                <div class="profit-row"><span class="profit-label">Pagado</span><span class="profit-val" id="pos-pagado">—</span></div>
+                <div class="profit-row"><span class="profit-label tk-b" style="font-weight:600">Falta / Vuelto</span><span class="profit-val" id="pos-resto">—</span></div>
+
+                <div class="field"><label>Notas <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="pos-notas" placeholder="Detalle de la venta..."></div>
+
+                <div class="pos-actions">
+                  <button class="pos-btn-cancel" onclick="vaciarCarrito()">✕ Cancelar</button>
+                  <button class="pos-btn-checkout" id="btn-pos-cobrar" onclick="cobrarPos(true)">🖨 Cobrar e imprimir</button>
+                </div>
+                <button class="btn-secondary" style="width:100%;margin-top:6px;" onclick="cobrarPos(false)">Cobrar sin imprimir</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- GRILLA -->
+          <div class="pos-catalog">
+            <div class="tab-btns" style="margin-bottom:10px;">
+              <button class="tab-btn active" id="pv-cat" onclick="setPosView('cat',this)">Por categoría</button>
+              <button class="tab-btn" id="pv-all" onclick="setPosView('all',this)">Todos</button>
+              <button class="tab-btn" id="pv-eq" onclick="setPosView('eq',this)">📱 Equipos</button>
+              <button class="tab-btn" id="pv-consig" onclick="setPosView('consig',this)">🤝 Consignación</button>
+            </div>
+            <div class="pos-breadcrumb" id="pos-breadcrumb"></div>
+            <div class="filters-bar" style="margin-bottom:10px;">
+              <input type="text" id="pos-buscar" placeholder="Buscar producto, SKU o IMEI en todo el catálogo...">
+            </div>
+            <div class="pos-grid" id="pos-grid"></div>
+            <div class="pos-quick-actions">
+              <button class="pqa-btn" onclick="abrirTkHistory()">🎫 Ver tickets</button>
+              <button class="pqa-btn" onclick="abrirFactHistory()">🧾 Ver facturas</button>
+              <button class="pqa-btn" onclick="goTo('rep')">➕ Nueva reparación</button>
+              <button class="pqa-btn pqa-danger" onclick="vaciarCarrito()">🗑 Vaciar carrito</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ TAB CARGA MANUAL (form original) ═══ -->
+      <div id="pos-tab-manual" style="display:none">
+      <div class="card">
+        <div class="card-title">Nuevo ingreso</div>
+
+        <div class="grid2">
+          <div class="field"><label>Fecha</label><input type="date" id="inc-fecha"></div>
+          <div class="field"><label>Item ID <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="inc-itemid" placeholder="Ej: #00123"></div>
+        </div>
+
+        <div class="field"><label>Producto / Origen del ingreso</label><input type="text" id="inc-nombre" placeholder="Ej: iPhone 14 Pro, Reparación pantalla..."></div>
+
+        <div class="grid2">
+          <div class="field"><label>Categoría</label><select id="inc-categoria"><option value="">Sin categoría</option><option>Venta producto</option><option>Reparación</option><option>Servicio</option><option>Otros</option></select></div>
+          <div class="field"><label>IMEI / N° de serie <span style="color:var(--text3);font-weight:400">(opcional)</span></label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="inc-imei" placeholder="Ej: 353012345678901"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" onclick="checkImei('inc-imei')" title="Chequear IMEI online">🔍</button></div></div>
+        </div>
+
+        <div class="field"><label>Costo del producto/servicio (lo que te costó a vos)</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" id="inc-costo" placeholder="0" step="0.01" min="0" style="flex:1" oninput="calcIncProfit()">
+            <select id="inc-costo-moneda" onchange="calcIncProfit()" style="width:90px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;">
+              <option value="ARS">ARS</option><option value="USD">USD</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field"><label>TC del momento del cobro (ARS/USD)</label><input type="number" id="inc-tc" placeholder="1410" step="1" oninput="calcIncProfit()"></div>
+
+        <div class="field">
+          <label>Medios de cobro <span style="color:var(--text3);font-weight:400">(podés agregar más de uno)</span></label>
+          <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <select id="inc-medio-sel" style="flex:1;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"></select>
+            <input type="number" id="inc-medio-val" placeholder="Monto" step="0.01" min="0" style="width:120px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;" onkeydown="if(event.key==='Enter')addIncMedio()">
+            <select id="inc-medio-moneda" style="width:80px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="ARS">ARS</option><option value="USD">USD</option></select>
+            <button class="btn-add" onclick="addIncMedio()">+</button>
+          </div>
+          <div class="medio-tags" id="inc-medios-tags"></div>
+        </div>
+
+        <div class="field">
+          <label class="check-item" style="margin-bottom:8px;"><input type="checkbox" id="inc-permuta" onchange="togglePermuta()"><span style="font-size:13px;color:var(--text2);margin-left:8px;">💱 Parte del pago fue en permuta (producto/servicio)</span></label>
+          <div id="permuta-wrap" style="display:none" class="permuta-box">
+            <div class="grid2">
+              <div class="field" style="margin-bottom:8px;"><label>Descripción de la permuta</label><input type="text" id="inc-permuta-desc" placeholder="Ej: iPhone 12 en parte de pago"></div>
+              <div class="field" style="margin-bottom:8px;"><label>Valor monetario de la permuta</label>
+                <div style="display:flex;gap:6px;">
+                  <input type="number" id="inc-permuta-val" placeholder="0" step="0.01" min="0" style="flex:1" oninput="calcIncProfit()">
+                  <select id="inc-permuta-moneda" onchange="calcIncProfit()" style="width:80px;padding:9px 8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="ARS">ARS</option><option value="USD">USD</option></select>
+                </div>
+              </div>
+            </div>
+            <div class="field" style="margin-bottom:0;"><label>IMEI / N° de serie del bien recibido <span style="color:var(--text3);font-weight:400">(opcional)</span></label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="inc-permuta-imei" placeholder="Ej: 353012345678901"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" onclick="checkImei('inc-permuta-imei')" title="Chequear IMEI online">🔍</button></div></div>
+          </div>
+        </div>
+
+        <!-- Profit preview -->
+        <div id="inc-profit-box" class="permuta-box" style="margin-bottom:14px;">
+          <div class="profit-row"><span class="profit-label">Total cobrado</span><span class="profit-val" id="pp-cobrado">—</span></div>
+          <div class="profit-row"><span class="profit-label">Costo</span><span class="profit-val" id="pp-costo">—</span></div>
+          <div class="profit-row"><span class="profit-label" style="font-weight:600">Ganancia bruta</span><span class="profit-val" id="pp-ganancia">—</span></div>
+        </div>
+
+        <div class="field"><label>Notas adicionales</label><textarea id="inc-notas" placeholder="Detalles, cliente, comprobante..."></textarea></div>
+        <button class="btn-save" id="btn-inc-guardar" onclick="guardarIngreso()">Registrar ingreso</button>
+      </div>
+      </div>
+
+      <!-- ═══ TAB HISTORIAL ═══ -->
+    </div>

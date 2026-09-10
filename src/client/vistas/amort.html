@@ -1,0 +1,17 @@
+<div id="page-amort" class="page">
+      <div class="page-header"><h1>Bienes & amortizaciones</h1><p>Lo que hay en el negocio y se deprecia con el tiempo.</p></div>
+      <div class="card">
+        <div class="card-title">Agregar bien</div>
+        <div class="grid2">
+          <div class="field"><label>Nombre</label><input type="text" id="am-nombre" placeholder="Ej: Mostrador 1..."></div>
+          <div class="field"><label>Valor aprox. (USD)</label><input type="number" id="am-valor" placeholder="0" min="0"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Fecha de compra</label><input type="date" id="am-fecha"></div>
+          <div class="field"><label>Vida útil (años)</label><input type="number" id="am-vida" placeholder="5" min="1" value="5"></div>
+        </div>
+        <div class="field"><label>Notas</label><input type="text" id="am-notas" placeholder="Modelo, proveedor, estado..."></div>
+        <button class="btn-save" onclick="guardarAmort()">Agregar bien</button>
+      </div>
+      <div class="card"><div class="card-title">Inventario</div><div id="amort-list"></div></div>
+    </div>

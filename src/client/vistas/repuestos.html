@@ -1,0 +1,110 @@
+<div id="page-repuestos" class="page">
+      <div class="page-header">
+        <h1>Repuestos</h1>
+        <p>Inventario de piezas OEM pull sacadas de equipos donantes. Valuadas a precio de reposición.</p>
+      </div>
+
+      <div class="tab-btns" style="margin-bottom:14px;">
+        <button class="tab-btn active" id="rp-tab-inv" onclick="setRepuestosTab('inv',this)">📦 Mi caja</button>
+        <button class="tab-btn" id="rp-tab-add" onclick="setRepuestosTab('add',this)">➕ Cargar piezas</button>
+        <button class="tab-btn" id="rp-tab-precios" onclick="setRepuestosTab('precios',this)">💲 Precios de referencia</button>
+      </div>
+
+      <!-- TAB: Inventario -->
+      <div id="rp-sec-inv">
+        <div id="rp-metrics" class="metrics"></div>
+        <div class="filters-bar" style="margin:12px 0;">
+          <input type="text" id="rp-fl-buscar" placeholder="🔎 Buscar modelo, pieza, color... (ej: 13 pro, batería, purple)" oninput="deb('rpB',renderRepInv)" style="flex:2;">
+          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="vaciarCaja()" title="Borrar todas las piezas cargadas">🗑 Vaciar caja</button>
+          <select id="rp-fl-tipo" onchange="renderRepInv()">
+            <option value="">Todas las piezas</option>
+            <option value="modulo">Módulo (pantalla)</option>
+            <option value="chasis">Chasis</option>
+            <option value="tapa">Tapa</option>
+            <option value="camara">Cámara trasera</option>
+            <option value="bateria">Batería</option>
+            <option value="flex_carga">Flex de carga</option>
+            <option value="otro">Otro</option>
+          </select>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div style="overflow-x:auto;">
+            <table class="rp-table">
+              <thead><tr><th>Detalle</th><th style="text-align:right;width:110px;">Valor USD</th><th style="text-align:center;width:70px;">Cant.</th><th style="width:80px;"></th></tr></thead>
+              <tbody id="rp-inv-body"></tbody>
+              <tfoot id="rp-inv-foot"></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Cargar -->
+      <div id="rp-sec-add" style="display:none;">
+        <div class="card" style="background:#FDF6EC;border-color:#F2C48D;">
+          <div class="card-title">🤖 Pegar lista (la IA la interpreta)</div>
+          <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Pegá tu lista tal cual, como la anotás vos. Entiende "x2", colores separados por /, "todo menos módulo", equipos enteros, etc.</p>
+          <textarea id="rp-bulk-text" placeholder="Módulo iphone 16 pro x2&#10;Batería 16 pro x2&#10;Chasis 14 pro purple esim x2&#10;iPhone 11 todo menos módulo blanco&#10;..." style="width:100%;height:150px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);outline:none;resize:vertical;margin-bottom:8px;"></textarea>
+          <button class="btn-save" id="btn-rp-bulk" onclick="cargarCajaIA()">🤖 Interpretar y cargar</button>
+          <div id="rp-bulk-status" style="font-size:12px;color:var(--text2);margin-top:8px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">✏️ Cargar a mano</div>
+          <div class="grid2">
+            <div class="field"><label>Modelo</label><input type="text" id="rp-modelo" placeholder="Ej: iPhone 14 Pro" list="rp-modelos-dl" autocomplete="off"><datalist id="rp-modelos-dl"></datalist></div>
+            <div class="field"><label>Color / variante <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="rp-color" placeholder="Ej: purple eSIM"></div>
+          </div>
+          <div class="field"><label>Cantidad de cada pieza</label>
+            <div id="rp-piezas-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;"></div>
+          </div>
+          <div class="field"><label>Notas <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="rp-notas" placeholder="De qué equipo salió, estado, etc."></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn-save" id="btn-rp-guardar" onclick="guardarPiezas()">Agregar a la caja</button>
+            <button class="btn-secondary" onclick="llenarEquipoEntero()" title="Pone 1 en las piezas principales">⚡ Equipo entero</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: Precios -->
+      <div id="rp-sec-precios" style="display:none;">
+        <div class="card" style="background:#FDF6EC;border-color:#F2C48D;">
+          <div class="card-title">📋 Pegar página de MobileSentrix (o cualquier lista)</div>
+          <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Abrí la página del modelo en MobileSentrix con tu sesión, <b>Ctrl+A → Ctrl+C</b>, y pegá acá. La IA saca los precios OEM pull de cada pieza y los carga todos juntos. También sirve pegar tu propia lista de costos.</p>
+          <div class="grid2" style="margin-bottom:8px;">
+            <div class="field" style="margin-bottom:0;"><label>Modelo al que corresponde <span style="color:var(--text3);font-weight:400">(si la página es de un solo modelo)</span></label><input type="text" id="rpp-bulk-modelo" placeholder="Ej: iPhone 14 Pro — dejalo vacío si la lista trae varios" list="rp-modelos-dl" autocomplete="off"></div>
+            <div class="field" style="margin-bottom:0;"><label>Preferencia de calidad</label><select id="rpp-bulk-calidad">
+              <option value="oem_pull">OEM Pull / Original usado (recomendado)</option>
+              <option value="cualquiera">La más barata que encuentre</option>
+              <option value="premium">Premium / Aftermarket alta</option>
+            </select></div>
+          </div>
+          <textarea id="rpp-bulk-text" placeholder="Pegá acá el contenido de la página..." style="width:100%;height:160px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12px;color:var(--text);outline:none;resize:vertical;margin-bottom:8px;"></textarea>
+          <button class="btn-save" id="btn-rpp-bulk" onclick="importarPreciosIA()">🤖 Extraer precios y cargar</button>
+          <div id="rpp-bulk-status" style="font-size:12px;color:var(--text2);margin-top:8px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">💲 Cargar un precio a mano</div>
+          <p style="font-size:12px;color:var(--text2);margin-bottom:12px;">Cargá lo que te costaría reponer cada pieza hoy. El inventario usa estos valores para valuar tu caja y para el costo real cuando usás una pieza en una reparación. Actualizalos cuando el mercado se mueva.</p>
+          <div class="grid3">
+            <div class="field"><label>Modelo</label><input type="text" id="rpp-modelo" placeholder="iPhone 14 Pro" list="rp-modelos-dl" autocomplete="off"></div>
+            <div class="field"><label>Tipo de pieza</label><select id="rpp-tipo">
+              <option value="modulo">Módulo (pantalla)</option>
+              <option value="chasis">Chasis</option>
+              <option value="tapa">Tapa</option>
+              <option value="camara">Cámara trasera</option>
+              <option value="bateria">Batería</option>
+              <option value="flex_carga">Flex de carga</option>
+              <option value="otro">Otro</option>
+            </select></div>
+            <div class="field"><label>Valor USD</label>
+              <div style="display:flex;gap:6px;">
+                <input type="number" id="rpp-valor" placeholder="0" step="0.01" style="flex:1;">
+                <button class="btn-add" onclick="guardarPrecioRef()">✓</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="rp-precios-list"></div>
+      </div>
+    </div>

@@ -1,0 +1,28 @@
+<div id="page-facturas" class="page">
+      <div class="page-header">
+        <h1>Facturas</h1>
+        <p>Todas las operaciones cobradas: ventas, accesorios, cobros de reparación. Borrar una factura devuelve los productos al stock.</p>
+      </div>
+      <div class="period-tabs" id="inc-presets" style="margin-top:.25rem;">
+        <button class="ptab active" onclick="setIncPreset('hoy',this)">Hoy</button>
+        <button class="ptab" onclick="setIncPreset('semana',this)">Semana</button>
+        <button class="ptab" onclick="setIncPreset('mes',this)">Este mes</button>
+        <button class="ptab" onclick="setIncPreset('mesant',this)">Mes anterior</button>
+        <button class="ptab" onclick="setIncPreset('todo',this)">Todo</button>
+      </div>
+      <div class="date-range" style="margin-top:.25rem;">
+        <label>Desde</label>
+        <input type="date" id="inc-fl-desde">
+        <label>Hasta</label>
+        <input type="date" id="inc-fl-hasta">
+        <button class="btn-clear-range" onclick="clearIngresosRange()">✕ Limpiar</button>
+      </div>
+      <div class="filters-bar">
+        <select id="inc-fl-cat"><option value="">Todas las categorías</option></select>
+        <select id="inc-fl-mes"><option value="">Todos los meses</option></select>
+        <input type="text" id="inc-fl-buscar" placeholder="Buscar producto, cliente o #factura...">
+      </div>
+      <div id="arca-banner"></div>
+      <div id="inc-metrics" class="metrics"></div>
+      <div class="card" id="inc-list-body"></div>
+    </div>

@@ -1,0 +1,84 @@
+<div id="page-fijos" class="page">
+      <div class="page-header">
+        <h1>Gastos fijos</h1>
+        <p>Servicios y gastos recurrentes. Controlá vencimientos y pagos de un vistazo.</p>
+      </div>
+
+      <div class="tab-btns">
+        <button class="tab-btn active" onclick="setFijosTab('negocio',this)">🏪 Negocio</button>
+        <button class="tab-btn" onclick="setFijosTab('personal',this)">🏠 Personal</button>
+        <button class="tab-btn" onclick="setFijosTab('nuevo',this)">+ Agregar</button>
+      </div>
+
+      <!-- Tab negocio / personal -->
+      <div id="fijos-tab-negocio">
+        <div class="gf-summary" id="gf-neg-summary"></div>
+        <div class="card" style="overflow-x:auto;">
+          <table class="gf-table" id="gf-neg-table">
+            <thead><tr>
+              <th>Servicio</th>
+              <th>Último pago</th>
+              <th>Próx. vencimiento</th>
+              <th>Medio</th>
+              <th>Importe</th>
+              <th>Estado</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="gf-neg-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="fijos-tab-personal" style="display:none">
+        <div class="gf-summary" id="gf-per-summary"></div>
+        <div class="card" style="overflow-x:auto;">
+          <table class="gf-table" id="gf-per-table">
+            <thead><tr>
+              <th>Servicio</th>
+              <th>Último pago</th>
+              <th>Próx. vencimiento</th>
+              <th>Medio</th>
+              <th>Importe</th>
+              <th>Estado</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="gf-per-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab nuevo -->
+      <div id="fijos-tab-nuevo" style="display:none">
+        <div class="card">
+          <div class="card-title">Agregar gasto fijo</div>
+          <div class="tipo-toggle">
+            <button class="tipo-btn neg active" id="gf-btn-neg" onclick="setGFTipo('negocio')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>Negocio
+            </button>
+            <button class="tipo-btn per" id="gf-btn-per" onclick="setGFTipo('personal')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Personal
+            </button>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Nombre del servicio</label><input type="text" id="gf-nombre" placeholder="Ej: Alquiler local, Agua, Internet"></div>
+            <div class="field"><label>Categoría</label><select id="gf-cat"></select></div>
+          </div>
+          <div class="field"><label>Identificador / N° de cuenta <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="gf-id-cuenta" placeholder="Ej: Cuenta OSSE 7356/004, alias: agua.mp"></div>
+          <div class="grid2">
+            <div class="field"><label>Importe <span style="color:var(--text3);font-weight:400">(dejar en 0 si varía)</span></label>
+              <div style="display:flex;gap:6px;">
+                <input type="number" id="gf-importe" placeholder="0" step="0.01" min="0" style="flex:1">
+                <select id="gf-moneda" style="width:80px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="ARS">ARS</option><option value="USD">USD</option></select>
+              </div>
+            </div>
+            <div class="field"><label>Medio de pago habitual</label><select id="gf-medio"></select></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Día de vencimiento del mes</label><input type="number" id="gf-dia-venc" placeholder="Ej: 10" min="1" max="31"></div>
+            <div class="field"><label>Días de alerta antes del vencimiento</label><input type="number" id="gf-dias-alerta" placeholder="5" min="1" max="30" value="5"></div>
+          </div>
+          <div class="field"><label>Notas</label><input type="text" id="gf-notas" placeholder="Detalles, link de pago, etc."></div>
+          <button class="btn-save" id="btn-gf-guardar" onclick="guardarFijo()">Agregar gasto fijo</button>
+        </div>
+      </div>
+    </div>

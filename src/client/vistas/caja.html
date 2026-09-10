@@ -1,0 +1,26 @@
+<div id="page-caja" class="page">
+      <div class="page-header">
+        <h1>Cierre de caja</h1>
+        <p>Movimientos del día por medio de pago. Cerrá la caja para dejar registro.</p>
+      </div>
+      <div class="date-range" style="margin-top:.25rem;">
+        <label>Día</label>
+        <input type="date" id="caja-fecha" onchange="renderCaja()">
+      </div>
+      <div id="caja-metrics" class="metrics"></div>
+      <div class="card" style="overflow-x:auto;">
+        <div class="card-title">Movimientos por medio de pago</div>
+        <table class="gf-table" id="caja-table">
+          <thead><tr><th>Medio</th><th style="text-align:right">Entradas</th><th style="text-align:right">Salidas</th><th style="text-align:right">Neto</th></tr></thead>
+          <tbody id="caja-body"></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <div class="field"><label>Notas del cierre <span style="color:var(--text3);font-weight:400">(opcional — diferencias, retiros, etc.)</span></label><input type="text" id="caja-notas" placeholder="Ej: Retiré $50.000 para el proveedor"></div>
+        <button class="btn-save" id="btn-cerrar-caja" onclick="cerrarCaja()">🔒 Cerrar caja del día</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Cierres anteriores</div>
+        <div id="caja-historial"></div>
+      </div>
+    </div>

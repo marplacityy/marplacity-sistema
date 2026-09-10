@@ -1,0 +1,16 @@
+<div id="page-pedidos" class="page">
+      <div class="page-header">
+        <h1>Pedidos</h1>
+        <p>Lo que compraron o reservaron desde el catálogo web. Un pedido pagado o reservado es alguien esperando: escribile por WhatsApp, coordiná la entrega y marcalo entregado.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+          <button class="btn-secondary" id="ped-f-abiertos" onclick="filtrarPedidos('abiertos')">Por atender</button>
+          <button class="btn-secondary" id="ped-f-todos" onclick="filtrarPedidos('todos')">Todos</button>
+        </div>
+        <div style="overflow-x:auto;"><table class="tkh-table">
+          <thead><tr><th style="width:120px;">Cuándo</th><th>Cliente</th><th>Producto</th><th>Pago</th><th>Entrega</th><th style="width:100px;">Estado</th><th style="width:170px;"></th></tr></thead>
+          <tbody id="ped-body"></tbody>
+        </table></div>
+      </div>
+    </div>

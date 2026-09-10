@@ -345,7 +345,7 @@ console.log('\n── un solo camino de envio automatico ──');
 // caminos automaticos tienen que pasar SIEMPRE por mandarAutomatico(), que es donde
 // viven el apagado y el modo prueba.
 {
-  const src = readFileSync(new URL('./worker-ig.js', import.meta.url), 'utf8')
+  const src = readFileSync(new URL('../../server/services/ig-bot/worker-ig.js', import.meta.url), 'utf8').replaceAll('\r\n', '\n')
     .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
   // El cierre se busca DESPUES del arranque de la funcion, no desde el principio del
   // archivo, que es lo que devolvia pedazos vacios.
@@ -383,7 +383,7 @@ console.log('\n── campos del doc vs. firestore.rules ──');
   // Los comentarios se sacan primero: estan llenos de dos puntos ("no se puede seguir:
   // sin fecha...") y se colarian como si fueran campos.
   const pelar = txt => txt.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-  const src = pelar(readFileSync(new URL('./worker-ig.js', import.meta.url), 'utf8'));
+  const src = pelar(readFileSync(new URL('../../server/services/ig-bot/worker-ig.js', import.meta.url), 'utf8').replaceAll('\r\n', '\n'));
   const rules = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8');
   const entre = (txt, desde, hasta) => txt.slice(txt.indexOf(desde), txt.indexOf(hasta));
 

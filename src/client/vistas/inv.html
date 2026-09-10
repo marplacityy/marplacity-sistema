@@ -1,0 +1,53 @@
+<div id="page-inv" class="page">
+      <div class="page-header">
+        <h1>Inventario</h1>
+        <p>Productos con cantidad: accesorios, repuestos, insumos. Los equipos con IMEI van en Equipos.</p>
+      </div>
+
+      <div class="tab-btns">
+        <button class="tab-btn active" onclick="setInvTab('lista',this)">📦 Productos</button>
+        <button class="tab-btn" onclick="setInvTab('nuevo',this)">+ Agregar</button>
+      </div>
+
+      <div id="inv-tab-lista">
+        <div id="inv-metrics" class="metrics"></div>
+        <div class="filters-bar">
+          <select id="inv-fl-cat"><option value="">Todas las categorías</option></select>
+          <select id="inv-fl-stock">
+            <option value="">Todos</option>
+            <option value="low">Stock bajo</option>
+            <option value="out">Sin stock</option>
+            <option value="ok">Con stock</option>
+          </select>
+          <input type="text" id="inv-fl-buscar" placeholder="Buscar producto o SKU...">
+        </div>
+        <div class="inv-grid" id="inv-list"></div>
+      </div>
+
+      <div id="inv-tab-nuevo" style="display:none">
+        <div class="card">
+          <div class="card-title">Agregar producto</div>
+          <div class="grid2">
+            <div class="field"><label>Producto</label><input type="text" id="i-nombre" placeholder="Ej: Vidrio templado iPhone 15"></div>
+            <div class="field"><label>Categoría</label>
+              <select id="i-cat"></select>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>SKU / Código <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="i-sku" placeholder="Para buscar rápido"></div>
+            <div class="field"><label>Cantidad inicial</label><input type="number" id="i-qty" min="0" step="1" placeholder="0"></div>
+          </div>
+          <div class="grid3">
+            <div class="field"><label>Costo unitario</label><input type="number" id="i-costo" min="0" step="0.01" placeholder="0"></div>
+            <div class="field"><label>Moneda</label><select id="i-moneda"><option value="ARS">ARS $</option><option value="USD">USD u$s</option></select></div>
+            <div class="field"><label>Precio sugerido <span style="color:var(--text3);font-weight:400">(editable al vender)</span></label><input type="number" id="i-sugerido" min="0" step="0.01" placeholder="0"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Alerta de stock bajo <span style="color:var(--text3);font-weight:400">(avisar cuando queden)</span></label><input type="number" id="i-minimo" min="0" step="1" value="3"></div>
+            <div class="field"><label>Proveedor <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="i-prov" placeholder="De dónde lo comprás"></div>
+          </div>
+          <div class="field"><label>Notas</label><input type="text" id="i-notas" placeholder="Opcional"></div>
+          <button class="btn-save" id="btn-i-guardar" onclick="guardarInv()">Agregar al inventario</button>
+        </div>
+      </div>
+    </div>

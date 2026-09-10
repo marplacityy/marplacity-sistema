@@ -1,0 +1,41 @@
+<div id="page-listado" class="page">
+      <div class="page-header"><h1>Listado</h1><p>Todos los gastos registrados.</p></div>
+
+      <!-- Date range filter -->
+            <div class="period-tabs" id="gl-presets">
+        <button class="ptab active" onclick="setGastosPreset('hoy',this)">Hoy</button>
+        <button class="ptab" onclick="setGastosPreset('semana',this)">Semana</button>
+        <button class="ptab" onclick="setGastosPreset('mes',this)">Este mes</button>
+        <button class="ptab" onclick="setGastosPreset('mesant',this)">Mes anterior</button>
+        <button class="ptab" onclick="setGastosPreset('todo',this)">Todo</button>
+      </div>
+<div class="date-range" id="gastos-date-range">
+        <label>Desde</label>
+        <input type="date" id="fl-desde" onchange="onGastosRangeChange()">
+        <label>Hasta</label>
+        <input type="date" id="fl-hasta" onchange="onGastosRangeChange()">
+        <button class="btn-clear-range" onclick="clearGastosRange()">✕ Limpiar</button>
+      </div>
+      <!-- Quick month chips -->
+      <div class="month-chips" id="month-chips"></div>
+
+      <!-- Filters -->
+      <div class="filters-bar">
+        <select id="fl-tipo">
+          <option value="">Negocio + Personal</option>
+          <option value="negocio">Solo negocio</option>
+          <option value="personal">Solo personal</option>
+        </select>
+        <select id="fl-cat"><option value="">Todas las categorías</option></select>
+        <select id="fl-medio"><option value="">Todos los medios</option></select>
+        <select id="fl-estado">
+          <option value="">Todos los estados</option>
+          <option value="pagado">Pagados</option>
+          <option value="pendiente">Pendientes</option>
+        </select>
+        <input type="text" id="fl-buscar" placeholder="Buscar concepto...">
+      </div>
+
+      <div id="listado-metrics" class="metrics"></div>
+      <div class="card" id="listado-body"></div>
+    </div>

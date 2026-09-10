@@ -1,0 +1,28 @@
+<div id="page-encargues" class="page">
+      <div class="page-header">
+        <h1>Encargues</h1>
+        <p>Pedidos por encargue con seña. La seña entra a caja el día que la recibís; la ganancia, el día que entregás.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Nuevo encargue</div>
+        <div class="grid2">
+          <div class="field"><label>Cliente</label><input type="text" id="en-cliente" list="clientes-global-dl" autocomplete="off" placeholder="Nombre y apellido"></div>
+          <div class="field"><label>Teléfono</label><input type="tel" id="en-tel" placeholder="Para avisarle cuando llegue"></div>
+        </div>
+        <div class="field"><label>Producto encargado</label><input type="text" id="en-producto" placeholder="Ej: iPhone 17 Pro Max 512GB Desert Titanium"></div>
+        <div class="grid3">
+          <div class="field"><label>Precio pactado</label><input type="number" id="en-precio" step="0.01" min="0" placeholder="0"></div>
+          <div class="field"><label>Moneda</label><select id="en-moneda"><option value="USD">USD u$s</option><option value="ARS">ARS $</option></select></div>
+          <div class="field"><label>TC</label><input type="number" id="en-tc" step="1"></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>Seña recibida</label><input type="number" id="en-sena" step="0.01" min="0" placeholder="0"></div>
+          <div class="field"><label>Medio de la seña</label><select id="en-sena-medio"></select></div>
+          <div class="field"><label>Llegada estimada</label><input type="date" id="en-fecha-est"></div>
+        </div>
+        <div class="field"><label>Notas</label><input type="text" id="en-notas" placeholder="Proveedor al que se lo pedís, color alternativo, etc."></div>
+        <button class="btn-save" id="btn-encargue" onclick="guardarEncargue()">Registrar encargue</button>
+      </div>
+      <div id="en-metrics" class="metrics"></div>
+      <div id="en-list"></div>
+    </div>

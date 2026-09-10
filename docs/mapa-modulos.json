@@ -1,0 +1,190 @@
+{
+  "revisionOriginal": "d3b366bfa413f7b47ce0a0e74653d076914ed7bd",
+  "paginas": [
+    "page-cargar",
+    "page-listado",
+    "page-reportes",
+    "page-amort",
+    "page-config",
+    "page-ingresos",
+    "page-facturas",
+    "page-stock",
+    "page-consig",
+    "page-fijos",
+    "page-rep",
+    "page-inv",
+    "page-clientes",
+    "page-home",
+    "page-caja",
+    "page-encargues",
+    "page-repuestos",
+    "page-bandeja",
+    "page-conocimiento",
+    "page-pedidos",
+    "page-catalogo",
+    "page-asistente",
+    "page-facturador"
+  ],
+  "modulos": [
+    {
+      "ruta": "core/firebase",
+      "inicializar": "inicializarFirebase",
+      "funciones": 0
+    },
+    {
+      "ruta": "core/datos",
+      "inicializar": "inicializarDatos",
+      "funciones": 13
+    },
+    {
+      "ruta": "core/interfaz",
+      "inicializar": "inicializarInterfaz",
+      "funciones": 9
+    },
+    {
+      "ruta": "modulos/gastos",
+      "inicializar": "inicializarGastos",
+      "funciones": 5
+    },
+    {
+      "ruta": "modulos/ingresos",
+      "inicializar": "inicializarIngresos",
+      "funciones": 5
+    },
+    {
+      "ruta": "modulos/importaciones",
+      "inicializar": "inicializarImportaciones",
+      "funciones": 1
+    },
+    {
+      "ruta": "modulos/facturas",
+      "inicializar": "inicializarFacturas",
+      "funciones": 11
+    },
+    {
+      "ruta": "modulos/gastos-fijos",
+      "inicializar": "inicializarGastosFijos",
+      "funciones": 6
+    },
+    {
+      "ruta": "modulos/etiquetas",
+      "inicializar": "inicializarEtiquetas",
+      "funciones": 3
+    },
+    {
+      "ruta": "modulos/imei",
+      "inicializar": "inicializarImei",
+      "funciones": 3
+    },
+    {
+      "ruta": "modulos/repuestos",
+      "inicializar": "inicializarRepuestos",
+      "funciones": 9
+    },
+    {
+      "ruta": "modulos/encargues",
+      "inicializar": "inicializarEncargues",
+      "funciones": 3
+    },
+    {
+      "ruta": "modulos/caja",
+      "inicializar": "inicializarCaja",
+      "funciones": 2
+    },
+    {
+      "ruta": "modulos/inicio",
+      "inicializar": "inicializarInicio",
+      "funciones": 2
+    },
+    {
+      "ruta": "modulos/clientes",
+      "inicializar": "inicializarClientes",
+      "funciones": 11
+    },
+    {
+      "ruta": "modulos/pos",
+      "inicializar": "inicializarPos",
+      "funciones": 15
+    },
+    {
+      "ruta": "modulos/inventario",
+      "inicializar": "inicializarInventario",
+      "funciones": 3
+    },
+    {
+      "ruta": "modulos/costos",
+      "inicializar": "inicializarCostos",
+      "funciones": 13
+    },
+    {
+      "ruta": "modulos/whatsapp",
+      "inicializar": "inicializarWhatsapp",
+      "funciones": 2
+    },
+    {
+      "ruta": "modulos/reparaciones",
+      "inicializar": "inicializarReparaciones",
+      "funciones": 10
+    },
+    {
+      "ruta": "modulos/stock",
+      "inicializar": "inicializarStock",
+      "funciones": 4
+    },
+    {
+      "ruta": "modulos/consignacion",
+      "inicializar": "inicializarConsignacion",
+      "funciones": 12
+    },
+    {
+      "ruta": "modulos/reportes",
+      "inicializar": "inicializarReportes",
+      "funciones": 9
+    },
+    {
+      "ruta": "modulos/amortizaciones",
+      "inicializar": "inicializarAmortizaciones",
+      "funciones": 1
+    },
+    {
+      "ruta": "modulos/configuracion",
+      "inicializar": "inicializarConfiguracion",
+      "funciones": 1
+    },
+    {
+      "ruta": "modulos/instagram",
+      "inicializar": "inicializarInstagram",
+      "funciones": 8
+    },
+    {
+      "ruta": "modulos/conocimiento",
+      "inicializar": "inicializarConocimiento",
+      "funciones": 15
+    },
+    {
+      "ruta": "modulos/arca",
+      "inicializar": "inicializarArca",
+      "funciones": 8
+    },
+    {
+      "ruta": "modulos/catalogo",
+      "inicializar": "inicializarCatalogo",
+      "funciones": 16
+    },
+    {
+      "ruta": "modulos/asistente",
+      "inicializar": "inicializarAsistente",
+      "funciones": 4
+    },
+    {
+      "ruta": "modulos/facturador",
+      "inicializar": "inicializarFacturador",
+      "funciones": 2
+    },
+    {
+      "ruta": "core/sesion",
+      "inicializar": "inicializarSesion",
+      "funciones": 0
+    }
+  ]
+}

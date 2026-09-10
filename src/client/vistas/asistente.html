@@ -1,0 +1,23 @@
+<div id="page-asistente" class="page">
+      <div class="page-header">
+        <h1>Asistente</h1>
+        <p>Contale lo que pasó como se lo contarías a alguien. Busca, arma reportes y te prepara las cargas — pero <b>no guarda nada sin que vos lo confirmes</b>.</p>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div id="ag-chat" style="height:52vh;min-height:320px;overflow-y:auto;padding:16px;background:var(--bg);"></div>
+        <div style="display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:var(--surface);">
+          <input type="text" id="ag-input" placeholder="Gasté 15 dólares en cosas de limpieza…" autocomplete="off"
+                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();mandarAlAgente();}"
+                 style="flex:1;padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;">
+          <button class="btn-save" id="btn-ag-enviar" style="width:auto;padding:11px 20px;" onclick="mandarAlAgente()">Enviar</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <button class="btn-secondary" onclick="ejemploAgente('¿Cómo me fue esta semana?')">¿Cómo me fue esta semana?</button>
+        <button class="btn-secondary" onclick="ejemploAgente('Gasté 15 dólares en cosas de limpieza para el local')">Anotar un gasto</button>
+        <button class="btn-secondary" onclick="ejemploAgente('¿Qué iPhone 15 tengo en stock?')">Buscar en el stock</button>
+        <button class="btn-secondary" style="color:var(--text3);" onclick="limpiarAgente()">Empezar de nuevo</button>
+      </div>
+    </div>

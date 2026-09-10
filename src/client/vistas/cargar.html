@@ -1,0 +1,46 @@
+<div id="page-cargar" class="page active">
+      <div class="page-header"><h1>Cargar gasto</h1><p>Registrá un nuevo gasto de negocio o personal.</p></div>
+      <div class="card" style="background:#FDF6EC;border-color:#F2C48D;">
+        <div style="font-size:13px;color:#854F0B;margin-bottom:8px;font-weight:600;">⚡ Pérdida extraordinaria del día</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Garantía rápida, repuesto regalado, algo que rompiste y repusiste, propina, faltante de caja. Impacta el reporte de operaciones como pérdida del día.</p>
+        <div class="grid3">
+          <div class="field" style="margin-bottom:0;"><input type="text" id="ext-concepto" placeholder="Qué pasó (ej: reposición vidrio)" style="font-size:13px;"></div>
+          <div class="field" style="margin-bottom:0;"><input type="number" id="ext-monto" placeholder="Monto" step="0.01" min="0" style="font-size:13px;"></div>
+          <div class="field" style="margin-bottom:0;display:flex;gap:6px;">
+            <select id="ext-moneda" style="flex:1;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);outline:none;appearance:none;"><option value="USD">USD</option><option value="ARS">ARS</option></select>
+            <button class="btn-add" style="background:#B45309;" onclick="cargarExtraordinario()" title="Registrar">✓</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="tipo-toggle">
+          <button class="tipo-btn neg active" id="btn-neg" onclick="setTipo('negocio')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Negocio
+          </button>
+          <button class="tipo-btn per" id="btn-per" onclick="setTipo('personal')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Personal
+          </button>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Concepto</label><input type="text" id="concepto" placeholder="Alquiler, Agua, Sueldo..." list="conceptos-dl" autocomplete="off"><datalist id="conceptos-dl"></datalist></div>
+          <div class="field"><label>Categoría</label><select id="categoria"></select></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>Monto</label><input type="number" id="monto" placeholder="0" step="0.01" min="0" oninput="calcEquiv()"></div>
+          <div class="field"><label>Moneda</label><select id="moneda" onchange="onMonedaChange()"><option value="ARS">ARS $</option><option value="USD">USD u$s</option></select></div>
+          <div class="field" id="tc-wrap"><label>TC ARS/USD</label><input type="number" id="tc" placeholder="1410" step="1" min="1" oninput="calcEquiv()"></div>
+        </div>
+        <div class="field" id="equiv-wrap"><label>Equivalente en USD (auto)</label><input type="number" id="equiv-usd" placeholder="—" readonly style="color:var(--text3)"></div>
+        <div class="grid2">
+          <div class="field"><label>Fecha</label><input type="date" id="fecha"></div>
+          <div class="field"><label>Medio de pago</label><select id="medio"></select></div>
+        </div>
+        <div class="check-row">
+          <label class="check-item"><input type="checkbox" id="pagado" checked><span>✅ Pago ya efectuado</span></label>
+          <label class="check-item"><input type="checkbox" id="tiene-vencimiento" onchange="toggleVencimiento()"><span>📅 Tiene fecha de vencimiento</span></label>
+        </div>
+        <div class="field" id="vencimiento-wrap" style="display:none"><label>Fecha de vencimiento</label><input type="date" id="vencimiento"></div>
+        <div class="field"><label>Notas / comprobante (opcional)</label><textarea id="notas" placeholder="Alias, número de operación, detalles..."></textarea></div>
+        <button class="btn-save" id="btn-guardar" onclick="guardar()">Guardar gasto</button>
+      </div>
+    </div>

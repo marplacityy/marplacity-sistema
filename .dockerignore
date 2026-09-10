@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.runtime
+.env
+.env.*
+*.key
+*.crt
+*.pem
+*.p12
+*.pfx
+*.csr
+.wrangler
+playwright-report
+test-results

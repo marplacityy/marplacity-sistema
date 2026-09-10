@@ -1,0 +1,68 @@
+<div id="page-stock" class="page">
+      <div class="page-header">
+        <h1>Stock</h1>
+        <p>Permutas recibidas e inversión propia. Pasás a vendido automático cuando registrás la venta con el mismo IMEI.</p>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Agregar item al stock</div>
+
+        <!-- 3uTools import -->
+        <input type="file" id="st-3u-file" accept=".txt" style="display:none" onchange="import3uTools('st')">
+        <button class="btn-import" onclick="document.getElementById('st-3u-file').click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Importar desde 3uTools — Verification Report
+        </button>
+        <div class="import-success" id="st-import-ok">✓ Datos importados correctamente</div>
+
+        <div class="grid2">
+          <div class="field"><label>Descripción del item</label><input type="text" id="st-nombre" placeholder="Ej: iPhone 16 Pro Max 256GB"></div>
+          <div class="field"><label>IMEI / N° serie <span style="color:var(--text3);font-weight:400">(opcional)</span></label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="st-imei" placeholder="Ej: 352356350948808"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" onclick="checkImei('st-imei')" title="Chequear IMEI online">🔍</button></div></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>Color</label><input type="text" id="st-color" placeholder="Ej: Midnight"></div>
+          <div class="field"><label>GB</label><input type="text" id="st-gb" placeholder="Ej: 128GB"></div>
+          <div class="field"><label>Estado del producto</label><input type="text" id="st-estado-prod" placeholder="Ej: Usado - muy bueno"></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>Valor <span style="color:var(--text3);font-weight:400">(costo)</span></label><input type="number" id="st-valor" placeholder="0" step="0.01" min="0"></div>
+          <div class="field"><label>Moneda</label><select id="st-moneda"><option value="USD">USD u$s</option><option value="ARS">ARS $</option></select></div>
+          <div class="field"><label>TC (si aplica)</label><input type="number" id="st-tc" placeholder="1410" step="1"></div>
+        </div>
+        <div class="grid3">
+          <div class="field"><label>💵 Precio de venta USD <span style="color:var(--text3);font-weight:400">(sale en la etiqueta)</span></label><input type="number" id="st-precio-venta" placeholder="0" step="0.01" min="0"></div>
+          <div class="field"><label>iCloud / FMI</label><select id="st-fmi"><option value="">— sin chequear —</option><option value="OFF">OFF (libre)</option><option value="ON">ON (bloqueado)</option></select></div>
+          <div class="field"><label>Blacklist</label><select id="st-blacklist"><option value="">— sin chequear —</option><option value="LIMPIO">Limpio</option><option value="REPORTADO">Reportado</option></select></div>
+        </div>
+        <div class="field"><label>Cosmética</label><input type="text" id="st-cosmetica" placeholder="Ej: 9/10, rayón en el marco"></div>
+        <div class="grid2">
+          <div class="field"><label>Batería %</label><input type="number" id="st-bateria" placeholder="Ej: 87" min="0" max="100" step="1"></div>
+          <div class="field"><label>Ciclos de carga</label><input type="number" id="st-ciclos" placeholder="Ej: 619" min="0" step="1"></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Fecha de entrada</label><input type="date" id="st-fecha"></div>
+          <div class="field"><label>Origen (ingreso relacionado)</label><input type="text" id="st-origen" placeholder="Ej: iPhone 17 Pro Max"></div>
+        </div>
+        <div class="field"><label>Notas</label><input type="text" id="st-notas" placeholder="Opcional"></div>
+        <div class="field"><label>Tipo de stock</label>
+          <select id="st-tipo">
+            <option value="permuta">💱 Permuta recibida</option>
+            <option value="propio">💰 Inversión propia</option>
+          </select>
+        </div>
+        <button class="btn-save" id="btn-st-guardar" onclick="guardarStock()">Agregar al stock</button>
+      </div>
+
+      <div id="stock-metrics" class="metrics" style="margin-top:1rem;"></div>
+      <div class="filters-bar" style="margin-bottom:1rem;">
+        <select id="st-fl-estado">
+          <option value="">En stock + vendidos</option>
+          <option value="en_stock">Solo en stock</option>
+          <option value="refurb">🔨 En refurbishment (a reparar)</option>
+          <option value="vendido">Solo vendidos</option>
+        </select>
+        <input type="text" id="st-fl-buscar" placeholder="Buscar por nombre o IMEI...">
+        <button class="btn-secondary" style="white-space:nowrap;" onclick="generarListaPrecios()">📋 Lista de precios</button>
+      </div>
+      <div class="card" id="stock-list-body"></div>
+    </div>

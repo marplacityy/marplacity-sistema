@@ -1,0 +1,61 @@
+<div id="page-facturador" class="page">
+      <div class="page-header">
+        <h1>Facturador</h1>
+        <p>Emitir una factura a mano, sin que haya una venta cargada. No toca el stock, no genera una venta y no entra en los reportes: es solo el comprobante.</p>
+      </div>
+
+      <div id="fac-banner"></div>
+
+      <div class="card">
+        <div class="card-title">Cliente</div>
+        <div class="grid2">
+          <div class="field"><label>Razón social o nombre</label><input type="text" id="fac-nombre" placeholder="Consumidor Final"></div>
+          <div class="field"><label>Condición frente al IVA</label><select id="fac-cond" onchange="facCondCambio()"></select></div>
+        </div>
+        <div class="grid2">
+          <div class="field"><label>Tipo de documento</label><select id="fac-doctipo" onchange="facPintarAviso()"></select></div>
+          <div class="field"><label>Número de documento</label><input type="text" id="fac-docnro" placeholder="Sin guiones" oninput="facPintarAviso()"></div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label>Tipo de comprobante</label>
+            <select id="fac-tipo" onchange="facPintarAviso()">
+              <option value="1">Factura A</option>
+              <option value="6">Factura B</option>
+            </select>
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Se sugiere según la condición de IVA, pero la podés cambiar.</div>
+          </div>
+          <div class="field"><label>Punto de venta</label><input type="number" id="fac-ptovta" step="1" min="1"></div>
+        </div>
+        <div id="fac-aviso"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Renglones</div>
+        <div class="field" style="max-width:340px;">
+          <label>Los precios que cargo son…</label>
+          <select id="fac-modo" onchange="facTotales()">
+            <option value="final">Precio final — lo que le cobro (con IVA adentro)</option>
+            <option value="neto">Neto — el sistema le suma el IVA</option>
+          </select>
+        </div>
+        <div style="overflow-x:auto;"><table class="tkh-table">
+          <thead><tr>
+            <th>Descripción</th>
+            <th style="width:80px;text-align:right;">Cant.</th>
+            <th style="width:130px;text-align:right;">Precio unit.</th>
+            <th style="width:110px;">IVA</th>
+            <th style="width:40px;"></th>
+          </tr></thead>
+          <tbody id="fac-items"></tbody>
+        </table></div>
+        <button class="btn-secondary" style="margin-top:10px;" onclick="facAgregarRenglon()">＋ Agregar renglón</button>
+        <div id="fac-totales" class="permuta-box" style="margin-top:14px;"></div>
+        <div class="pos-actions" style="margin-top:14px;">
+          <button class="pos-btn-cancel" onclick="facLimpiar()">✕ Limpiar</button>
+          <button class="pos-btn-checkout" id="btn-fac-emitir" onclick="facEmitir()">🧾 Emitir y pedir el CAE</button>
+        </div>
+      </div>
+
+      <div id="fac-resultado"></div>
+    </div>

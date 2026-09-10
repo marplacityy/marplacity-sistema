@@ -1,0 +1,176 @@
+<div id="page-consig" class="page">
+      <div class="page-header">
+        <h1>Consignación</h1>
+        <p>Productos de proveedores. Controlá deuda, stock y pagos por proveedor.</p>
+      </div>
+
+      <div class="tab-btns">
+        <button class="tab-btn active" onclick="setConsigTab('productos',this)">Productos</button>
+        <button class="tab-btn" onclick="setConsigTab('proveedores',this)">Proveedores</button>
+        <button class="tab-btn" onclick="setConsigTab('pagos',this)">Registrar pago</button>
+        <button class="tab-btn" onclick="setConsigTab('lista',this)">📋 Importar lista</button>
+      </div>
+
+      <!-- TAB: PRODUCTOS -->
+      <div id="consig-tab-productos">
+        <div class="card">
+          <div class="card-title">Agregar producto</div>
+
+          <!-- 3uTools import -->
+          <input type="file" id="cp-3u-file" accept=".txt" style="display:none" onchange="import3uTools('cp')">
+          <button class="btn-import" onclick="document.getElementById('cp-3u-file').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Importar desde 3uTools — Verification Report
+          </button>
+          <div class="import-success" id="cp-import-ok">✓ Datos importados correctamente</div>
+
+          <div class="grid2">
+            <div class="field"><label>Proveedor</label>
+              <div style="display:flex;gap:6px;">
+                <input type="text" id="cp-proveedor" placeholder="Nombre del proveedor o particular" list="proveedores-dl" style="flex:1" autocomplete="off" onchange="autoTipoProveedor()">
+                <datalist id="proveedores-dl"></datalist>
+              </div>
+            </div>
+            <div class="field"><label>Tipo</label>
+              <select id="cp-tipo">
+                <option value="casual">👤 Cliente casual (trae 1 vez)</option>
+                <option value="fijo">🔁 Proveedor fijo (recurrente)</option>
+              </select>
+            </div>
+          </div>
+          <div class="field"><label>Producto</label><input type="text" id="cp-producto" placeholder="Ej: iPhone 16 Pro 256GB"></div>
+          <div class="grid2">
+            <div class="field"><label>DNI del dueño <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="cp-prov-dni" placeholder="Ej: 28.456.789"></div>
+            <div class="field"><label>Teléfono del dueño <span style="color:var(--text3);font-weight:400">(para avisarle)</span></label><input type="tel" id="cp-prov-tel" placeholder="Ej: 223 555-1234"></div>
+          </div>
+          <div class="grid3">
+            <div class="field"><label>Color</label><input type="text" id="cp-color" placeholder="Ej: Desert"></div>
+            <div class="field"><label>GB / Capacidad</label><input type="text" id="cp-gb" placeholder="Ej: 256GB"></div>
+            <div class="field"><label>Estado</label>
+              <select id="cp-estado">
+                <option value="Nuevo">Nuevo</option>
+                <option value="Como nuevo">Como nuevo</option>
+                <option value="Usado">Usado</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>IMEI / N° serie</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="cp-imei" placeholder="Opcional"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" onclick="checkImei('cp-imei')" title="Chequear IMEI online">🔍</button></div></div>
+            <div class="field"><label>Fecha de entrada</label><input type="date" id="cp-fecha"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Batería %</label><input type="number" id="cp-bateria" placeholder="Ej: 87" min="0" max="100" step="1"></div>
+            <div class="field"><label>Ciclos de carga</label><input type="number" id="cp-ciclos" placeholder="Ej: 619" min="0" step="1"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Precio del dueño <span style="color:var(--text3);font-weight:400">(lo que él recibe — va en el comprobante)</span></label>
+              <div style="display:flex;gap:6px;">
+                <input type="number" id="cp-precio" placeholder="0" step="0.01" min="0" style="flex:1">
+                <select id="cp-moneda" style="width:80px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="USD">USD</option><option value="ARS">ARS</option></select>
+              </div>
+            </div>
+            <div class="field"><label>Precio de venta local <span style="color:var(--text3);font-weight:400">(NO sale en el comprobante)</span></label><input type="number" id="cp-precio-venta" placeholder="0" step="0.01" min="0"></div>
+          </div>
+          <div class="field"><label>TC (si aplica)</label><input type="number" id="cp-tc" placeholder="1410" step="1"></div>
+          <div class="field"><label>Notas</label><input type="text" id="cp-notas" placeholder="Detalles adicionales..."></div>
+          <button class="btn-save" id="btn-cp-guardar" onclick="guardarConsig()">Agregar producto</button>
+        </div>
+
+        <div class="filters-bar" style="margin-top:1rem;">
+          <select id="cp-fl-proveedor"><option value="">Todos los proveedores</option></select>
+          <select id="cp-fl-estado-stock">
+            <option value="en_stock">En stock</option>
+            <option value="vendido">Vendidos</option>
+            <option value="">Todos</option>
+          </select>
+          <input type="text" id="cp-fl-buscar" placeholder="Buscar producto o IMEI...">
+        </div>
+        <div id="consig-metrics" class="metrics"></div>
+        <div class="card" id="consig-list-body"></div>
+      </div>
+
+      <!-- TAB: PROVEEDORES -->
+      <div id="consig-tab-proveedores" style="display:none">
+        <div id="proveedores-list"></div>
+      </div>
+
+      <!-- TAB: LISTA -->
+      <div id="consig-tab-lista" style="display:none">
+        <div class="card">
+          <div class="card-title">Importar lista de productos</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Pegá la lista en cualquier formato — la IA la interpreta automáticamente y te muestra una vista previa para confirmar antes de guardar.</p>
+          <div class="field">
+            <label>Proveedor (se aplica a todos los items)</label>
+            <input type="text" id="lista-proveedor" placeholder="Nombre del proveedor" list="proveedores-dl" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Lista de productos</label>
+            <textarea id="lista-texto" style="height:160px;font-family:'DM Mono',monospace;font-size:13px;" placeholder="Pegá la lista acá en cualquier formato..."></textarea>
+          </div>
+          <div class="grid2">
+            <div class="field">
+              <label>Moneda de los precios</label>
+              <select id="lista-moneda"><option value="USD">USD u$s</option><option value="ARS">ARS $</option></select>
+            </div>
+            <div class="field">
+              <label>TC (si aplica)</label>
+              <input type="number" id="lista-tc" placeholder="1410" step="1">
+            </div>
+          </div>
+          <button class="btn-save" id="btn-lista-interpretar" onclick="interpretarLista()">
+            ✨ Interpretar con IA
+          </button>
+        </div>
+
+        <!-- Preview -->
+        <div id="lista-preview" style="display:none">
+          <div class="card">
+            <div class="card-title">Vista previa — confirmá antes de guardar</div>
+            <div id="lista-preview-items"></div>
+            <div style="display:flex;gap:8px;margin-top:1rem;">
+              <button class="btn-secondary" onclick="cancelarLista()">Cancelar</button>
+              <button class="btn-save" id="btn-lista-guardar" onclick="guardarLista()">Guardar todos</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: PAGOS -->
+      <div id="consig-tab-pagos" style="display:none">
+        <div class="card">
+          <div class="card-title">Registrar pago a proveedor</div>
+          <div class="grid2">
+            <div class="field"><label>Proveedor</label>
+              <input type="text" id="pago-proveedor" placeholder="Nombre del proveedor" list="proveedores-dl2" autocomplete="off">
+              <datalist id="proveedores-dl2"></datalist>
+            </div>
+            <div class="field"><label>Fecha del pago</label><input type="date" id="pago-fecha"></div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Monto pagado</label>
+              <div style="display:flex;gap:6px;">
+                <input type="number" id="pago-monto" placeholder="0" step="0.01" min="0" style="flex:1">
+                <select id="pago-moneda" onchange="pagoTcToggle()" style="width:80px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="USD">USD</option><option value="ARS">ARS</option></select>
+              </div>
+            </div>
+            <div class="field"><label>Medio de pago</label><select id="pago-medio"></select></div>
+          </div>
+          <div class="field" id="pago-tc-wrap" style="display:none;">
+            <label>Cotización del día (ARS/USD)</label>
+            <input type="number" id="pago-tc" placeholder="1410" step="1" oninput="pagoTcPreview()">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;" id="pago-tc-preview">Con esto el pago en pesos descuenta del saldo en dólares.</div>
+          </div>
+          <div class="field"><label>Notas</label><input type="text" id="pago-notas" placeholder="Transferencia, efectivo, referencia..."></div>
+          <button class="btn-save" id="btn-pago-guardar" onclick="guardarPago()">Registrar pago</button>
+        </div>
+
+        <div class="card" style="margin-top:1rem;">
+          <div class="card-title">Historial de pagos</div>
+          <div class="filters-bar" style="margin-bottom:1rem;">
+            <select id="pago-fl-proveedor"><option value="">Todos los proveedores</option></select>
+          </div>
+          <div id="pagos-list"></div>
+        </div>
+      </div>
+
+    </div>
