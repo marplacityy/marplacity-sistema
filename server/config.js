@@ -18,6 +18,8 @@ const esquema = z.object({
   FIREBASE_PROJECT: z.string().default('mis-gastos-21e7b'),
   FIREBASE_KEY: z.string().default('AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg'),
   SEGUIMIENTOS_ACTIVOS: z.enum(['true', 'false']).default('false'),
+  // Detrás de un proxy inverso (Caddy en el VPS): 'loopback' toma IP y protocolo de X-Forwarded-*.
+  TRUST_PROXY: z.string().optional(),
 });
 
 /** Las credenciales quedan exclusivamente en el proceso del servidor. */

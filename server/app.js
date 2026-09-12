@@ -25,6 +25,7 @@ const requeridos = {
 
 export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, servicios = {}, directorioEstatico = resolve(raiz, 'dist') } = {}) {
   const app = express();
+  if (config.TRUST_PROXY) app.set('trust proxy', config.TRUST_PROXY);
   const logger = pino({ level: config.LOG_LEVEL });
   const tareas = crearTareas(logger);
   app.disable('x-powered-by');
