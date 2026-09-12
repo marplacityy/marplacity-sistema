@@ -73,25 +73,24 @@ Vite inserta las vistas en `index.html` en build y en dev (`transformIndexHtml` 
 
 ## Arquitectura
 
-### Handlers en `window` (todavía)
+### Handlers sin JS inline: `data-click` + `window`
 
-Las vistas usan `onclick="..."` inline. Como la lógica vive en módulos ES, **todo handler invocado desde el HTML tiene que colgarse de `window`**: cada módulo hace `window.nombre = ...` o un `Object.assign(window, {...})` al final. Si agregás un handler y no lo exponés, el onclick falla silenciosamente en runtime.
+No hay `onclick="..."` en el HTML (la CSP lo prohíbe: `script-src-attr 'none'`). Los controles declaran el handler por nombre y `core/eventos.js` lo despacha por delegación desde `document`:
 
-Vale también para variables: `onclick="f(repEditId)"` no funciona porque el atributo se evalúa en scope global. El handler tiene que ser un wrapper que lea la variable por su cuenta.
-
-Para auditar que no falte ninguno:
-
-```bash
-cat src/client/vistas/*.html index.html \
-  | grep -oE 'on(click|change|input|keydown)="[a-zA-Z_$][a-zA-Z0-9_$]*\(' \
-  | sed -E 's/.*"([a-zA-Z_$][a-zA-Z0-9_$]*)\(/\1/' | sort -u
+```html
+<button data-click="guardar">                              <!-- window.guardar() -->
+<a data-click="goTo" data-args='["stock"]'>                <!-- window.goTo('stock') -->
+<input data-change="setTab" data-args='["x","$this"]'>     <!-- window.setTab('x', el) -->
+<input data-enter="agregarMedio">                          <!-- Enter sin Shift -->
 ```
 
-Comparar contra lo expuesto en `window`; lo único que puede sobrar legítimamente es `if`.
+Eventos: `data-click`, `data-change`, `data-input`, `data-submit`, `data-error`, `data-enter`. Comodines en `data-args`: `"$this"`, `"$value"`, `"$checked"`, `"$event"`, `"$fn:nombre"`. `data-stop` en un elemento sin handler corta el click (el viejo `event.stopPropagation()`). Se atiende solo el elemento más cercano: un handler anidado no dispara el del contenedor.
 
-El HTML dinámico se genera con template strings + `innerHTML`: `esc()` para texto y `escJs()` para valores que entran dentro de un `onclick='...'`.
+En HTML generado desde JS usá el helper `on()` de `shared/seguridad.js`, que arma los dos atributos y escapa los argumentos como JSON: `` `<button ${on('click', 'eliminarStock', s.id)}>` ``. No hace falta `escJs()` para los argumentos; `esc()` sigue siendo obligatorio para el texto.
 
-Pendiente conocido: la CSP del servidor mantiene `script-src-attr 'unsafe-inline'` por estos handlers. Migrarlos a `addEventListener` dentro de los módulos es lo que permite endurecerla.
+**El handler tiene que existir en `window`**: cada módulo hace `window.nombre = ...` o un `Object.assign(window, {...})`. Si no está, el despachador loguea `Handler X no expuesto en window` en la consola. Un handler que hacía dos cosas (`cerrar(); abrir(id)`) pasa a ser un wrapper con nombre en el módulo.
+
+`tests/estructura.test.js` falla si vuelve a aparecer un `on*=` inline en vistas, `index.html`, `catalogo.html` o en los módulos.
 
 ### Estado compartido: `contextoApp`
 

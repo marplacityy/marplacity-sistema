@@ -1,5 +1,6 @@
 /** modulos/gastos: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { showToast, esc, populateCatSelects, populateMedioSelects } from '../core/interfaz.js';
 import { renderReporte } from './reportes.js';
 import { setSyncDot, avisoVentana, fechasPreset } from '../core/datos.js';
@@ -10,7 +11,7 @@ export
 function buildMonthChips() {
   const meses = [...new Set(contextoApp.gastos.map(g => (g.fecha || '').slice(0, 7)).filter(Boolean))].sort().reverse();
   const container = document.getElementById('month-chips');
-  container.innerHTML = `<button class="mchip all ${contextoApp.activeMonth === '' ? 'active' : ''}" onclick="setMonth('')">Todos</button>` + meses.map(m => `<button class="mchip ${contextoApp.activeMonth === m ? 'active' : ''}" onclick="setMonth('${m}')">${contextoApp.fmtMes(m)}</button>`).join('');
+  container.innerHTML = `<button class="mchip all ${contextoApp.activeMonth === '' ? 'active' : ''}" ${on('click', 'setMonth', '')}>Todos</button>` + meses.map(m => `<button class="mchip ${contextoApp.activeMonth === m ? 'active' : ''}" ${on('click', 'setMonth', m)}>${contextoApp.fmtMes(m)}</button>`).join('');
 }
 export
 // ── Listado ──
@@ -100,10 +101,10 @@ export function renderListado() {
         ${g.usd && g.moneda === 'ARS' ? `<div class="ei-usd">${contextoApp.fmtUSD(g.usd)}</div>` : ''}
       </div>
       <div class="ei-actions">
-        <button class="pay-toggle" onclick="togglePagado('${g.id}',${pagado})" title="${pagado ? 'Marcar como pendiente' : 'Marcar como pagado'}">${pagado ? '✅' : '⬜'}</button>
-        <button class="ei-btn" onclick="editarGasto('${g.id}')" title="Editar">✎</button>
-        <button class="ei-btn" onclick="duplicarGasto('${g.id}')" title="Duplicar">⧉</button>
-        <button class="ei-btn del" onclick="eliminar('${g.id}')" title="Eliminar">×</button>
+        <button class="pay-toggle" ${on('click', 'togglePagado', g.id, pagado)} title="${pagado ? 'Marcar como pendiente' : 'Marcar como pagado'}">${pagado ? '✅' : '⬜'}</button>
+        <button class="ei-btn" ${on('click', 'editarGasto', g.id)} title="Editar">✎</button>
+        <button class="ei-btn" ${on('click', 'duplicarGasto', g.id)} title="Duplicar">⧉</button>
+        <button class="ei-btn del" ${on('click', 'eliminar', g.id)} title="Eliminar">×</button>
       </div>
     </div>`;
   }).join('');

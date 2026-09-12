@@ -1,5 +1,6 @@
 /** modulos/repuestos: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { showToast, esc } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { writeBatch, doc, serverTimestamp, updateDoc, addDoc, deleteDoc } from 'firebase/firestore';
@@ -70,7 +71,7 @@ export function renderRepInv() {
     document.getElementById('rp-metrics').innerHTML = `
     <div class="metric"><div class="m-label">Piezas en stock</div><div class="m-val">${totalPiezas}</div></div>
     <div class="metric"><div class="m-label">Valor de la caja</div><div class="m-val" style="color:#237A4B">u$s ${Math.round(valorTotal)}</div><div class="m-sub">a precio de reposición</div></div>
-    ${sinPrecio ? `<div class="metric" style="cursor:pointer;" onclick="setRepuestosTab('precios',document.getElementById('rp-tab-precios'))"><div class="m-label">Sin precio cargado</div><div class="m-val" style="color:#854F0B">${sinPrecio}</div><div class="m-sub">click para cargar</div></div>` : ''}
+    ${sinPrecio ? `<div class="metric" style="cursor:pointer;" ${on('click', 'irATabPrecios')}><div class="m-label">Sin precio cargado</div><div class="m-val" style="color:#854F0B">${sinPrecio}</div><div class="m-sub">click para cargar</div></div>` : ''}
   `;
 
     // filtros
@@ -108,11 +109,11 @@ export function renderRepInv() {
         const val = p.valorRef != null ? 'u$s ' + p.valorRef : '<span class="rp-sinprecio">sin precio</span>';
         filas += `<tr>
         <td class="rp-pieza-txt">${t.icon} ${esc(detalle)}${p.notas && p.notas !== 'Carga masiva' && p.notas !== 'De equipo entero desarmado' ? `<div style="font-size:11px;color:var(--text3);">${esc(p.notas)}</div>` : ''}</td>
-        <td class="rp-num rp-precio-cell" id="rpc-${p.id}" onclick="editarPrecioInline('${p.id}')" title="Click para poner el precio">${val}</td>
+        <td class="rp-num rp-precio-cell" id="rpc-${p.id}" ${on('click', 'editarPrecioInline', p.id)} title="Click para poner el precio">${val}</td>
         <td class="rp-cant">${p.qty}</td>
         <td style="text-align:right;white-space:nowrap;">
-          <button class="tkh-open" onclick="usarPieza('${p.id}')" title="Usé una (baja 1)">−1</button>
-          <button class="ei-btn del" onclick="eliminarPieza('${p.id}')" title="Eliminar">×</button>
+          <button class="tkh-open" ${on('click', 'usarPieza', p.id)} title="Usé una (baja 1)">−1</button>
+          <button class="ei-btn del" ${on('click', 'eliminarPieza', p.id)} title="Eliminar">×</button>
         </td>
       </tr>`;
       });
@@ -175,7 +176,7 @@ export function renderPreciosRef() {
           <div>${contextoApp.RP_TIPOS[p.tipo].icon} ${contextoApp.RP_TIPOS[p.tipo].n}</div>
           <div style="display:flex;align-items:center;gap:10px;">
             <span style="font-family:'DM Mono',monospace;font-weight:600;">u$s ${p.valor}</span>
-            <button class="ei-btn del" onclick="eliminarPrecioRef('${p.id}')">×</button>
+            <button class="ei-btn del" ${on('click', 'eliminarPrecioRef', p.id)}>×</button>
           </div>
         </div>`).join('')}
     </div>`).join('') : '<div class="empty">Sin precios cargados. Cargá los valores de reposición arriba.</div>';
@@ -216,6 +217,7 @@ export function inicializarRepuestos() {
       icon: '🧩'
     }
   };
+  window.irATabPrecios = () => window.setRepuestosTab('precios', document.getElementById('rp-tab-precios'));
   window.setRepuestosTab = function (tab, btn) {
     try {
       document.querySelectorAll('#page-repuestos .tab-btn').forEach(b => b.classList.remove('active'));

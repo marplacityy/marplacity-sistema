@@ -1,5 +1,6 @@
 /** modulos/stock: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { updateDoc, doc, addDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { setSyncDot } from '../core/datos.js';
 import { showToast, esc } from '../core/interfaz.js';
@@ -170,6 +171,7 @@ export function fill3uForm(prefix, d) {
     if (notas2) document.getElementById('st-notas').value = notas2;
   }
 }
+window.verRefurb = () => { document.getElementById('st-fl-estado').value = 'refurb'; renderStock(); };
 export function renderStock() {
   const fEstado = document.getElementById('st-fl-estado').value;
   const fBus = (document.getElementById('st-fl-buscar').value || '').toLowerCase().trim();
@@ -186,7 +188,7 @@ export function renderStock() {
   const enRefurb = contextoApp.stockItems.filter(s => s.refurb && s.status === 'en_stock');
   const refurbUSD = enRefurb.reduce((s, x) => s + (x.valorUSD || 0), 0);
   document.getElementById('stock-metrics').innerHTML = `
-    ${enRefurb.length ? `<div class="metric" style="cursor:pointer;" onclick="document.getElementById('st-fl-estado').value='refurb';renderStock();" title="Ver solo los equipos a reparar"><div class="m-label">🔨 En refurbishment</div><div class="m-val" style="color:#B45309">${enRefurb.length}</div><div class="m-sub">u$s ${Math.round(refurbUSD)} parados · ver</div></div>` : ''}
+    ${enRefurb.length ? `<div class="metric" style="cursor:pointer;" ${on('click', 'verRefurb')} title="Ver solo los equipos a reparar"><div class="m-label">🔨 En refurbishment</div><div class="m-val" style="color:#B45309">${enRefurb.length}</div><div class="m-sub">u$s ${Math.round(refurbUSD)} parados · ver</div></div>` : ''}
     <div class="metric"><div class="m-label">En stock</div><div class="m-val">${enStock.length}</div><div class="m-sub">items</div></div>
     <div class="metric"><div class="m-label">Capital parado USD</div><div class="m-val" style="color:var(--neg)">${contextoApp.fmtUSD(totalParadoUSD)}</div><div class="m-sub">${totalParadoARS > 0 ? contextoApp.fmtARS(totalParadoARS) : ''}</div></div>
     <div class="metric"><div class="m-label">Vendidos</div><div class="m-val">${contextoApp.stockItems.filter(s => s.status === 'vendido').length}</div><div class="m-sub">total histórico</div></div>
@@ -225,10 +227,10 @@ export function renderStock() {
         ${s.valorARS != null ? `<div class="stock-sub">${contextoApp.fmtARS(s.valorARS)}</div>` : ''}
       </div>
       <div class="ei-actions">
-        <button class="ei-btn" onclick="labelEquipo('${s.id}')" title="Imprimir etiqueta 62x100mm">🏷</button>
-        ${s.status === 'en_stock' && !s.refurb ? `<button class="ei-btn" onclick="mandarARefurb('${s.id}')" title="Mandar a refurbishment (reparación interna)">🔨</button>` : ''}
-        <button class="ei-btn" onclick="editarStock('${s.id}')" title="Editar">✎</button>
-        <button class="ei-btn del" onclick="eliminarStock('${s.id}')" title="Eliminar">×</button>
+        <button class="ei-btn" ${on('click', 'labelEquipo', s.id)} title="Imprimir etiqueta 62x100mm">🏷</button>
+        ${s.status === 'en_stock' && !s.refurb ? `<button class="ei-btn" ${on('click', 'mandarARefurb', s.id)} title="Mandar a refurbishment (reparación interna)">🔨</button>` : ''}
+        <button class="ei-btn" ${on('click', 'editarStock', s.id)} title="Editar">✎</button>
+        <button class="ei-btn del" ${on('click', 'eliminarStock', s.id)} title="Eliminar">×</button>
       </div>
     </div>`;
   }).join('');
@@ -486,7 +488,7 @@ ${texto}`
           </div>
         </div>
         <div class="stock-val"><div class="stock-usd">${precioStr}</div></div>
-        <button class="ei-btn del" onclick="quitarDePreview(${i})" title="Quitar">×</button>
+        <button class="ei-btn del" ${on('click', 'quitarDePreview', i)} title="Quitar">×</button>
       </div>`;
       }).join('');
       document.getElementById('lista-preview').style.display = 'block';
@@ -513,7 +515,7 @@ ${texto}`
       })()}</div>
       </div>
       <div class="stock-val"><div class="stock-usd">${precioStr}</div></div>
-      <button class="ei-btn del" onclick="quitarDePreview(${i})">×</button>
+      <button class="ei-btn del" ${on('click', 'quitarDePreview', i)}>×</button>
     </div>`;
     }).join('');
     if (!contextoApp.listaParseada.length) document.getElementById('lista-preview').style.display = 'none';

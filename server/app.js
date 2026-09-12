@@ -35,13 +35,12 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
     autoLogging: { ignore: req => req.url === '/api/salud' },
   }));
   app.use(helmet({
-    // Los onclick existentes se conservan durante la migración modular.
     contentSecurityPolicy: desarrollo ? false : {
       useDefaults: false,
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        scriptSrcAttr: ["'unsafe-inline'"],
+        scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
         imgSrc: ["'self'", 'https:', 'data:', 'blob:'],

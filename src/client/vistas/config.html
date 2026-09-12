@@ -10,14 +10,14 @@
           <input type="number" id="cfg-arca-ptovta" placeholder="1" step="1" min="1">
           <div style="font-size:11px;color:var(--text3);margin-top:4px;">El que diste de alta <b>para webservice</b>. No es el mismo que el de Comprobantes en Línea: si ponés ese, ARCA rechaza todo.</div>
         </div>
-        <button class="btn-save" onclick="guardarConfig()">Guardar</button>
+        <button class="btn-save" data-click="guardarConfig">Guardar</button>
       </div>
 
       <div class="card">
         <div class="card-title">Categorías de gastos</div>
         <div class="input-add">
-          <input type="text" id="nueva-cat" placeholder="Nueva categoría..." onkeydown="if(event.key==='Enter')agregarCat()">
-          <button class="btn-add" onclick="agregarCat()">+ Agregar</button>
+          <input type="text" id="nueva-cat" placeholder="Nueva categoría..." data-enter="agregarCat">
+          <button class="btn-add" data-click="agregarCat">+ Agregar</button>
         </div>
         <div class="tags" id="cats-tags"></div>
       </div>
@@ -25,8 +25,8 @@
       <div class="card">
         <div class="card-title">Categorías de inventario</div>
         <div class="input-add">
-          <input type="text" id="nueva-icat" placeholder="Ej: Accesorios, Repuestos..." onkeydown="if(event.key==='Enter')agregarICat()">
-          <button class="btn-add" onclick="agregarICat()">+ Agregar</button>
+          <input type="text" id="nueva-icat" placeholder="Ej: Accesorios, Repuestos..." data-enter="agregarICat">
+          <button class="btn-add" data-click="agregarICat">+ Agregar</button>
         </div>
         <div class="tags" id="icats-tags"></div>
       </div>
@@ -34,8 +34,8 @@
       <div class="card">
         <div class="card-title">Medios de pago</div>
         <div class="input-add">
-          <input type="text" id="nuevo-medio" placeholder="Nuevo medio de pago..." onkeydown="if(event.key==='Enter')agregarMedio()">
-          <button class="btn-add" onclick="agregarMedio()">+ Agregar</button>
+          <input type="text" id="nuevo-medio" placeholder="Nuevo medio de pago..." data-enter="agregarMedio">
+          <button class="btn-add" data-click="agregarMedio">+ Agregar</button>
         </div>
         <div class="tags" id="medios-tags"></div>
       </div>
@@ -60,7 +60,7 @@
         </div>
         <div class="field"><label>Términos del ticket de reparación</label><textarea class="terms" id="cfg-terms"></textarea></div>
         <div class="field"><label>Términos del ticket de venta <span style="color:var(--text3);font-weight:400">(solo se imprimen si la venta incluye un equipo con IMEI/serial)</span></label><textarea class="terms" id="cfg-terms-venta" style="height:120px;"></textarea></div>
-        <button class="btn-save" onclick="guardarConfig()">Guardar</button>
+        <button class="btn-save" data-click="guardarConfig">Guardar</button>
       </div>
 
       <div class="card">
@@ -72,7 +72,7 @@
       <div class="card">
         <div class="card-title">🖨 Impresión de tickets</div>
         <div class="field"><label>Dónde imprimir los tickets térmicos</label>
-          <select id="cfg-print-mode" onchange="setPrintMode(this.value)">
+          <select id="cfg-print-mode" data-change="setPrintMode" data-args='["$value"]'>
             <option value="pantalla">📄 En este dispositivo (diálogo de impresión)</option>
             <option value="local">🏪 Ticketera del local (impresión remota)</option>
           </select>
@@ -83,29 +83,29 @@
       <div class="card">
         <div class="card-title">🩺 Diagnóstico de rendimiento</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Usá la app normalmente 30 segundos y después tocá el botón. Copiá el resultado y pasáselo a soporte.</p>
-        <button class="btn-secondary" onclick="verDiagnostico()">Ver diagnóstico</button>
+        <button class="btn-secondary" data-click="verDiagnostico">Ver diagnóstico</button>
         <pre id="diag-out" style="font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;margin-top:10px;white-space:pre-wrap;display:none;max-height:300px;overflow:auto;"></pre>
       </div>
 
       <div class="card">
         <div class="card-title">🧹 Limpiar clientes duplicados</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Fusiona clientes con el mismo nombre: conserva uno (con teléfono si lo hay), reasigna sus reparaciones y facturas, y borra los repetidos.</p>
-        <button class="btn-secondary" id="btn-dedup" onclick="dedupClientes()">Buscar y fusionar duplicados</button>
+        <button class="btn-secondary" id="btn-dedup" data-click="dedupClientes">Buscar y fusionar duplicados</button>
         <div id="dedup-progress" style="font-size:13px;color:var(--text2);margin-top:8px;"></div>
       </div>
 
       <div class="card">
         <div class="card-title">Importar desde RepairDesk</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Subí el archivo <b>repairdesk-import.json</b>. Crea los clientes y las órdenes históricas (estado "Importado de RD"). Ejecutalo una sola vez.</p>
-        <input type="file" id="rd-file" accept=".json" style="display:none" onchange="importarRD()">
-        <button class="btn-secondary" id="btn-rd" onclick="document.getElementById('rd-file').click()">Elegir archivo e importar</button>
+        <input type="file" id="rd-file" accept=".json" style="display:none" data-change="importarRD">
+        <button class="btn-secondary" id="btn-rd" data-click="clickEn" data-args='["rd-file"]'>Elegir archivo e importar</button>
         <div id="rd-progress" style="font-size:13px;color:var(--text2);margin-top:8px;"></div>
       </div>
 
       <div class="card">
         <div class="card-title">Migración de datos</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Si tenés datos cargados de antes del sistema de usuarios, esto te los asigna a tu cuenta. Ejecutalo una sola vez.</p>
-        <button class="btn-secondary" id="btn-migrar" onclick="migrarDatos()">Migrar datos existentes</button>
+        <button class="btn-secondary" id="btn-migrar" data-click="migrarDatos">Migrar datos existentes</button>
       </div>
 
       <div class="card">
@@ -113,7 +113,7 @@
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Para que el sistema arranque rápido y no agote la cuota diaria de lecturas de Firebase, los <b>gastos, ingresos y cierres de caja</b> se cargan solo desde esta fecha en adelante. Todo lo demás (stock, reparaciones, consignación, clientes, repuestos) se carga completo siempre.<br><br>Si necesitás ver o reportar períodos más viejos, ampliá el rango — se recarga al instante y podés volver a achicarlo después.</p>
         <div class="field">
           <label>Rango de datos históricos</label>
-          <select id="cfg-ventana" onchange="setVentanaDatos(this.value)">
+          <select id="cfg-ventana" data-change="setVentanaDatos" data-args='["$value"]'>
             <option value="6">Últimos 6 meses</option>
             <option value="12">Últimos 12 meses</option>
             <option value="24">Últimos 2 años</option>
@@ -127,12 +127,12 @@
       <div class="card">
         <div class="card-title">Backup</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Descarga todos tus datos en un archivo JSON: gastos, ingresos, ventas, stock, consignación, reparaciones, repuestos, clientes, cierres y la configuración del local. Guardalo cada tanto — es tu copia fuera de Firebase.</p>
-        <button class="btn-secondary" id="btn-export" onclick="exportarBackup()">⬇ Descargar backup (JSON)</button>
+        <button class="btn-secondary" id="btn-export" data-click="exportarBackup">⬇ Descargar backup (JSON)</button>
       </div>
 
       <div class="card danger-zone">
         <div class="card-title" style="color:var(--neg)">Zona de peligro</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Borra TODOS tus datos de Firebase. No se puede deshacer. Antes de borrar se descarga un backup automáticamente y hay que escribir una frase de confirmación.</p>
-        <button class="btn-danger" onclick="borrarTodo()">Borrar todos los datos</button>
+        <button class="btn-danger" data-click="borrarTodo">Borrar todos los datos</button>
       </div>
     </div>

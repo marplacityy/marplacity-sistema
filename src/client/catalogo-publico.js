@@ -1,4 +1,6 @@
-import { esc, escJs } from '../shared/seguridad.js';
+import { esc, on } from '../shared/seguridad.js';
+import { activarEventos } from './core/eventos.js';
+activarEventos();
 import { cargarConfiguracion } from './core/config-publica.js';
 const configuracion = await cargarConfiguracion();
 // La página es pública y no tiene login: lee un solo documento que el sistema publica
@@ -54,17 +56,17 @@ function tarjeta(p){
   const fotos = Array.isArray(p.fotos) ? p.fotos : (p.foto ? [p.foto] : []);
   const galeria = fotos.length ? `
     ${fotos.map((f, k) => `<img src="${esc(f)}" alt="${esc(p.nombre)}" loading="lazy"
-        class="${k === 0 ? 'ver' : ''}" onerror="this.remove()">`).join('')}
+        class="${k === 0 ? 'ver' : ''}" ${on('error', 'quitarImagen', '$this')}>`).join('')}
     ${fotos.length > 1 ? `<div class="puntos">${fotos.map((_, k) =>
-        `<button class="punto${k === 0 ? ' on' : ''}" aria-label="Foto ${k+1}" onclick="event.stopPropagation();verFoto(this,${k})"></button>`).join('')}</div>` : ''}
+        `<button class="punto${k === 0 ? ' on' : ''}" aria-label="Foto ${k+1}" ${on('click', 'verFoto', '$this', k)}></button>`).join('')}</div>` : ''}
   ` : esc(inicial(p.nombre));
 
-  return `<article class="prod" onclick="abrirFicha('${escJs(p.id)}')">
+  return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
     <div class="prod-foto${fotos.length ? ' con-foto' : ''}">${galeria}</div>
     <div class="prod-nombre">${esc(p.titulo || p.nombre)}</div>
     <div class="chips">${p.tipo === 'pedido' ? '<span class="chip pedido">A pedido</span>' : ''}${specs}</div>
     <div class="precio">${usd(p.precioUSD)}</div>
-    ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Consultar</a>` : ''}
+    ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener" data-stop>Consultar</a>` : ''}
   </article>`;
 }
 
@@ -95,14 +97,14 @@ window.abrirFicha = id => {
   ].filter(Boolean).join('');
 
   document.getElementById('ficha-contenido').innerHTML = `
-    <button class="ficha-cerrar" onclick="cerrarFicha()" aria-label="Cerrar">×</button>
+    <button class="ficha-cerrar" ${on('click', 'cerrarFicha')} aria-label="Cerrar">×</button>
     <div class="ficha-cuerpo">
       <div class="ficha-galeria">
         <div class="ficha-grande" id="ficha-grande">${fotos.length
-          ? `<img src="${esc(fotos[0])}" alt="${esc(p.nombre)}" onerror="this.parentNode.textContent='${escJs(inicial(p.nombre))}'">`
+          ? `<img src="${esc(fotos[0])}" alt="${esc(p.nombre)}" ${on('error', 'fotoFallo', '$this', inicial(p.nombre))}>`
           : esc(inicial(p.nombre))}</div>
         ${fotos.length > 1 ? `<div class="ficha-mini">${fotos.map((f, k) =>
-          `<img src="${esc(f)}" class="${k === 0 ? 'on' : ''}" alt="" onclick="verGrande(this,'${escJs(f)}')" onerror="this.remove()">`).join('')}</div>` : ''}
+          `<img src="${esc(f)}" class="${k === 0 ? 'on' : ''}" alt="" ${on('click', 'verGrande', '$this', f)} ${on('error', 'quitarImagen', '$this')}>`).join('')}</div>` : ''}
       </div>
       <div class="ficha-datos">
         <div class="ficha-nombre">${esc(p.titulo || p.nombre)}</div>
@@ -115,9 +117,9 @@ window.abrirFicha = id => {
         <div class="ficha-precio">${usd(p.precioUSD)}</div>
         <div class="ficha-nota">Precio en dólar billete, válido pagando en efectivo. Por otros medios de pago, consultá.</div>
         <div class="ficha-acciones">
-          <button class="consultar" onclick="abrirPedido('${escJs(p.id)}')">Comprar</button>
+          <button class="consultar" ${on('click', 'abrirPedido', p.id)}>Comprar</button>
           ${wa ? `<a class="btn-sec" href="${wa}" target="_blank" rel="noopener">Preguntar por WhatsApp</a>` : ''}
-          <button class="btn-sec" onclick="compartirFicha('${escJs(p.id)}')">Compartir</button>
+          <button class="btn-sec" ${on('click', 'compartirFicha', p.id)}>Compartir</button>
         </div>
       </div>
     </div>`;
@@ -143,6 +145,10 @@ function metaDeProducto(p){
 }
 
 window.cerrarFicha = () => document.getElementById('ficha').close();
+window.filtrarDesdeLink = (c, e) => { e.preventDefault(); window.filtrar(c); };
+window.quitarImagen = el => el.remove();
+window.fotoFallo = (el, texto) => { el.parentNode.textContent = texto; };
+window.cerrarFichaSiFondo = (e, el) => { if (e.target === el) window.cerrarFicha(); };
 // Al cerrar —por el botón, Escape o tocando afuera— el link vuelve a ser el del catálogo.
 document.getElementById('ficha').addEventListener('close', () => {
   if (location.hash) history.replaceState(null, '', location.pathname + location.search);
@@ -213,9 +219,9 @@ window.abrirPedido = id => {
   const specs = [p.gb, p.color, p.estado, p.bateria != null && `Batería ${esc(p.bateria)}%`].filter(Boolean).join(' · ');
 
   document.getElementById('ficha-contenido').innerHTML = `
-    <button class="ficha-cerrar" onclick="cerrarFicha()" aria-label="Cerrar">×</button>
-    <form class="pedido-form" id="form-pedido" onsubmit="mandarPedido(event,'${esc(p.id)}')">
-      <button type="button" class="volver" onclick="abrirFicha('${escJs(p.id)}')">← Volver al producto</button>
+    <button class="ficha-cerrar" ${on('click', 'cerrarFicha')} aria-label="Cerrar">×</button>
+    <form class="pedido-form" id="form-pedido" ${on('submit', 'mandarPedido', '$event', p.id)}>
+      <button type="button" class="volver" ${on('click', 'abrirFicha', p.id)}>← Volver al producto</button>
       <div class="pedido-titulo">Tu pedido</div>
       <div class="pedido-prod">
         ${foto ? `<img src="${esc(foto)}" alt="">` : ''}
@@ -225,14 +231,14 @@ window.abrirPedido = id => {
 
       <div class="pedido-sec">¿Cómo querés pagar?</div>
       ${formas.map((f, k) => `<label class="opcion">
-        <input type="radio" name="pago" value="${esc(f.id)}" ${k === 0 ? 'checked' : ''} onchange="pintarTotal()">
+        <input type="radio" name="pago" value="${esc(f.id)}" ${k === 0 ? 'checked' : ''} ${on('change', 'pintarTotal')}>
         <div><div class="t">${f.titulo}</div><div class="d">${f.detalle}</div></div>
       </label>`).join('')}
 
       <div class="pedido-sec">¿Cómo lo recibís?</div>
-      <label class="opcion"><input type="radio" name="entrega" value="retiro" checked onchange="pintarEnvio()">
+      <label class="opcion"><input type="radio" name="entrega" value="retiro" checked ${on('change', 'pintarEnvio')}>
         <div><div class="t">Lo paso a buscar</div><div class="d">${esc(LOCAL.direccion || 'por el local')}${LOCAL.horarios ? ' · ' + esc(LOCAL.horarios) : ''}</div></div></label>
-      <label class="opcion"><input type="radio" name="entrega" value="envio" onchange="pintarEnvio()">
+      <label class="opcion"><input type="radio" name="entrega" value="envio" ${on('change', 'pintarEnvio')}>
         <div><div class="t">Envío a domicilio</div><div class="d">El costo del envío te lo pasamos por WhatsApp según la zona</div></div></label>
       <div class="campo" id="campo-direccion" hidden><span>Dirección de entrega</span><textarea name="direccion" rows="2" placeholder="Calle y número, ciudad"></textarea></div>
 
@@ -243,7 +249,7 @@ window.abrirPedido = id => {
 
       <div class="pedido-total"><span class="s" id="total-titulo">Total</span><span class="m" id="total-monto"></span></div>
       <button class="consultar" type="submit" id="btn-pedido"></button>
-      <button class="btn-sec" type="button" onclick="pedidoPorWhatsApp('${escJs(p.id)}')">Seguir por WhatsApp</button>
+      <button class="btn-sec" type="button" ${on('click', 'pedidoPorWhatsApp', p.id)}>Seguir por WhatsApp</button>
       <div class="ficha-nota">Al confirmar te escribimos por WhatsApp para coordinar.</div>
     </form>`;
 
@@ -337,14 +343,14 @@ function pantallaPedido(d){
     ? `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(`Hola! Hice el pedido ${d.id.slice(0, 8)} (${d.producto}) desde el catálogo`)}`
     : null;
   document.getElementById('ficha-contenido').innerHTML = `
-    <button class="ficha-cerrar" onclick="cerrarFicha()" aria-label="Cerrar">×</button>
+    <button class="ficha-cerrar" ${on('click', 'cerrarFicha')} aria-label="Cerrar">×</button>
     <div class="pedido-form">
       <div class="pedido-titulo">${titulo}</div>
       <div class="ficha-desc">${esc(detalle)}</div>
       <div class="ficha-nota">Pedido ${esc(d.id.slice(0, 8))} · ${esc(d.producto)}</div>
       <div class="ficha-acciones">
         ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener">Seguir por WhatsApp</a>` : ''}
-        <button class="btn-sec" type="button" onclick="cerrarFicha()">Volver al catálogo</button>
+        <button class="btn-sec" type="button" ${on('click', 'cerrarFicha')}>Volver al catálogo</button>
       </div>
     </div>`;
   const dlg = document.getElementById('ficha');
@@ -436,8 +442,8 @@ function tarjetaGrupo(lista){
   const colores = [...new Set(lista.map(x => x.color).filter(Boolean))];
   const desde = Math.min(...lista.map(x => Number(x.precioUSD) || Infinity));
   const foto = (p.fotos || [])[0];
-  return `<article class="prod" onclick="abrirFicha('${escJs(p.id)}')">
-    <div class="prod-foto${foto ? ' con-foto' : ''}">${foto ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" onerror="this.remove()">` : esc(inicial(p.nombre))}</div>
+  return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
+    <div class="prod-foto${foto ? ' con-foto' : ''}">${foto ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" ${on('error', 'quitarImagen', '$this')}>` : esc(inicial(p.nombre))}</div>
     <div class="prod-nombre">${esc(p.nombre)}</div>
     <div class="chips">${p.tipo === 'pedido' ? '<span class="chip pedido">A pedido</span>' : ''}${gbs.length ? `<span class="chip">${esc(gbs.join(' · '))}</span>` : ''}${colores.length > 1 ? `<span class="chip">${colores.length} colores</span>` : ''}</div>
     <div class="precio"><span class="desde">desde</span>${usd(desde)}</div>
@@ -471,9 +477,9 @@ function selectoresVariante(p, grupo){
   const conColor = c => grupo.find(x => x.gb === p.gb && x.color === c) || grupo.find(x => x.color === c);
   return `<div class="variantes">
     ${gbs.length > 1 ? `<div><div class="t">Capacidad</div><div class="opciones">${gbs.map(gb =>
-      `<button class="opc${gb === p.gb ? ' on' : ''}" onclick="abrirFicha('${escJs(conGb(gb).id)}')">${esc(gb)}</button>`).join('')}</div></div>` : ''}
+      `<button class="opc${gb === p.gb ? ' on' : ''}" ${on('click', 'abrirFicha', conGb(gb).id)}>${esc(gb)}</button>`).join('')}</div></div>` : ''}
     ${colores.length > 1 ? `<div><div class="t">Color</div><div class="opciones">${colores.map(c =>
-      `<button class="opc${c === p.color ? ' on' : ''}" onclick="abrirFicha('${escJs(conColor(c).id)}')">${esc(c)}</button>`).join('')}</div></div>` : ''}
+      `<button class="opc${c === p.color ? ' on' : ''}" ${on('click', 'abrirFicha', conColor(c).id)}>${esc(c)}</button>`).join('')}</div></div>` : ''}
   </div>`;
 }
 const catDe = p => p.categoria || 'Otros';
@@ -503,7 +509,7 @@ function pintar(){
   if (q || FILTRO !== 'todo') {
     const lista = PRODUCTOS.filter(p => (q || catDe(p) === FILTRO) && coincide(p));
     conteo.textContent = lista.length ? `${lista.length} producto${lista.length === 1 ? '' : 's'}${q ? ' encontrado' + (lista.length === 1 ? '' : 's') : ''}` : '';
-    salida.innerHTML = (q ? '' : `<button class="volver-cat" onclick="filtrar('todo')">← Todas las categorías</button>
+    salida.innerHTML = (q ? '' : `<button class="volver-cat" ${on('click', 'filtrar', 'todo')}>← Todas las categorías</button>
         <div class="seccion-cab"><div class="seccion-titulo">${esc(FILTRO)}</div></div>`) +
       (lista.length
         ? `<div class="grilla">${entradas(lista)}</div>`
@@ -518,7 +524,7 @@ function pintar(){
     return `<section class="seccion">
       <div class="seccion-cab">
         <div class="seccion-titulo">${esc(c)}</div>
-        <a class="vertodos" href="#c=${slug(c)}" onclick="event.preventDefault();filtrar('${escJs(c)}')">Ver todos (${cuenta(lista)}) ›</a>
+        <a class="vertodos" href="#c=${slug(c)}" ${on('click', 'filtrarDesdeLink', c, '$event')}>Ver todos (${cuenta(lista)}) ›</a>
       </div>
       <div class="fila">${entradas(lista)}</div>
     </section>`;

@@ -8,8 +8,8 @@
         <div class="card-title">Agregar item al stock</div>
 
         <!-- 3uTools import -->
-        <input type="file" id="st-3u-file" accept=".txt" style="display:none" onchange="import3uTools('st')">
-        <button class="btn-import" onclick="document.getElementById('st-3u-file').click()">
+        <input type="file" id="st-3u-file" accept=".txt" style="display:none" data-change="import3uTools" data-args='["st"]'>
+        <button class="btn-import" data-click="clickEn" data-args='["st-3u-file"]'>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Importar desde 3uTools — Verification Report
         </button>
@@ -17,7 +17,7 @@
 
         <div class="grid2">
           <div class="field"><label>Descripción del item</label><input type="text" id="st-nombre" placeholder="Ej: iPhone 16 Pro Max 256GB"></div>
-          <div class="field"><label>IMEI / N° serie <span style="color:var(--text3);font-weight:400">(opcional)</span></label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="st-imei" placeholder="Ej: 352356350948808"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" onclick="checkImei('st-imei')" title="Chequear IMEI online">🔍</button></div></div>
+          <div class="field"><label>IMEI / N° serie <span style="color:var(--text3);font-weight:400">(opcional)</span></label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="st-imei" placeholder="Ej: 352356350948808"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" data-click="checkImei" data-args='["st-imei"]' title="Chequear IMEI online">🔍</button></div></div>
         </div>
         <div class="grid3">
           <div class="field"><label>Color</label><input type="text" id="st-color" placeholder="Ej: Midnight"></div>
@@ -50,7 +50,7 @@
             <option value="propio">💰 Inversión propia</option>
           </select>
         </div>
-        <button class="btn-save" id="btn-st-guardar" onclick="guardarStock()">Agregar al stock</button>
+        <button class="btn-save" id="btn-st-guardar" data-click="guardarStock">Agregar al stock</button>
       </div>
 
       <div id="stock-metrics" class="metrics" style="margin-top:1rem;"></div>
@@ -62,7 +62,7 @@
           <option value="vendido">Solo vendidos</option>
         </select>
         <input type="text" id="st-fl-buscar" placeholder="Buscar por nombre o IMEI...">
-        <button class="btn-secondary" style="white-space:nowrap;" onclick="generarListaPrecios()">📋 Lista de precios</button>
+        <button class="btn-secondary" style="white-space:nowrap;" data-click="generarListaPrecios">📋 Lista de precios</button>
       </div>
       <div class="card" id="stock-list-body"></div>
     </div>

@@ -1,5 +1,6 @@
 /** modulos/asistente: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { esc, showToast } from '../core/interfaz.js';
 import { posCatalog } from './pos.js';
 import { buildDataContext, workerHeaders } from './reportes.js';
@@ -79,16 +80,16 @@ function agPintarFichas() {
       </div>
       <div class="field"><label>Fecha</label><input type="date" id="ag-f${i}-fecha" value="${esc(f.datos.fecha || contextoApp.today())}"></div>
       <div class="pos-actions" style="margin-top:8px;">
-        <button class="pos-btn-cancel" onclick="descartarFichaAgente(${i})" ${f.estado === 'guardando' ? 'disabled' : ''}>✕ Descartar</button>
-        <button class="pos-btn-checkout" onclick="confirmarGastoAgente(${i})" ${f.estado === 'guardando' ? 'disabled' : ''}>${f.estado === 'guardando' ? 'Guardando…' : 'Anotar el gasto'}</button>
+        <button class="pos-btn-cancel" ${on('click', 'descartarFichaAgente', i)} ${f.estado === 'guardando' ? 'disabled' : ''}>✕ Descartar</button>
+        <button class="pos-btn-checkout" ${on('click', 'confirmarGastoAgente', i)} ${f.estado === 'guardando' ? 'disabled' : ''}>${f.estado === 'guardando' ? 'Guardando…' : 'Anotar el gasto'}</button>
       </div>
     </div>` : `
     <div class="card" style="margin:4px 0 10px;border-color:var(--accent);">
       <div class="card-title" style="margin-bottom:6px;">Listo para cobrar</div>
       <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">${esc(f.datos.nombre)} — te abro el punto de venta con esto cargado. La venta la cerrás vos con el botón de siempre.</p>
       <div class="pos-actions">
-        <button class="pos-btn-cancel" onclick="descartarFichaAgente(${i})">✕ Descartar</button>
-        <button class="pos-btn-checkout" onclick="abrirVentaAgente(${i})">Abrir el punto de venta</button>
+        <button class="pos-btn-cancel" ${on('click', 'descartarFichaAgente', i)}>✕ Descartar</button>
+        <button class="pos-btn-checkout" ${on('click', 'abrirVentaAgente', i)}>Abrir el punto de venta</button>
       </div>
     </div>`).join(''));
   c.scrollTop = c.scrollHeight;

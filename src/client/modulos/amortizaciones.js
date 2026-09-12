@@ -1,5 +1,6 @@
 /** modulos/amortizaciones: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { showToast, esc } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { addDoc, deleteDoc, doc } from 'firebase/firestore';
@@ -25,7 +26,7 @@ export function renderAmort() {
         <div class="amort-val">u$s ${Math.round(valorResidual).toLocaleString('es-AR')}</div>
         <div class="amort-yr">u$s ${Math.round(amortMensual)}/mes</div>
       </div>
-      <button class="ei-btn del" onclick="eliminarAmort('${a.id}')" style="font-size:18px;">×</button>
+      <button class="ei-btn del" ${on('click', 'eliminarAmort', a.id)} style="font-size:18px;">×</button>
     </div>`;
   }).join('');
 }

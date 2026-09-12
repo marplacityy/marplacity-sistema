@@ -1,6 +1,7 @@
 /** modulos/imei: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { showToast, esc, escJs } from '../core/interfaz.js';
+import { on } from '../../shared/seguridad.js';
+import { showToast, esc } from '../core/interfaz.js';
 import { workerHeaders } from './reportes.js';
 import { updateDoc, doc } from 'firebase/firestore';
 
@@ -84,8 +85,8 @@ export function mostrarResultadoCheck(imei, resultados) {
 
   // botón para autocompletar el formulario
   const hayDatos = extraido.modelo || extraido.color || extraido.gb;
-  document.getElementById('ic-actions').innerHTML = hayDatos ? `<button class="btn-secondary" onclick="document.getElementById('ic-modal').classList.remove('open')">Cerrar</button>
-       <button class="btn-save" onclick='aplicarDatosCheck(${esc(JSON.stringify(extraido))})'>✓ Completar formulario</button>` : `<button class="btn-secondary" onclick="document.getElementById('ic-modal').classList.remove('open')">Cerrar</button>`;
+  document.getElementById('ic-actions').innerHTML = hayDatos ? `<button class="btn-secondary" ${on('click', 'cerrarCapa', 'ic-modal')}>Cerrar</button>
+       <button class="btn-save" ${on('click', 'aplicarDatosCheck', extraido)}>✓ Completar formulario</button>` : `<button class="btn-secondary" ${on('click', 'cerrarCapa', 'ic-modal')}>Cerrar</button>`;
 }
 
 // Guarda el resultado del check en el equipo del stock (para que salga en la etiqueta)
@@ -145,11 +146,11 @@ export function inicializarImei() {
     document.getElementById('ic-body').innerHTML = `
     <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">¿Qué querés consultar?</p>
     <div style="display:grid;gap:8px;">
-      <button class="btn-secondary" style="text-align:left;" onclick="correrCheck('${escJs(imei)}',[0])">🆓 Solo modelo — <b>gratis</b></button>
-      <button class="btn-secondary" style="text-align:left;" onclick="correrCheck('${escJs(imei)}',[81])">📱 Modelo + color + capacidad — u$s 0,02</button>
-      <button class="btn-secondary" style="text-align:left;" onclick="correrCheck('${escJs(imei)}',[4])">🔒 iCloud / FMI on-off — u$s 0,01</button>
-      <button class="btn-secondary" style="text-align:left;" onclick="correrCheck('${escJs(imei)}',[55])">🚨 Blacklist — u$s 0,02</button>
-      <button class="btn-save" style="text-align:left;" onclick="correrCheck('${escJs(imei)}',[81,4,55])">⚡ CHECK COMPLETO (todo) — u$s 0,05</button>
+      <button class="btn-secondary" style="text-align:left;" ${on('click', 'correrCheck', imei, [0])}>🆓 Solo modelo — <b>gratis</b></button>
+      <button class="btn-secondary" style="text-align:left;" ${on('click', 'correrCheck', imei, [81])}>📱 Modelo + color + capacidad — u$s 0,02</button>
+      <button class="btn-secondary" style="text-align:left;" ${on('click', 'correrCheck', imei, [4])}>🔒 iCloud / FMI on-off — u$s 0,01</button>
+      <button class="btn-secondary" style="text-align:left;" ${on('click', 'correrCheck', imei, [55])}>🚨 Blacklist — u$s 0,02</button>
+      <button class="btn-save" style="text-align:left;" ${on('click', 'correrCheck', imei, [81, 4, 55])}>⚡ CHECK COMPLETO (todo) — u$s 0,05</button>
     </div>`;
     document.getElementById('ic-actions').innerHTML = '';
     document.getElementById('ic-modal').classList.add('open');

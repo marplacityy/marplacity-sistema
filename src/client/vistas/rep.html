@@ -5,9 +5,9 @@
       </div>
 
       <div class="tab-btns">
-        <button class="tab-btn active" onclick="setRepTab('activas',this)">🔧 Activas</button>
-        <button class="tab-btn" onclick="setRepTab('todas',this)">Todas</button>
-        <button class="tab-btn" onclick="setRepTab('nueva',this)">+ Recibir equipo</button>
+        <button class="tab-btn active" data-click="setRepTab" data-args='["activas", "$this"]'>🔧 Activas</button>
+        <button class="tab-btn" data-click="setRepTab" data-args='["todas", "$this"]'>Todas</button>
+        <button class="tab-btn" data-click="setRepTab" data-args='["nueva", "$this"]'>+ Recibir equipo</button>
       </div>
 
       <!-- LISTA -->
@@ -25,7 +25,7 @@
         <div class="card">
           <div class="card-title">Datos del cliente</div>
           <div class="grid2">
-            <div class="field"><label>Nombre y apellido</label><input type="text" id="r-cliente" placeholder="Ej: Ornella Campos" list="clientes-dl" autocomplete="off" onchange="autofillTelRep()"><datalist id="clientes-dl"></datalist></div>
+            <div class="field"><label>Nombre y apellido</label><input type="text" id="r-cliente" placeholder="Ej: Ornella Campos" list="clientes-dl" autocomplete="off" data-change="autofillTelRep"><datalist id="clientes-dl"></datalist></div>
             <div class="field"><label>Teléfono</label><input type="tel" id="r-tel" placeholder="Ej: 223 576-2334"></div>
           </div>
         </div>
@@ -34,14 +34,14 @@
           <div class="card-title">Equipo</div>
           <div class="grid2">
             <div class="field"><label>Equipo</label><input type="text" id="r-equipo" placeholder="Ej: iPhone 11 128GB Negro"></div>
-            <div class="field"><label>IMEI / N° serie</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="r-imei" placeholder="Opcional"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" onclick="checkImei('r-imei')" title="Chequear IMEI online">🔍</button></div></div>
+            <div class="field"><label>IMEI / N° serie</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="r-imei" placeholder="Opcional"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" data-click="checkImei" data-args='["r-imei"]' title="Chequear IMEI online">🔍</button></div></div>
           </div>
           <div class="grid2">
             <div class="field"><label>Clave de desbloqueo</label><input type="text" id="r-clave" placeholder="Ej: 603065 — opcional"></div>
             <div class="field"><label>Batería % <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="number" id="r-bateria" min="0" max="100" placeholder="Ej: 87"></div>
           </div>
-          <input type="file" id="r-3u-file" accept=".txt" style="display:none" onchange="import3uRep()">
-          <button class="btn-import" onclick="document.getElementById('r-3u-file').click()">
+          <input type="file" id="r-3u-file" accept=".txt" style="display:none" data-change="import3uRep">
+          <button class="btn-import" data-click="clickEn" data-args='["r-3u-file"]'>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Importar desde 3uTools
           </button>
@@ -65,22 +65,22 @@
             <div style="display:flex;gap:6px;margin-bottom:8px;">
               <select id="r-rep-sel" style="flex:1;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"></select>
               <input type="number" id="r-rep-qty" value="1" min="1" step="1" style="width:70px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;">
-              <button class="btn-add" onclick="addRepuesto()">+</button>
+              <button class="btn-add" data-click="addRepuesto">+</button>
             </div>
             <div style="display:flex;gap:6px;margin-bottom:8px;">
               <input type="text" id="r-rep-libre-nombre" placeholder="Repuesto comprado aparte (no descuenta stock)" style="flex:1;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;">
-              <input type="number" id="r-rep-libre-costo" placeholder="Costo u$s" step="0.01" min="0" style="width:100px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;" onkeydown="if(event.key==='Enter')addRepuestoLibre()">
-              <button class="btn-add" onclick="addRepuestoLibre()">+</button>
+              <input type="number" id="r-rep-libre-costo" placeholder="Costo u$s" step="0.01" min="0" style="width:100px;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;" data-enter="addRepuestoLibre">
+              <button class="btn-add" data-click="addRepuestoLibre">+</button>
             </div>
             <div class="medio-tags" id="r-repuestos-tags"></div>
           </div>
           <div class="grid3">
-            <div class="field"><label>Precio</label><input type="number" id="r-precio" step="0.01" min="0" placeholder="0" oninput="calcRepTotales()"></div>
-            <div class="field"><label>Moneda</label><select id="r-moneda" onchange="calcRepTotales()"><option value="ARS">ARS $</option><option value="USD">USD u$s</option></select></div>
-            <div class="field"><label>TC del día</label><input type="number" id="r-tc" step="1" placeholder="1410" oninput="calcRepTotales()"></div>
+            <div class="field"><label>Precio</label><input type="number" id="r-precio" step="0.01" min="0" placeholder="0" data-input="calcRepTotales"></div>
+            <div class="field"><label>Moneda</label><select id="r-moneda" data-change="calcRepTotales"><option value="ARS">ARS $</option><option value="USD">USD u$s</option></select></div>
+            <div class="field"><label>TC del día</label><input type="number" id="r-tc" step="1" placeholder="1410" data-input="calcRepTotales"></div>
           </div>
           <div class="grid2">
-            <div class="field"><label>Seña recibida</label><input type="number" id="r-sena" step="0.01" min="0" placeholder="0" oninput="calcRepTotales()"></div>
+            <div class="field"><label>Seña recibida</label><input type="number" id="r-sena" step="0.01" min="0" placeholder="0" data-input="calcRepTotales"></div>
             <div class="field"><label>Medio de la seña</label><select id="r-medio"></select></div>
           </div>
           <div class="permuta-box" style="margin-bottom:14px;">
@@ -96,7 +96,7 @@
             </select></div>
             <div class="field"><label>Entrega estimada</label><input type="date" id="r-entrega"></div>
           </div>
-          <button class="btn-save" id="btn-r-guardar" onclick="guardarRep()">Recibir equipo y generar ticket</button>
+          <button class="btn-save" id="btn-r-guardar" data-click="guardarRep">Recibir equipo y generar ticket</button>
         </div>
       </div>
     </div>

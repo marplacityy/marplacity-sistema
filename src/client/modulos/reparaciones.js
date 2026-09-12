@@ -1,5 +1,6 @@
 /** modulos/reparaciones: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { esc, showToast } from '../core/interfaz.js';
 import { populateClientesDL, resolverCliente } from './clientes.js';
 import { populateRepuestoSelects, renderRepuestosTags, origenRep, ajustarStockRepuesto, costoRepuestosUSD } from './costos.js';
@@ -15,8 +16,8 @@ export function initRepForm() {
     <div class="chk-item">
       <span>${i.label}</span>
       <div class="chk-btns">
-        <button class="chk-b si" id="chk-${i.k}-si" onclick="setChk('${i.k}',true)">Si</button>
-        <button class="chk-b no" id="chk-${i.k}-no" onclick="setChk('${i.k}',false)">No</button>
+        <button class="chk-b si" id="chk-${i.k}-si" ${on('click', 'setChk', i.k, true)}>Si</button>
+        <button class="chk-b no" id="chk-${i.k}-no" ${on('click', 'setChk', i.k, false)}>No</button>
       </div>
     </div>`).join('');
   const med = document.getElementById('r-medio');
@@ -78,7 +79,7 @@ export function renderReps() {
     const e = contextoApp.estInfo(r.estado);
     const pv = r.moneda === 'ARS' ? contextoApp.fmtARS(r.precio) : 'u$s ' + r.precio;
     const sd = r.saldo > 0 ? r.moneda === 'ARS' ? contextoApp.fmtARS(r.saldo) : 'u$s ' + r.saldo : null;
-    return `<div class="rep-card" onclick="abrirRep('${r.id}')">
+    return `<div class="rep-card" ${on('click', 'abrirRep', r.id)}>
       <div class="rep-card-top">
         <span class="rep-num">#${r.num}</span>
         <span class="est ${e.cls}">${e.label}</span>
@@ -129,7 +130,7 @@ export function renderTkHistory() {
       <td><span class="est-badge ${contextoApp.estInfo(r.estado).cls}" style="font-size:9px;">${contextoApp.estInfo(r.estado).label}</span></td>
       <td style="text-align:right;font-family:'DM Mono',monospace;${(r.saldo || 0) > 0 ? 'color:var(--neg);font-weight:600;' : ''}">${money(r)}</td>
       <td style="text-align:right;white-space:nowrap;">
-        <button class="tkh-open" onclick="closeTkH();abrirRep('${r.id}')">Abrir</button>
+        <button class="tkh-open" ${on('click', 'abrirRepDesdeHistorial', r.id)}>Abrir</button>
       </td>
     </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1.5rem;">Sin resultados.</td></tr>';
   document.getElementById('tkh-count').textContent = total > 25 ? `Mostrando 25 de ${total} — refiná la búsqueda.` : `${total} tickets.`;
@@ -151,8 +152,8 @@ export function renderFkHistory() {
       <td>${esc((v.nombre || '').slice(0, 32))}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;">${money(v)}</td>
       <td style="text-align:right;white-space:nowrap;">
-        <button class="tkh-open" onclick="reimprimirFactura('${v.id}','termica')" title="Reimprimir">🖨</button>
-        <button class="tkh-open" onclick="closeFkH();abrirFE('${v.id}')" title="Editar" ${v.items && v.items.length ? '' : 'disabled style="opacity:.4"'}>✎</button>
+        <button class="tkh-open" ${on('click', 'reimprimirFactura', v.id, 'termica')} title="Reimprimir">🖨</button>
+        <button class="tkh-open" ${on('click', 'abrirFEDesdeHistorial', v.id)} title="Editar" ${v.items && v.items.length ? '' : 'disabled style="opacity:.4"'}>✎</button>
       </td>
     </tr>`).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:1.5rem;">Sin resultados.</td></tr>';
   document.getElementById('fkh-count').textContent = total > 25 ? `Mostrando 25 de ${total} — refiná la búsqueda.` : `${total} facturas.`;
@@ -228,7 +229,7 @@ export function crTotals() {
   };
 }
 export function renderCRMedios() {
-  document.getElementById('cr-medios-tags').innerHTML = contextoApp.crMedios.map((mm, i) => `<div class="medio-tag"><span>${esc(mm.medio)} · ${mm.moneda === 'USD' ? 'u$s ' : '$ '}${mm.valor.toLocaleString('es-AR')}</span><button onclick="crDelMedio(${i})">×</button></div>`).join('');
+  document.getElementById('cr-medios-tags').innerHTML = contextoApp.crMedios.map((mm, i) => `<div class="medio-tag"><span>${esc(mm.medio)} · ${mm.moneda === 'USD' ? 'u$s ' : '$ '}${mm.valor.toLocaleString('es-AR')}</span><button ${on('click', 'crDelMedio', i)}>×</button></div>`).join('');
   const t = crTotals();
   document.getElementById('cr-pagado').textContent = [t.pARS ? contextoApp.fmtARS(Math.round(t.pARS)) : null, t.pUSD ? 'u$s ' + Math.round(t.pUSD * 100) / 100 : null].filter(Boolean).join(' / ') || '—';
   const resto = t.tc ? t.saldoUSD - t.pUSD : contextoApp.crRep?.moneda === 'USD' ? t.saldoUSD - t.pUSD : t.saldoARS - t.pARS;
@@ -725,7 +726,7 @@ export function inicializarReparaciones() {
     document.getElementById('rm-repuestos-list').innerHTML = (r.repuestos || []).length ? r.repuestos.map((x, i) => `<div class="pago-item">
         <div class="pago-info"><div style="font-size:13px;">${x.libre ? '' : origenRep(x) === 'rep' ? '🧩 ' : '📦 '}${x.qty}x ${esc(x.nombre)}${x.libre ? ' <span style="font-size:10px;color:var(--text3);">🛒 comprado aparte</span>' : ''}</div>
         <div class="pago-fecha">${x.moneda === 'ARS' ? contextoApp.fmtARS((x.costo || 0) * x.qty) : 'u$s ' + (x.costo || 0) * x.qty}</div></div>
-        <button class="ei-btn del" onclick="quitarRepuestoModal(${i})">×</button>
+        <button class="ei-btn del" ${on('click', 'quitarRepuestoModal', i)}>×</button>
       </div>`).join('') + (r.stockDescontado ? '<div style="font-size:11px;color:var(--text3);margin-top:4px;">✓ Ya descontados del stock</div>' : '') : '<div style="font-size:12px;color:var(--text3);">Sin repuestos cargados.</div>';
     const h = (r.historial || []).slice().reverse();
     document.getElementById('rep-historial').innerHTML = h.length ? '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Historial</div>' + h.map(x => `<div class="pago-item"><div class="pago-info"><div style="font-size:13px;">${esc(x.texto)}</div><div class="pago-fecha">${x.fecha}</div></div></div>`).join('') : '';
@@ -946,6 +947,8 @@ export function inicializarReparaciones() {
     document.getElementById('tkh-modal').classList.add('open');
     renderTkHistory();
   };
+  window.abrirRepDesdeHistorial = id => { window.closeTkH(); window.abrirRep(id); };
+  window.abrirFEDesdeHistorial = id => { window.closeFkH(); window.abrirFE(id); };
   window.closeTkH = function () {
     document.getElementById('tkh-modal').classList.remove('open');
   };

@@ -1,5 +1,6 @@
 /** modulos/ingresos: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { esc, showToast } from '../core/interfaz.js';
 import { setSyncDot, avisoVentana } from '../core/datos.js';
 import { addDoc, serverTimestamp, updateDoc, doc, deleteDoc } from 'firebase/firestore';
@@ -31,7 +32,7 @@ export function populateIncCatFilter() {
   selM.value = prevM;
 }
 export function renderIncMedioTags() {
-  document.getElementById('inc-medios-tags').innerHTML = contextoApp.incMediosActuales.map((m, i) => `<div class="medio-tag"><span>${esc(m.medio)} · ${m.moneda === 'USD' ? 'u$s ' : '$ '}${m.valor.toLocaleString('es-AR')}</span><button onclick="removeIncMedio(${i})">×</button></div>`).join('');
+  document.getElementById('inc-medios-tags').innerHTML = contextoApp.incMediosActuales.map((m, i) => `<div class="medio-tag"><span>${esc(m.medio)} · ${m.moneda === 'USD' ? 'u$s ' : '$ '}${m.valor.toLocaleString('es-AR')}</span><button ${on('click', 'removeIncMedio', i)}>×</button></div>`).join('');
 }
 export function renderIngresos() {
   populateIncCatFilter();
@@ -114,12 +115,12 @@ export function renderIngresos() {
         ${ganStr}
       </div>
       <div class="ei-actions">
-        <button class="ei-btn" onclick="abrirFacturaArca('${g.id}')" title="${contextoApp.comprobanteDe(g.id) ? 'Ver la factura electrónica' : 'Emitir factura electrónica (ARCA)'}" style="color:${contextoApp.comprobanteDe(g.id) ? '#237A4B' : 'var(--text2)'};">🧾</button>
-        <button class="ei-btn" onclick="enviarFacturaWa('${g.id}')" title="Enviar por WhatsApp" style="color:#1A6B3C;">📤</button>
-        <button class="ei-btn" onclick="reimprimirFactura('${g.id}','termica')" title="Reimprimir ticket térmico">🖨</button>
-        <button class="ei-btn" onclick="reimprimirFactura('${g.id}','a4')" title="Factura A4 (imprimir o guardar PDF)">📄</button>
-        <button class="ei-btn" onclick="${g.items && g.items.length ? `abrirFE('${g.id}')` : `editarIngreso('${g.id}')`}" title="Editar">✎</button>
-        <button class="ei-btn del" onclick="eliminarIngreso('${g.id}')" title="Eliminar">×</button>
+        <button class="ei-btn" ${on('click', 'abrirFacturaArca', g.id)} title="${contextoApp.comprobanteDe(g.id) ? 'Ver la factura electrónica' : 'Emitir factura electrónica (ARCA)'}" style="color:${contextoApp.comprobanteDe(g.id) ? '#237A4B' : 'var(--text2)'};">🧾</button>
+        <button class="ei-btn" ${on('click', 'enviarFacturaWa', g.id)} title="Enviar por WhatsApp" style="color:#1A6B3C;">📤</button>
+        <button class="ei-btn" ${on('click', 'reimprimirFactura', g.id, 'termica')} title="Reimprimir ticket térmico">🖨</button>
+        <button class="ei-btn" ${on('click', 'reimprimirFactura', g.id, 'a4')} title="Factura A4 (imprimir o guardar PDF)">📄</button>
+        <button class="ei-btn" ${on('click', g.items && g.items.length ? 'abrirFE' : 'editarIngreso', g.id)} title="Editar">✎</button>
+        <button class="ei-btn del" ${on('click', 'eliminarIngreso', g.id)} title="Eliminar">×</button>
       </div>
     </div>`;
   }).join('');
@@ -127,7 +128,7 @@ export function renderIngresos() {
 
 // ── Income edit modal state ──
 export function renderImMedioTags() {
-  document.getElementById('im-medios-tags').innerHTML = contextoApp.imMedios.map((m, i) => `<div class="medio-tag"><span>${esc(m.medio)} · ${m.moneda === 'USD' ? 'u$s ' : '$ '}${m.valor.toLocaleString('es-AR')}</span><button onclick="removeImMedio(${i})">×</button></div>`).join('');
+  document.getElementById('im-medios-tags').innerHTML = contextoApp.imMedios.map((m, i) => `<div class="medio-tag"><span>${esc(m.medio)} · ${m.moneda === 'USD' ? 'u$s ' : '$ '}${m.valor.toLocaleString('es-AR')}</span><button ${on('click', 'removeImMedio', i)}>×</button></div>`).join('');
 }
 export function inicializarIngresos() {
   window.togglePermuta = function () {

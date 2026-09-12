@@ -1,8 +1,10 @@
 /** modulos/inicio: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { getGFStatus, statusBadge } from './gastos-fijos.js';
 import { esc } from '../core/interfaz.js';
 import { cargarClientes, attachClienteAC } from './clientes.js';
+import { renderIngresos } from './ingresos.js';
 
 export
 // ── Dashboard ─────────────────────────────────────────
@@ -30,12 +32,12 @@ function renderHome() {
     <div class="metric"><div class="m-label">Reparaciones en curso</div><div class="m-val">${activas.length}</div><div class="m-sub">${listas.length} listas p/ retirar</div></div>
     <div class="metric"><div class="m-label">Fijos vencidos</div><div class="m-val" style="color:${gfVencidos ? 'var(--neg)' : 'var(--text3)'}">${gfVencidos}</div></div>
     <div class="metric"><div class="m-label">Stock bajo / sin stock</div><div class="m-val" style="color:${stockBajo ? '#854F0B' : 'var(--text3)'}">${stockBajo}</div></div>
-    ${(contextoApp.encarguesItems || []).filter(x => x.estado === 'pendiente').length ? `<div class="metric" style="cursor:pointer;" onclick="goTo('encargues')"><div class="m-label">📦 Encargues pendientes</div><div class="m-val">${contextoApp.encarguesItems.filter(x => x.estado === 'pendiente').length}</div><div class="m-sub">click para ver</div></div>` : ''}
+    ${(contextoApp.encarguesItems || []).filter(x => x.estado === 'pendiente').length ? `<div class="metric" style="cursor:pointer;" ${on('click', 'goTo', 'encargues')}><div class="m-label">📦 Encargues pendientes</div><div class="m-val">${contextoApp.encarguesItems.filter(x => x.estado === 'pendiente').length}</div><div class="m-sub">click para ver</div></div>` : ''}
   `;
 
   // Reparaciones listas
   const repList = listas.slice(0, 6).map(r => `
-    <div class="home-list-item" onclick="abrirRep('${r.id}')">
+    <div class="home-list-item" ${on('click', 'abrirRep', r.id)}>
       <div><b>#${r.num}</b> ${esc(r.cliente || '')} <div class="sub">${esc(r.equipo || '')}</div></div>
       <div>${(r.saldo || 0) > 0 ? `<span style="color:var(--neg);font-weight:600;">saldo ${r.moneda === 'ARS' ? contextoApp.fmtARS(r.saldo) : 'u$s ' + r.saldo}</span>` : '<span style="color:#237A4B;">pago</span>'}</div>
     </div>`).join('');
@@ -48,14 +50,14 @@ function renderHome() {
   })).filter(x => ['vencido', 'proximo'].includes(x.st.status));
   gfAlerta.sort((a, b) => (a.st.proxVenc || '').localeCompare(b.st.proxVenc || ''));
   document.getElementById('home-fijos').innerHTML = gfAlerta.slice(0, 6).map(x => `
-    <div class="home-list-item" onclick="goTo('fijos')">
+    <div class="home-list-item" ${on('click', 'goTo', 'fijos')}>
       <div><b>${esc(x.f.nombre)}</b> <div class="sub">vence ${x.st.proxVenc || '—'}</div></div>
       <div>${statusBadge(x.st.status)}</div>
     </div>`).join('') || '<div class="home-empty">Todo al día ✓</div>';
 
   // Ventas de hoy
   document.getElementById('home-ventas').innerHTML = ventasHoy.slice(0, 6).map(v => `
-    <div class="home-list-item" onclick="goTo('facturas')">
+    <div class="home-list-item" ${on('click', 'goTo', 'facturas')}>
       <div><b>${v.numVenta ? '#V-' + v.numVenta : ''}</b> ${esc(v.clienteNombre || '')} <div class="sub">${esc((v.nombre || '').slice(0, 60))}</div></div>
       <div style="font-family:'DM Mono',monospace;">${v.totalUSD ? 'u$s ' + v.totalUSD : v.totalARS ? contextoApp.fmtARS(v.totalARS) : ''}</div>
     </div>`).join('') || '<div class="home-empty">Sin ventas todavía hoy.</div>';
@@ -63,7 +65,7 @@ function renderHome() {
   // Stock bajo
   const bajos = contextoApp.invItems.filter(p => contextoApp.invEstado(p) !== 'ok');
   document.getElementById('home-stock').innerHTML = bajos.slice(0, 6).map(p => `
-    <div class="home-list-item" onclick="abrirInv('${p.id}')">
+    <div class="home-list-item" ${on('click', 'abrirInv', p.id)}>
       <div><b>${esc(p.nombre)}</b> <div class="sub">${esc(p.categoria || '')}</div></div>
       <div>${contextoApp.invEstado(p) === 'out' ? '<span class="inv-alert alert-out">Sin stock</span>' : `<span class="inv-alert alert-low">Quedan ${p.qty}</span>`}</div>
     </div>`).join('') || '<div class="home-empty">Stock saludable ✓</div>';
@@ -82,7 +84,7 @@ export async function buscarGlobal(q) {
     items: cl.map(x => ({
       txt: `<b>${esc(x.nombre)}</b>`,
       sub: x.tel || '',
-      fn: `abrirCliente('${x.id}')`
+      fn: on('click', 'abrirCliente', x.id)
     }))
   });
   const rp = contextoApp.reps.filter(r => has(String(r.num || ''), r.cliente || '', r.imei || '', r.equipo || '', r.tel || '')).slice(0, 8);
@@ -91,7 +93,7 @@ export async function buscarGlobal(q) {
     items: rp.map(r => ({
       txt: `<b>#${r.num}</b> ${esc(r.cliente || '')} — ${esc(r.equipo || '')}`,
       sub: (r.imei ? 'IMEI ' + r.imei + ' · ' : '') + contextoApp.estInfo(r.estado).label,
-      fn: `abrirRep('${r.id}')`
+      fn: on('click', 'abrirRep', r.id)
     }))
   });
   const vt = contextoApp.ingresos.filter(v => has(String(v.numVenta || ''), v.clienteNombre || '', v.nombre || '', v.imei || '', ...(v.items || []).map(i => i.imei || ''))).slice(0, 8);
@@ -100,7 +102,7 @@ export async function buscarGlobal(q) {
     items: vt.map(v => ({
       txt: `<b>${v.numVenta ? '#V-' + v.numVenta : ''}</b> ${esc(v.clienteNombre || '')}`,
       sub: (v.fecha || '') + ' · ' + esc((v.nombre || '').slice(0, 60)),
-      fn: `goTo('facturas');document.getElementById('inc-fl-buscar').value='${esc(q)}';renderIngresos();closeGS()`
+      fn: on('click', 'buscarVentasDesdeInicio', q)
     }))
   });
   const eq = contextoApp.stockItems.filter(s => has(s.nombre || '', s.imei || '', s.color || '')).slice(0, 8);
@@ -109,7 +111,7 @@ export async function buscarGlobal(q) {
     items: eq.map(s => ({
       txt: `<b>${esc(s.nombre)}</b> ${esc(s.color || '')}`,
       sub: (s.imei ? 'IMEI ' + s.imei + ' · ' : '') + (s.status === 'vendido' ? 'Vendido' : 'En stock'),
-      fn: `editarStock('${s.id}')`
+      fn: on('click', 'editarStock', s.id)
     }))
   });
   const cg = contextoApp.consigItems.filter(x => has(x.producto || '', x.imei || '', x.proveedor || '')).slice(0, 8);
@@ -118,7 +120,7 @@ export async function buscarGlobal(q) {
     items: cg.map(x => ({
       txt: `<b>${esc(x.producto || '')}</b>`,
       sub: (x.proveedor || '') + ' · ' + (x.status === 'vendido' ? 'Vendido' : 'En stock'),
-      fn: `editarConsigItem('${x.id}')`
+      fn: on('click', 'editarConsigItem', x.id)
     }))
   });
   const iv = contextoApp.invItems.filter(p => has(p.nombre || '', p.sku || '')).slice(0, 8);
@@ -127,16 +129,17 @@ export async function buscarGlobal(q) {
     items: iv.map(p => ({
       txt: `<b>${esc(p.nombre)}</b>`,
       sub: (p.qty || 0) + ' unidades',
-      fn: `abrirInv('${p.id}')`
+      fn: on('click', 'abrirInv', p.id)
     }))
   });
-  document.getElementById('gs-results').innerHTML = R.length ? R.map(sec => `<div class="gs-section">${sec.t}</div>` + sec.items.map(it => `<div class="gs-item" onclick="${it.fn}">${it.txt}<div class="sub">${it.sub}</div></div>`).join('')).join('') : '<div class="home-empty">Sin resultados para "' + esc(q) + '".</div>';
+  document.getElementById('gs-results').innerHTML = R.length ? R.map(sec => `<div class="gs-section">${sec.t}</div>` + sec.items.map(it => `<div class="gs-item" ${it.fn}>${it.txt}<div class="sub">${it.sub}</div></div>`).join('')).join('') : '<div class="home-empty">Sin resultados para "' + esc(q) + '".</div>';
   document.getElementById('gs-modal').classList.add('open');
 }
 
 // Búsqueda global solo con Enter (recorrer 30k registros en cada pausa de tipeo pesa)
 export function inicializarInicio() {
-  window.closeGS = function () {
+  window.buscarVentasDesdeInicio = q => { window.goTo('facturas'); document.getElementById('inc-fl-buscar').value = q; renderIngresos(); window.closeGS(); };
+window.closeGS = function () {
     document.getElementById('gs-modal').classList.remove('open');
   };
   document.getElementById('gs-input').addEventListener('keydown', function (e) {

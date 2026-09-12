@@ -71,7 +71,7 @@ test('guardar un gasto lo lleva al listado y al cierre de caja', async ({ page }
   await page.locator('#concepto').fill('Compra de limpieza');
   await page.locator('#monto').fill('28000');
   await page.locator('#medio').selectOption('Efectivo');
-  await page.locator('#page-cargar button[onclick="guardar()"]').click();
+  await page.locator('#page-cargar button[data-click="guardar"]').click();
   await expect.poll(() => page.evaluate(() => window.__datosPrueba.listar('gastos').length)).toBe(2);
   const gasto = await page.evaluate(() => window.__datosPrueba.listar('gastos').find(g => g.concepto === 'Compra de limpieza'));
   expect(gasto.usd).toBe(20);

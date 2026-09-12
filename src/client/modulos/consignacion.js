@@ -1,6 +1,7 @@
 /** modulos/consignacion: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { esc, escJs, showToast } from '../core/interfaz.js';
+import { on } from '../../shared/seguridad.js';
+import { esc, showToast } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { addDoc, serverTimestamp, updateDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { printTicket80 } from './pos.js';
@@ -89,10 +90,10 @@ export function renderConsig() {
         ${g.precioARS != null ? `<div class="stock-sub">${contextoApp.fmtARS(g.precioARS)}</div>` : ''}
       </div>
       <div class="ei-actions">
-        <button class="ei-btn" onclick="labelConsig('${g.id}')" title="Imprimir etiqueta 62x100mm">🏷</button>
-        <button class="ei-btn" onclick="editarConsig('${g.id}')" title="Editar">✎</button>
-        <button class="ei-btn" onclick="marcarConsigVendido('${g.id}',${vendido})" title="${vendido ? 'Volver a stock' : 'Marcar vendido'}">${vendido ? '↩' : '✓'}</button>
-        <button class="ei-btn del" onclick="eliminarConsig('${g.id}')" title="Eliminar">×</button>
+        <button class="ei-btn" ${on('click', 'labelConsig', g.id)} title="Imprimir etiqueta 62x100mm">🏷</button>
+        <button class="ei-btn" ${on('click', 'editarConsig', g.id)} title="Editar">✎</button>
+        <button class="ei-btn" ${on('click', 'marcarConsigVendido', g.id, vendido)} title="${vendido ? 'Volver a stock' : 'Marcar vendido'}">${vendido ? '↩' : '✓'}</button>
+        <button class="ei-btn del" ${on('click', 'eliminarConsig', g.id)} title="Eliminar">×</button>
       </div>
     </div>`;
   }).join('');
@@ -217,7 +218,7 @@ export function renderProveedores() {
     if (aPagar > 0 && dias != null) {
       if (dias >= 7) alerta = `<div class="proveedor-alerta alerta-urgente">⚠️ Hay deuda de hace <b>${dias} días</b> sin pagar — se está juntando.</div>`;else if (dias >= 3) alerta = `<div class="proveedor-alerta alerta-atencion">🔔 Deuda de hace ${dias} días — conviene ir pagando.</div>`;
     }
-    return `<div class="proveedor-card" onclick="abrirCuentaCorriente('${escJs(prov)}')">
+    return `<div class="proveedor-card" ${on('click', 'abrirCuentaCorriente', prov)}>
       <div class="proveedor-header">
         <div>
           <div class="proveedor-nombre">${esc(prov)} ${esFijo ? '<span class="tipo-tag tipo-fijo">🔁 Fijo</span>' : '<span class="tipo-tag tipo-casual">👤 Casual</span>'}</div>
@@ -234,8 +235,8 @@ export function renderProveedores() {
         <div class="proveedor-stat">Pagado: <strong style="color:#237A4B">${contextoApp.fmtUSD(pagado)}</strong>${pagadoARS ? ` <span style="color:var(--text3)">(incluye ${contextoApp.fmtARS(pagadoARS)})</span>` : ''}</div>
       </div>
       <div style="margin-top:10px;display:flex;gap:8px;">
-        <button class="btn-pagar-outline" onclick="event.stopPropagation();abrirCuentaCorriente('${escJs(prov)}')">📋 Cuenta corriente</button>
-        <button class="btn-pagar-outline" onclick="event.stopPropagation();imprimirComprobanteConsig('${escJs(prov)}')">🖨 Comprobante</button>
+        <button class="btn-pagar-outline" ${on('click', 'abrirCuentaCorriente', prov)}>📋 Cuenta corriente</button>
+        <button class="btn-pagar-outline" ${on('click', 'imprimirComprobanteConsig', prov)}>🖨 Comprobante</button>
       </div>
     </div>`;
   }).join('');
@@ -291,7 +292,7 @@ export function renderPagos() {
         <div class="pago-fecha">${p.fecha || ''} ${p.medio ? '· ' + esc(p.medio) : ''} ${p.notas ? '· ' + esc(p.notas) : ''}</div>
       </div>
       <div class="pago-monto">${p.moneda === 'USD' ? contextoApp.fmtUSD(p.monto) : contextoApp.fmtARS(p.monto)}${p.moneda === 'ARS' ? `<div style="font-size:10.5px;color:var(--text3);font-weight:400;">${contextoApp.fmtUSD(pagoUSD(p))}${p.tc ? ' · TC ' + p.tc : ' · TC estimado'}</div>` : ''}</div>
-      <button class="ei-btn del" onclick="eliminarPago('${p.id}')">×</button>
+      <button class="ei-btn del" ${on('click', 'eliminarPago', p.id)}>×</button>
     </div>
   `).join('');
 }

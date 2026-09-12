@@ -1,6 +1,7 @@
 /** modulos/inventario: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { esc, escJs, saveCfgData, showToast } from '../core/interfaz.js';
+import { on } from '../../shared/seguridad.js';
+import { esc, saveCfgData, showToast } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { addDoc, serverTimestamp, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 
@@ -26,7 +27,7 @@ function populateICatSelects() {
 export function renderICatTags() {
   const el = document.getElementById('icats-tags');
   if (!el) return;
-  el.innerHTML = contextoApp.icats.map(x => `<div class="tag"><span>${esc(x)}</span><button onclick="eliminarICat('${escJs(x)}')">×</button></div>`).join('');
+  el.innerHTML = contextoApp.icats.map(x => `<div class="tag"><span>${esc(x)}</span><button ${on('click', 'eliminarICat', x)}>×</button></div>`).join('');
 }
 export function renderInv() {
   populateICatSelects();
@@ -65,7 +66,7 @@ export function renderInv() {
     const cls = st === 'out' ? 'out' : st === 'low' ? 'low' : '';
     const badge = st === 'out' ? '<span class="inv-alert alert-out">Sin stock</span>' : st === 'low' ? '<span class="inv-alert alert-low">Quedan pocos</span>' : '';
     const m = v => p.moneda === 'ARS' ? contextoApp.fmtARS(v) : 'u$s ' + v;
-    return `<div class="inv-card ${cls}" onclick="abrirInv('${p.id}')">
+    return `<div class="inv-card ${cls}" ${on('click', 'abrirInv', p.id)}>
       <div class="inv-top">
         <div style="flex:1;min-width:0;">
           <div class="inv-nombre">${esc(p.nombre)}</div>
@@ -79,8 +80,8 @@ export function renderInv() {
         ${p.sugerido ? `<span><span class="c">Sug.</span> <span class="v">${m(p.sugerido)}</span></span>` : ''}
       </div>
       <div class="inv-acts">
-        <button class="qty-btn" onclick="ajustarQty('${p.id}',-1,event)">−</button>
-        <button class="qty-btn" onclick="ajustarQty('${p.id}',1,event)">+</button>
+        <button class="qty-btn" ${on('click', 'ajustarQty', p.id, -1, '$event')}>−</button>
+        <button class="qty-btn" ${on('click', 'ajustarQty', p.id, 1, '$event')}>+</button>
       </div>
     </div>`;
   }).join('');

@@ -5,10 +5,10 @@
       </div>
 
       <div class="tab-btns">
-        <button class="tab-btn active" onclick="setConsigTab('productos',this)">Productos</button>
-        <button class="tab-btn" onclick="setConsigTab('proveedores',this)">Proveedores</button>
-        <button class="tab-btn" onclick="setConsigTab('pagos',this)">Registrar pago</button>
-        <button class="tab-btn" onclick="setConsigTab('lista',this)">📋 Importar lista</button>
+        <button class="tab-btn active" data-click="setConsigTab" data-args='["productos", "$this"]'>Productos</button>
+        <button class="tab-btn" data-click="setConsigTab" data-args='["proveedores", "$this"]'>Proveedores</button>
+        <button class="tab-btn" data-click="setConsigTab" data-args='["pagos", "$this"]'>Registrar pago</button>
+        <button class="tab-btn" data-click="setConsigTab" data-args='["lista", "$this"]'>📋 Importar lista</button>
       </div>
 
       <!-- TAB: PRODUCTOS -->
@@ -17,8 +17,8 @@
           <div class="card-title">Agregar producto</div>
 
           <!-- 3uTools import -->
-          <input type="file" id="cp-3u-file" accept=".txt" style="display:none" onchange="import3uTools('cp')">
-          <button class="btn-import" onclick="document.getElementById('cp-3u-file').click()">
+          <input type="file" id="cp-3u-file" accept=".txt" style="display:none" data-change="import3uTools" data-args='["cp"]'>
+          <button class="btn-import" data-click="clickEn" data-args='["cp-3u-file"]'>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Importar desde 3uTools — Verification Report
           </button>
@@ -27,7 +27,7 @@
           <div class="grid2">
             <div class="field"><label>Proveedor</label>
               <div style="display:flex;gap:6px;">
-                <input type="text" id="cp-proveedor" placeholder="Nombre del proveedor o particular" list="proveedores-dl" style="flex:1" autocomplete="off" onchange="autoTipoProveedor()">
+                <input type="text" id="cp-proveedor" placeholder="Nombre del proveedor o particular" list="proveedores-dl" style="flex:1" autocomplete="off" data-change="autoTipoProveedor">
                 <datalist id="proveedores-dl"></datalist>
               </div>
             </div>
@@ -55,7 +55,7 @@
             </div>
           </div>
           <div class="grid2">
-            <div class="field"><label>IMEI / N° serie</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="cp-imei" placeholder="Opcional"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" onclick="checkImei('cp-imei')" title="Chequear IMEI online">🔍</button></div></div>
+            <div class="field"><label>IMEI / N° serie</label><div style="display:flex;gap:6px;align-items:center;"><input type="text" id="cp-imei" placeholder="Opcional"><button type="button" class="btn-add" style="flex-shrink:0;background:var(--surface);color:var(--text2);border:1px solid var(--border);" data-click="checkImei" data-args='["cp-imei"]' title="Chequear IMEI online">🔍</button></div></div>
             <div class="field"><label>Fecha de entrada</label><input type="date" id="cp-fecha"></div>
           </div>
           <div class="grid2">
@@ -73,7 +73,7 @@
           </div>
           <div class="field"><label>TC (si aplica)</label><input type="number" id="cp-tc" placeholder="1410" step="1"></div>
           <div class="field"><label>Notas</label><input type="text" id="cp-notas" placeholder="Detalles adicionales..."></div>
-          <button class="btn-save" id="btn-cp-guardar" onclick="guardarConsig()">Agregar producto</button>
+          <button class="btn-save" id="btn-cp-guardar" data-click="guardarConsig">Agregar producto</button>
         </div>
 
         <div class="filters-bar" style="margin-top:1rem;">
@@ -117,7 +117,7 @@
               <input type="number" id="lista-tc" placeholder="1410" step="1">
             </div>
           </div>
-          <button class="btn-save" id="btn-lista-interpretar" onclick="interpretarLista()">
+          <button class="btn-save" id="btn-lista-interpretar" data-click="interpretarLista">
             ✨ Interpretar con IA
           </button>
         </div>
@@ -128,8 +128,8 @@
             <div class="card-title">Vista previa — confirmá antes de guardar</div>
             <div id="lista-preview-items"></div>
             <div style="display:flex;gap:8px;margin-top:1rem;">
-              <button class="btn-secondary" onclick="cancelarLista()">Cancelar</button>
-              <button class="btn-save" id="btn-lista-guardar" onclick="guardarLista()">Guardar todos</button>
+              <button class="btn-secondary" data-click="cancelarLista">Cancelar</button>
+              <button class="btn-save" id="btn-lista-guardar" data-click="guardarLista">Guardar todos</button>
             </div>
           </div>
         </div>
@@ -150,18 +150,18 @@
             <div class="field"><label>Monto pagado</label>
               <div style="display:flex;gap:6px;">
                 <input type="number" id="pago-monto" placeholder="0" step="0.01" min="0" style="flex:1">
-                <select id="pago-moneda" onchange="pagoTcToggle()" style="width:80px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="USD">USD</option><option value="ARS">ARS</option></select>
+                <select id="pago-moneda" data-change="pagoTcToggle" style="width:80px;padding:9px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;appearance:none;"><option value="USD">USD</option><option value="ARS">ARS</option></select>
               </div>
             </div>
             <div class="field"><label>Medio de pago</label><select id="pago-medio"></select></div>
           </div>
           <div class="field" id="pago-tc-wrap" style="display:none;">
             <label>Cotización del día (ARS/USD)</label>
-            <input type="number" id="pago-tc" placeholder="1410" step="1" oninput="pagoTcPreview()">
+            <input type="number" id="pago-tc" placeholder="1410" step="1" data-input="pagoTcPreview">
             <div style="font-size:11px;color:var(--text3);margin-top:4px;" id="pago-tc-preview">Con esto el pago en pesos descuenta del saldo en dólares.</div>
           </div>
           <div class="field"><label>Notas</label><input type="text" id="pago-notas" placeholder="Transferencia, efectivo, referencia..."></div>
-          <button class="btn-save" id="btn-pago-guardar" onclick="guardarPago()">Registrar pago</button>
+          <button class="btn-save" id="btn-pago-guardar" data-click="guardarPago">Registrar pago</button>
         </div>
 
         <div class="card" style="margin-top:1rem;">

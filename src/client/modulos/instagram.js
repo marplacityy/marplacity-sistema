@@ -1,7 +1,8 @@
 import { configuracion } from '../core/config-publica.js';
+import { on } from '../../shared/seguridad.js';
 /** modulos/instagram: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { esc, escJs, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
+import { esc, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { setDoc, serverTimestamp, updateDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
 import { workerHeaders } from './reportes.js';
@@ -35,13 +36,13 @@ export function renderSwitchBot() {
   const modo = contextoApp.modoBotActual();
   const m = contextoApp.MODOS_BOT[modo];
   const borde = modo === 'todos' ? '' : modo === 'prueba' ? 'border-color:#FAC775;background:#FEF9E7;' : 'border-color:#F09595;background:#FDECEC;';
-  const btn = (id, txt) => `<button class="${modo === id ? 'btn-save' : 'btn-pagar-outline'}" style="${modo === id ? 'width:auto;padding:9px 16px;' : ''}white-space:nowrap;" ${modo === id ? 'disabled' : `onclick="setModoBot('${id}')"`}>${txt}</button>`;
+  const btn = (id, txt) => `<button class="${modo === id ? 'btn-save' : 'btn-pagar-outline'}" style="${modo === id ? 'width:auto;padding:9px 16px;' : ''}white-space:nowrap;" ${modo === id ? 'disabled' : on('click', 'setModoBot', id)}>${txt}</button>`;
 
   // Las cuentas se agregan desde una conversación de la bandeja, que es donde sabemos
   // el id de Instagram: no es algo que se pueda tipear de memoria.
   const cuentas = contextoApp.botCfg.cuentasPrueba.length ? contextoApp.botCfg.cuentasPrueba.map(id => {
     const c = contextoApp.convsItems.find(x => String(x.igUserId) === id);
-    return `<span class="consig-tipo tipo-propio" style="margin:2px 4px 2px 0;">${esc(c && c.igUsuario ? '@' + c.igUsuario : 'IG ' + id)} <a onclick="quitarCuentaPrueba('${escJs(id)}')" style="cursor:pointer;font-weight:700;">✕</a></span>`;
+    return `<span class="consig-tipo tipo-propio" style="margin:2px 4px 2px 0;">${esc(c && c.igUsuario ? '@' + c.igUsuario : 'IG ' + id)} <a ${on('click', 'quitarCuentaPrueba', id)} style="cursor:pointer;font-weight:700;">✕</a></span>`;
   }).join('') : '<span style="font-size:12px;color:var(--neg);">Ninguna cuenta autorizada todavía — el bot no le va a contestar a nadie. Agregá la tuya con el botón de una conversación de abajo.</span>';
   document.getElementById('bd-switch').innerHTML = `
     <div class="card" style="margin-bottom:12px;${borde}">
@@ -172,14 +173,14 @@ export function renderBandeja() {
   const ahora = Date.now();
   document.getElementById('bd-tabs').innerHTML = Object.entries(contextoApp.TABS_BD).map(([k, t]) => {
     const n = contextoApp.convsItems.filter(t.filtra).length;
-    return `<button class="tab-btn ${k === contextoApp.bdTab ? 'active' : ''}" onclick="setBdTab('${k}')">${t.label}${n ? ` (${n})` : ''}</button>`;
+    return `<button class="tab-btn ${k === contextoApp.bdTab ? 'active' : ''}" ${on('click', 'setBdTab', k)}>${t.label}${n ? ` (${n})` : ''}</button>`;
   }).join('');
   const tab = contextoApp.TABS_BD[contextoApp.bdTab];
   const filas = contextoApp.convsItems.filter(tab.filtra).sort(tab.ordena);
 
   // Vaciar solo tiene sentido sobre lo que te está pidiendo atención.
   const pendientes = contextoApp.convsItems.filter(contextoApp.TABS_BD.atencion.filtra).length;
-  document.getElementById('bd-acciones').innerHTML = contextoApp.bdTab === 'atencion' && pendientes ? `<div style="margin-bottom:10px;"><button class="btn-pagar-outline" onclick="vaciarBandeja()">✓ Ya contesté todo — vaciar</button></div>` : '';
+  document.getElementById('bd-acciones').innerHTML = contextoApp.bdTab === 'atencion' && pendientes ? `<div style="margin-bottom:10px;"><button class="btn-pagar-outline" ${on('click', 'vaciarBandeja')}>✓ Ya contesté todo — vaciar</button></div>` : '';
   document.getElementById('bd-list').innerHTML = filas.map(x => {
     const t = msDe(x.ultimoMensajeCliente);
     // Sin fecha se trata como vencida: es el lado seguro, porque mandar fuera de las
@@ -198,11 +199,11 @@ export function renderBandeja() {
     const solo = pausado && !!x.motivoPausa;
     const semaforo = `<button class="bd-semaforo ${pausado ? 'sem-off' : 'sem-on'}"
       title="${pausado ? solo ? esc(x.motivoPausa) + '. Tocá para que el bot vuelva a contestar.' : 'El bot no contesta este chat. Tocá para que vuelva a contestar.' : 'El bot contesta este chat solo. Tocá para pausarlo y seguirlo vos.'}"
-      onclick="event.stopPropagation(); toggleBotChat('${escJs(x.id)}')">${pausado ? solo ? '🔴 Te lo dejó' : '🔴 Pausado' : '🟢 Bot'}</button>`;
+      ${on('click', 'toggleBotChat', x.id)}>${pausado ? solo ? '🔴 Te lo dejó' : '🔴 Pausado' : '🟢 Bot'}</button>`;
     const etiqueta = x.necesitaAtencion ? `<span class="est-badge ${vencida ? 'est-abandono' : 'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>` : `<span class="consig-tipo ${x.estado === 'cerrado' ? 'tipo-permuta' : 'tipo-consig'}" style="white-space:nowrap;">${esc(contextoApp.ESTADOS_BOT[x.estado] || x.estado || '—')}</span>`;
     const bajada = x.necesitaAtencion ? esc(contextoApp.MOTIVOS_BOT[x.motivo] || x.motivo || 'Sin motivo') : esc(contextoApp.ESTADOS_BOT[x.estado] || x.estado || '');
     return `<div class="card" style="margin-bottom:8px;${vencida && x.necesitaAtencion ? 'border-color:#F09595;' : ''}">
-      <div onclick="toggleConv('${escJs(x.id)}')" style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;">
+      <div ${on('click', 'toggleConv', x.id)} style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;">
         <div style="min-width:0;">
           <div style="font-weight:600;font-size:15px;">${abierta ? '▾' : '▸'} 💬 ${esc(quien)}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:2px;">${bajada} · ${t ? haceCuanto(ahora - t) : 'sin fecha'}${x.ultimoProducto ? ' · ' + esc(x.ultimoProducto) : ''}</div>
@@ -217,12 +218,12 @@ export function renderBandeja() {
       ${vencida ? `<div class="proveedor-alerta alerta-urgente">⏰ <b>Pasaron las 24 h</b> — Instagram ya no deja que el bot conteste. Escribile vos desde la app y después marcala como contestada.</div>` : ''}
       <div class="field" style="margin:10px 0 8px;">
         <label>${vencida ? 'Respuesta que había preparado el bot (no se puede mandar desde acá)' : 'Respuesta — editala si hace falta, una línea por mensaje'}</label>
-        <textarea id="bd-txt-${x.id}" style="height:90px;" ${vencida ? 'disabled' : ''} oninput="bdBorrador('${escJs(x.id)}', this.value)">${esc(borrador)}</textarea>
+        <textarea id="bd-txt-${x.id}" style="height:90px;" ${vencida ? 'disabled' : ''} ${on('input', 'bdBorrador', x.id, '$value')}>${esc(borrador)}</textarea>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${vencida ? '' : `<button class="btn-save" id="bd-btn-${x.id}" style="width:auto;padding:10px 18px;" onclick="aprobarBandeja('${escJs(x.id)}')">✓ Aprobar y mandar</button>`}
-        ${x.necesitaAtencion ? `<button class="btn-pagar-outline" onclick="resolverBandeja('${escJs(x.id)}')">Ya le contesté yo</button>` : ''}
-        ${contextoApp.modoBotActual() === 'prueba' && x.igUserId && !contextoApp.botCfg.cuentasPrueba.includes(String(x.igUserId)) ? `<button class="btn-pagar-outline" onclick="agregarCuentaPrueba('${escJs(x.igUserId)}')">🧪 Probar con esta cuenta</button>` : ''}
+        ${vencida ? '' : `<button class="btn-save" id="bd-btn-${x.id}" style="width:auto;padding:10px 18px;" ${on('click', 'aprobarBandeja', x.id)}>✓ Aprobar y mandar</button>`}
+        ${x.necesitaAtencion ? `<button class="btn-pagar-outline" ${on('click', 'resolverBandeja', x.id)}>Ya le contesté yo</button>` : ''}
+        ${contextoApp.modoBotActual() === 'prueba' && x.igUserId && !contextoApp.botCfg.cuentasPrueba.includes(String(x.igUserId)) ? `<button class="btn-pagar-outline" ${on('click', 'agregarCuentaPrueba', x.igUserId)}>🧪 Probar con esta cuenta</button>` : ''}
       </div>`}
     </div>`;
   }).join('') || `<div class="empty">${tab.vacio}</div>`;
@@ -232,7 +233,7 @@ export function renderBandeja() {
     <div class="card danger-zone" style="margin-top:20px;">
       <div class="card-title" style="color:var(--neg)">Zona de peligro</div>
       <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">Borra <b>todas</b> las conversaciones de Instagram, con sus chats y su historial. No se puede deshacer y no se puede recuperar de Instagram: lo que se borra acá se perdió.<br><br>Es distinto de <i>vaciar</i>: vaciar solo saca de la bandeja lo que ya contestaste y deja las charlas guardadas.</p>
-      <button class="btn-danger" onclick="borrarConversaciones()">Borrar todas las conversaciones</button>
+      <button class="btn-danger" ${on('click', 'borrarConversaciones')}>Borrar todas las conversaciones</button>
     </div>` : '';
 
   // Cada chat abierto arranca abajo, en lo último que se dijo.

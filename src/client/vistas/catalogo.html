@@ -5,26 +5,26 @@
           <p>Tu tienda online. Lo que cambiás acá se publica cuando tocás el botón.</p>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <button class="btn-secondary" style="width:auto;" onclick="copiarLinkCatalogo()">📋 Copiar link</button>
-          <button class="btn-secondary" style="width:auto;" onclick="window.open(LINK_CATALOGO_PUBLICO(),'_blank')">↗ Ver tienda</button>
-          <button class="btn-add" id="btn-cat-publicar" onclick="publicarCatalogo()">🌐 Publicar</button>
+          <button class="btn-secondary" style="width:auto;" data-click="copiarLinkCatalogo">📋 Copiar link</button>
+          <button class="btn-secondary" style="width:auto;" data-click="abrirTiendaPublica">↗ Ver tienda</button>
+          <button class="btn-add" id="btn-cat-publicar" data-click="publicarCatalogo">🌐 Publicar</button>
         </div>
       </div>
       <input type="hidden" id="cat-link">
       <div id="cat-estado" style="margin-bottom:12px;"></div>
 
       <div class="cat-tabs">
-        <button class="cat-tab on" id="cat-tab-productos" onclick="catTab('productos')">Productos</button>
-        <button class="cat-tab" id="cat-tab-categorias" onclick="catTab('categorias')">Categorías</button>
-        <button class="cat-tab" id="cat-tab-fotos" onclick="catTab('fotos')">Fotos</button>
+        <button class="cat-tab on" id="cat-tab-productos" data-click="catTab" data-args='["productos"]'>Productos</button>
+        <button class="cat-tab" id="cat-tab-categorias" data-click="catTab" data-args='["categorias"]'>Categorías</button>
+        <button class="cat-tab" id="cat-tab-fotos" data-click="catTab" data-args='["fotos"]'>Fotos</button>
       </div>
 
       <!-- Productos -->
       <div id="cat-vista-productos">
         <div class="cat-filtros">
-          <input type="search" id="cat-q" placeholder="Buscar producto…" oninput="filtrarCatalogo()">
-          <select id="cat-f-cat" onchange="filtrarCatalogo()"></select>
-          <select id="cat-f-tipo" onchange="filtrarCatalogo()">
+          <input type="search" id="cat-q" placeholder="Buscar producto…" data-input="filtrarCatalogo">
+          <select id="cat-f-cat" data-change="filtrarCatalogo"></select>
+          <select id="cat-f-tipo" data-change="filtrarCatalogo">
             <option value="">Todos</option>
             <option value="inmediato">Inmediato</option>
             <option value="pedido">A pedido</option>
@@ -32,17 +32,17 @@
             <option value="sinprecio">Sin precio</option>
             <option value="fuera">Eliminados del catálogo</option>
           </select>
-          <button class="cat-pill" id="cat-sel-todos-btn" onclick="seleccionarCatalogo(null, catSeleccion.size === 0 || catSeleccion.size < catalogoFiltrados().length)">Seleccionar todo</button>
+          <button class="cat-pill" id="cat-sel-todos-btn" data-click="seleccionarTodoCatalogo">Seleccionar todo</button>
         </div>
         <div id="cat-resumen" style="font-size:12.5px;color:var(--text3);margin-bottom:10px;"></div>
         <div id="cat-bulk" class="cat-bulk" style="display:none;">
           <b id="cat-bulk-n" style="font-size:13px;"></b>
-          <select id="cat-bulk-cat" onchange="if(this.value){accionCatalogo('categoria',this.value);this.value='';}"><option value="">Mover a categoría…</option></select>
-          <button class="btn-secondary" onclick="accionCatalogo('entrega','inmediato')">Inmediato</button>
-          <button class="btn-secondary" onclick="accionCatalogo('entrega','pedido')">A pedido</button>
-          <button class="btn-danger" onclick="accionCatalogo('sale',false)">Eliminar del catálogo</button>
-          <button class="btn-secondary" onclick="accionCatalogo('sale',true)">Restaurar</button>
-          <button class="btn-secondary" style="margin-left:auto;" onclick="seleccionarCatalogo(null,false)">✕</button>
+          <select id="cat-bulk-cat" data-change="moverSeleccionACategoria" data-args='["$this"]'><option value="">Mover a categoría…</option></select>
+          <button class="btn-secondary" data-click="accionCatalogo" data-args='["entrega", "inmediato"]'>Inmediato</button>
+          <button class="btn-secondary" data-click="accionCatalogo" data-args='["entrega", "pedido"]'>A pedido</button>
+          <button class="btn-danger" data-click="accionCatalogo" data-args='["sale", false]'>Eliminar del catálogo</button>
+          <button class="btn-secondary" data-click="accionCatalogo" data-args='["sale", true]'>Restaurar</button>
+          <button class="btn-secondary" style="margin-left:auto;" data-click="seleccionarCatalogo" data-args='[null, false]'>✕</button>
         </div>
         <div id="cat-grid" class="cat-grid"></div>
       </div>
@@ -51,7 +51,7 @@
       <div id="cat-vista-categorias" style="display:none;">
         <div class="cat-head">
           <p style="font-size:13px;color:var(--text2);flex:1;">La portada de la tienda muestra cada categoría en este orden, con tres productos a la vista y el resto deslizando. Las vacías no se muestran. La categoría de cada producto se elige en su ficha.</p>
-          <button class="btn-add" onclick="nuevaCategoria()">＋ Nueva categoría</button>
+          <button class="btn-add" data-click="nuevaCategoria">＋ Nueva categoría</button>
         </div>
         <div id="cat-categorias" class="cat-lista-cats"></div>
       </div>
@@ -60,9 +60,9 @@
       <div id="cat-vista-fotos" style="display:none;">
         <div class="cat-head">
           <p style="font-size:13px;color:var(--text2);flex:1;">Las imágenes viven en la carpeta <code>fotos/</code> del repositorio. Buscá en Amazon las que faltan, o subí archivos con cualquier nombre y dejá que la IA los asigne. El bot de Instagram usa las mismas fotos.</p>
-          <button class="btn-secondary" style="width:auto;" id="btn-cat-amazon" onclick="buscarFotosAmazon()">🛒 Buscar en Amazon</button>
-          <button class="btn-secondary" style="width:auto;" id="btn-cat-ia" onclick="clasificarFotos()">🤖 Clasificar nuevas</button>
-          <button class="btn-secondary" style="width:auto;" id="btn-cat-fotos" onclick="sincronizarFotos()">🔄 Sincronizar</button>
+          <button class="btn-secondary" style="width:auto;" id="btn-cat-amazon" data-click="buscarFotosAmazon">🛒 Buscar en Amazon</button>
+          <button class="btn-secondary" style="width:auto;" id="btn-cat-ia" data-click="clasificarFotos">🤖 Clasificar nuevas</button>
+          <button class="btn-secondary" style="width:auto;" id="btn-cat-fotos" data-click="sincronizarFotos">🔄 Sincronizar</button>
         </div>
         <div id="cat-fotos"></div>
       </div>

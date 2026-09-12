@@ -1,8 +1,9 @@
 import { configuracion } from '../core/config-publica.js';
+import { on } from '../../shared/seguridad.js';
 /** modulos/arca: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
 import { workerHeaders } from './reportes.js';
-import { esc, showToast, escJs } from '../core/interfaz.js';
+import { esc, showToast } from '../core/interfaz.js';
 import { updateDoc, doc } from 'firebase/firestore';
 
 export
@@ -138,9 +139,9 @@ function htmlComprobante(c, {
     </div>` : ''}
     ${c.manual ? `<div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Emitido a mano desde el Facturador, sin una venta asociada.</div>` : ''}
     ${emitida ? `<div class="pos-actions" style="margin-top:12px;">
-           ${conNotaCredito && !c.notaCredito && !c.esNotaCredito ? `<button class="pos-btn-cancel" onclick="emitirNotaCreditoArca('${escJs(c.id || '')}')">↩️ Nota de crédito</button>` : ''}
-           <button class="pos-btn-checkout" onclick="pdfComprobanteArcaActual()">📄 Descargar el PDF con el QR</button>
-         </div>` : conReintento ? `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" onclick="reintentarFacturaArca()">Corregir y volver a intentar</button></div>` : ''}`;
+           ${conNotaCredito && !c.notaCredito && !c.esNotaCredito ? `<button class="pos-btn-cancel" ${on('click', 'emitirNotaCreditoArca', c.id || '')}>↩️ Nota de crédito</button>` : ''}
+           <button class="pos-btn-checkout" ${on('click', 'pdfComprobanteArcaActual')}>📄 Descargar el PDF con el QR</button>
+         </div>` : conReintento ? `<div class="pos-actions" style="margin-top:12px;"><button class="pos-btn-checkout" ${on('click', 'reintentarFacturaArca')}>Corregir y volver a intentar</button></div>` : ''}`;
 }
 
 /** El comprobante de una venta, adentro de su modal. */
@@ -256,11 +257,11 @@ export function inicializarArca() {
       <td>${esc(r.descripcion)}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;">${r.cantidad}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;">
-        <input type="number" class="fea-precio" data-i="${i}" value="${esc(r.precioUnitario ?? '')}" step="0.01" oninput="feaTotales()"
+        <input type="number" class="fea-precio" data-i="${i}" value="${esc(r.precioUnitario ?? '')}" step="0.01" ${on('input', 'feaTotales')}
                style="width:110px;text-align:right;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:12.5px;color:var(--text);">
       </td>
       <td>
-        <select class="fea-alic" data-i="${i}" onchange="feaTotales()" style="width:100px;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:12.5px;color:var(--text);">
+        <select class="fea-alic" data-i="${i}" ${on('change', 'feaTotales')} style="width:100px;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:12.5px;color:var(--text);">
           ${contextoApp.arcaTablas.iva.map(a => `<option value="${esc(parseFloat(a.desc))}" ${parseFloat(a.desc) === 21 ? 'selected' : ''}>${esc(a.desc)}</option>`).join('')}
         </select>
       </td>

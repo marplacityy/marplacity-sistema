@@ -1,8 +1,9 @@
 import { SYSTEM_PROMPT } from '../../../server/services/ig-bot/prompt.js';
+import { on } from '../../shared/seguridad.js';
 /** modulos/conocimiento: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
 import { showToast, esc, escJs, requiereDuenoDelLocal } from '../core/interfaz.js';
-import { setSyncDot } from '../core/datos.js';
+import { setSyncDot, deb } from '../core/datos.js';
 import { setDoc, serverTimestamp, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { workerHeaders, textoDeIA } from './reportes.js';
 
@@ -123,7 +124,7 @@ export function anterioresKb(origen, actual) {
           <div style="font-size:13px;">${esc(kbFecha(o.fecha))}</div>
           <div class="pago-fecha">${n} producto${n === 1 ? '' : 's'}</div>
         </div>
-        <button class="btn-pagar-outline" onclick="restaurarListaKb('${escJs(origen)}','${escJs(o.id)}')">Volver a esta</button>
+        <button class="btn-pagar-outline" ${on('click', 'restaurarListaKb', origen, o.id)}>Volver a esta</button>
       </div>`;
   }).join('')}</div>
   </details>`;
@@ -158,7 +159,7 @@ export function renderKbPreview(origen) {
       <div class="stock-meta" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${[it.gb, it.color].filter(Boolean).map(ch => `<span style="font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:100px;padding:1px 7px;">${esc(ch)}</span>`).join('')}${contextoApp.badgeCondicion(it.condicion)}</div>
     </div>
     <div class="stock-val"><div class="stock-usd">${fmtPrecioKb(it.precioPublico, moneda)}</div></div>
-    <button class="ei-btn del" onclick="quitarDeKbPreview('${escJs(origen)}',${i})" title="Quitar">×</button>
+    <button class="ei-btn del" ${on('click', 'quitarDeKbPreview', origen, i)} title="Quitar">×</button>
   </div>`).join('');
   if (!contextoApp.kbParseada[origen].length) document.getElementById('kb-' + origen + '-preview').style.display = 'none';
 }
@@ -212,11 +213,11 @@ export function pintarTramosProv() {
   const t = contextoApp.tramosProv();
   tb.innerHTML = t.map((x, i) => `
     <tr>
-      <td>${x.hasta == null ? 'de ahí en adelante' : `hasta <input type="number" value="${esc(x.hasta)}" step="1" min="0" oninput="setTramoProv(${i},'hasta',this.value)"
+      <td>${x.hasta == null ? 'de ahí en adelante' : `hasta <input type="number" value="${esc(x.hasta)}" step="1" min="0" ${on('input', 'setTramoProv', i, 'hasta', '$value')}
              style="width:110px;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"> u$s de costo`}</td>
-      <td style="text-align:right;"><input type="number" value="${esc(x.suma)}" step="1" min="0" oninput="setTramoProv(${i},'suma',this.value)"
+      <td style="text-align:right;"><input type="number" value="${esc(x.suma)}" step="1" min="0" ${on('input', 'setTramoProv', i, 'suma', '$value')}
             style="width:90px;text-align:right;padding:5px 7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
-      <td>${t.length > 1 && x.hasta != null ? `<button class="ei-btn del" onclick="quitarTramoProv(${i})" title="Quitar">×</button>` : ''}</td>
+      <td>${t.length > 1 && x.hasta != null ? `<button class="ei-btn del" ${on('click', 'quitarTramoProv', i)} title="Quitar">×</button>` : ''}</td>
     </tr>`).join('');
 }
 export function inicializarConocimiento() {
@@ -478,6 +479,7 @@ export function inicializarConocimiento() {
       }
     }
   };
+  window.renderKbListaDeb = origen => deb('kb' + origen + 'B', () => window.renderKbLista(origen));
   window.renderKbLista = function (origen) {
     renderKbEstado(origen);
     const tb = document.getElementById('kb-' + origen + '-body');
@@ -510,8 +512,8 @@ export function inicializarConocimiento() {
             <b>Cambios sin guardar.</b> ${ahora === antes ? 'Editaste precios.' : `La lista pasa de ${antes} a ${ahora} producto${ahora === 1 ? '' : 's'}.`} Nada se aplica hasta que guardes.
           </div>
           <div style="display:flex;gap:8px;">
-            <button class="btn-pagar-outline" onclick="cancelarEdicionKb('${escJs(origen)}')">Descartar</button>
-            <button class="btn-save" id="btn-kb-${escJs(origen)}-guardar-edicion" style="width:auto;padding:9px 16px;" onclick="guardarEdicionKb('${escJs(origen)}')">✓ Guardar cambios</button>
+            <button class="btn-pagar-outline" ${on('click', 'cancelarEdicionKb', origen)}>Descartar</button>
+            <button class="btn-save" id="btn-kb-${escJs(origen)}-guardar-edicion" style="width:auto;padding:9px 16px;" ${on('click', 'guardarEdicionKb', origen)}>✓ Guardar cambios</button>
           </div>
         </div>
       </div>`;
@@ -532,11 +534,11 @@ export function inicializarConocimiento() {
     <td style="text-align:right;white-space:nowrap;">
       <span style="font-size:11px;color:var(--text3);">${simbolo}</span>
       <input type="number" step="0.01" min="0" value="${esc(it.precioPublico != null ? esc(String(it.precioPublico)) : '')}" placeholder="—"
-             onchange="editarPrecioKb('${escJs(origen)}', ${i}, this.value)"
+             ${on('change', 'editarPrecioKb', origen, i, '$value')}
              style="width:88px;text-align:right;font-weight:600;font-family:'DM Mono',monospace;padding:5px 7px;">
     </td>
     <td style="text-align:center;">
-      <a onclick="borrarItemKb('${escJs(origen)}', ${i})" title="Sacar de la lista" style="cursor:pointer;color:var(--text3);font-weight:700;">✕</a>
+      <a ${on('click', 'borrarItemKb', origen, i)} title="Sacar de la lista" style="cursor:pointer;color:var(--text3);font-weight:700;">✕</a>
     </td>
   </tr>`).join('');
   };

@@ -5,8 +5,8 @@
       </div>
 
       <div class="tab-btns">
-        <button class="tab-btn active" onclick="setInvTab('lista',this)">📦 Productos</button>
-        <button class="tab-btn" onclick="setInvTab('nuevo',this)">+ Agregar</button>
+        <button class="tab-btn active" data-click="setInvTab" data-args='["lista", "$this"]'>📦 Productos</button>
+        <button class="tab-btn" data-click="setInvTab" data-args='["nuevo", "$this"]'>+ Agregar</button>
       </div>
 
       <div id="inv-tab-lista">
@@ -47,7 +47,7 @@
             <div class="field"><label>Proveedor <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="i-prov" placeholder="De dónde lo comprás"></div>
           </div>
           <div class="field"><label>Notas</label><input type="text" id="i-notas" placeholder="Opcional"></div>
-          <button class="btn-save" id="btn-i-guardar" onclick="guardarInv()">Agregar al inventario</button>
+          <button class="btn-save" id="btn-i-guardar" data-click="guardarInv">Agregar al inventario</button>
         </div>
       </div>
     </div>

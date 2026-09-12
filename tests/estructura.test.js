@@ -37,3 +37,13 @@ test('el estado de sesión no se copia a variables locales durante la inicializa
     } });
   }
 });
+
+test('ningún handler inline: la CSP prohíbe script-src-attr', async () => {
+  const raiz = new URL('../', import.meta.url);
+  const html = ['index.html', 'catalogo.html', 'ver.html', ...(await readdir(new URL('src/client/vistas/', raiz))).map(v => 'src/client/vistas/' + v)];
+  const js = (await readdir(new URL('src/client/', raiz), { recursive: true })).filter(f => f.endsWith('.js') && !f.endsWith('eventos.js')).map(f => 'src/client/' + f);
+  for (const archivo of [...html, ...js]) {
+    const fuente = await readFile(new URL(archivo, raiz), 'utf8');
+    assert.doesNotMatch(fuente, /\bon(click|change|input|keydown|keyup|submit|blur|focus|load|error)=/, `handler inline en ${archivo}`);
+  }
+});

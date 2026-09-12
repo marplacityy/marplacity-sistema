@@ -6,20 +6,20 @@
 
       <!-- Period selector -->
       <div class="period-tabs">
-        <button class="ptab" onclick="setPeriod('semana',this)">Esta semana</button>
-        <button class="ptab active" onclick="setPeriod('hoy',this)">Hoy</button>
-        <button class="ptab" onclick="setPeriod('semana',this)">Semana</button>
-        <button class="ptab" onclick="setPeriod('mes',this)">Este mes</button>
-        <button class="ptab" onclick="setPeriod('mesant',this)">Mes anterior</button>
-        <button class="ptab" onclick="setPeriod('anio',this)">Este año</button>
-        <button class="ptab" onclick="setPeriod('todo',this)">Todo</button>
-        <button class="ptab" onclick="setPeriod('custom',this)">Personalizado</button>
+        <button class="ptab" data-click="setPeriod" data-args='["semana", "$this"]'>Esta semana</button>
+        <button class="ptab active" data-click="setPeriod" data-args='["hoy", "$this"]'>Hoy</button>
+        <button class="ptab" data-click="setPeriod" data-args='["semana", "$this"]'>Semana</button>
+        <button class="ptab" data-click="setPeriod" data-args='["mes", "$this"]'>Este mes</button>
+        <button class="ptab" data-click="setPeriod" data-args='["mesant", "$this"]'>Mes anterior</button>
+        <button class="ptab" data-click="setPeriod" data-args='["anio", "$this"]'>Este año</button>
+        <button class="ptab" data-click="setPeriod" data-args='["todo", "$this"]'>Todo</button>
+        <button class="ptab" data-click="setPeriod" data-args='["custom", "$this"]'>Personalizado</button>
       </div>
       <div class="date-range" id="rep-date-range" style="display:none;margin-bottom:1rem;">
         <label>Desde</label>
-        <input type="date" id="rep-desde" onchange="renderReporte()">
+        <input type="date" id="rep-desde" data-change="renderReporte">
         <label>Hasta</label>
-        <input type="date" id="rep-hasta" onchange="renderReporte()">
+        <input type="date" id="rep-hasta" data-change="renderReporte">
       </div>
 
       <!-- Quick stats (always visible) -->
@@ -29,7 +29,7 @@
       <div class="card" style="margin-top:1rem;">
         <div class="card-title">Análisis con IA</div>
         <p style="font-size:13px;color:var(--text2);margin-bottom:1rem;">La IA analiza todos tus datos del período seleccionado y genera un reporte completo con insights, comparativas y recomendaciones.</p>
-        <button class="btn-save" id="btn-generar-reporte" onclick="generarReporteIA()">
+        <button class="btn-save" id="btn-generar-reporte" data-click="generarReporteIA">
           ✨ Generar reporte del período
         </button>
       </div>
@@ -41,8 +41,8 @@
           <div class="report-period-label" id="report-period-label"></div>
           <div id="ai-chat-messages"></div>
           <div class="chat-input-row">
-            <input type="text" id="ai-chat-input" placeholder="Preguntá algo más sobre tus datos..." onkeydown="if(event.key==='Enter')enviarPreguntaIA()">
-            <button class="chat-send-btn" id="ai-chat-send" onclick="enviarPreguntaIA()">→</button>
+            <input type="text" id="ai-chat-input" placeholder="Preguntá algo más sobre tus datos..." data-enter="enviarPreguntaIA">
+            <button class="chat-send-btn" id="ai-chat-send" data-click="enviarPreguntaIA">→</button>
           </div>
         </div>
       </div>

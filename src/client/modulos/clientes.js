@@ -1,5 +1,6 @@
 /** modulos/clientes: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { setSyncDot, applySnap, deb, snapErr } from '../core/datos.js';
 import { onSnapshot, updateDoc, doc, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { esc, showToast } from '../core/interfaz.js';
@@ -185,7 +186,7 @@ export function renderClientes() {
     const gastoUSD = ventas.reduce((s, v) => s + (v.totalUSD || 0), 0);
     const gastoARS = ventas.reduce((s, v) => s + (v.totalARS || 0), 0);
     const gastoStr = gastoUSD > 0.01 ? contextoApp.fmtUSD(Math.round(gastoUSD * 100) / 100) : gastoARS > 0 ? contextoApp.fmtARS(gastoARS) : '—';
-    return `<div class="rep-card" onclick="abrirCliente('${cl.id}')">
+    return `<div class="rep-card" ${on('click', 'abrirCliente', cl.id)}>
       <div class="rep-cliente">${esc(cl.nombre)}</div>
       ${cl.tel ? `<div class="rep-equipo">${esc(cl.tel)}</div>` : ''}
       <div class="rep-meta">

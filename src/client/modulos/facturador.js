@@ -1,5 +1,6 @@
 /** modulos/facturador: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { renderArcaBanner, arcaPedir, confirmarProduccion, htmlComprobante } from './arca.js';
 import { esc, showToast } from '../core/interfaz.js';
 import { deb } from '../core/datos.js';
@@ -7,7 +8,7 @@ import { renderCaja } from './caja.js';
 import { renderCart } from './pos.js';
 import { renderRepInv } from './repuestos.js';
 import { renderReporte } from './reportes.js';
-import { renderTkHistory } from './reparaciones.js';
+import { renderTkHistory, renderFkHistory } from './reparaciones.js';
 
 export async function initFacturador() {
   renderArcaBanner('fac-banner');
@@ -47,20 +48,20 @@ function facRenderRenglones() {
   }];
   document.getElementById('fac-items').innerHTML = contextoApp.facRenglones.map((r, i) => `
     <tr>
-      <td><input type="text" value="${esc(r.descripcion || '')}" placeholder="Ej: Service de iPhone" oninput="facSet(${i},'descripcion',this.value)"
+      <td><input type="text" value="${esc(r.descripcion || '')}" placeholder="Ej: Service de iPhone" ${on('input', 'facSet', i, 'descripcion', '$value')}
             style="width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;color:var(--text);"></td>
-      <td><input type="number" value="${esc(r.cantidad)}" min="1" step="1" oninput="facSet(${i},'cantidad',this.value)"
+      <td><input type="number" value="${esc(r.cantidad)}" min="1" step="1" ${on('input', 'facSet', i, 'cantidad', '$value')}
             style="width:100%;text-align:right;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
-      <td><input type="number" value="${esc(r.precioUnitario ?? '')}" step="0.01" min="0" placeholder="0" oninput="facSet(${i},'precioUnitario',this.value)"
+      <td><input type="number" value="${esc(r.precioUnitario ?? '')}" step="0.01" min="0" placeholder="0" ${on('input', 'facSet', i, 'precioUnitario', '$value')}
             style="width:100%;text-align:right;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);"></td>
-      <td><select onchange="facSet(${i},'alicuotaIva',this.value)"
+      <td><select ${on('change', 'facSet', i, 'alicuotaIva', '$value')}
             style="width:100%;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text);">
             ${alics.map(a => {
     const v = parseFloat(a.desc);
     return `<option value="${esc(v)}" ${v === Number(r.alicuotaIva) ? 'selected' : ''}>${esc(a.desc)}</option>`;
   }).join('')}
           </select></td>
-      <td>${contextoApp.facRenglones.length > 1 ? `<button class="ei-btn del" onclick="facQuitarRenglon(${i})" title="Quitar">×</button>` : ''}</td>
+      <td>${contextoApp.facRenglones.length > 1 ? `<button class="ei-btn del" ${on('click', 'facQuitarRenglon', i)} title="Quitar">×</button>` : ''}</td>
     </tr>`).join('');
   window.facTotales();
 }
@@ -238,6 +239,7 @@ export function inicializarFacturador() {
     renderRepInv,
     renderReporte,
     renderTkHistory,
+    renderFkHistory,
     renderArcaBanner
   });
 }

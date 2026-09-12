@@ -34,7 +34,7 @@
   <footer id="pie"></footer>
 </div>
 
-<dialog class="ficha" id="ficha" onclick="if(event.target===this) cerrarFicha()">
+<dialog class="ficha" id="ficha" data-click="cerrarFichaSiFondo" data-args='["$event","$this"]'>
   <div id="ficha-contenido"></div>
 </dialog>
 

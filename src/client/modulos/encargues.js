@@ -1,5 +1,6 @@
 /** modulos/encargues: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { showToast, esc } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { resolverCliente } from './clientes.js';
@@ -35,9 +36,9 @@ export function renderEncargues() {
         </div>
       </div>
       ${pendiente ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
-        <button class="btn-pagar-outline" onclick="abrirEnt('${x.id}')">✓ Llegó — entregar</button>
-        ${x.tel ? `<button class="btn-pagar-outline" onclick="avisarEncargue('${x.id}')">📱 Avisar que llegó</button>` : ''}
-        <button class="btn-pagar-outline" style="color:var(--neg);" onclick="cancelarEncargue('${x.id}')">✕ Cancelar</button>
+        <button class="btn-pagar-outline" ${on('click', 'abrirEnt', x.id)}>✓ Llegó — entregar</button>
+        ${x.tel ? `<button class="btn-pagar-outline" ${on('click', 'avisarEncargue', x.id)}>📱 Avisar que llegó</button>` : ''}
+        <button class="btn-pagar-outline" style="color:var(--neg);" ${on('click', 'cancelarEncargue', x.id)}>✕ Cancelar</button>
       </div>` : ''}
     </div>`;
   }).join('') || '<div class="empty">Sin encargues registrados.</div>';
@@ -77,7 +78,7 @@ export function entTotals() {
   };
 }
 export function renderEntMedios() {
-  document.getElementById('ent-medios-tags').innerHTML = contextoApp.entMedios.map((mm, i) => `<div class="medio-tag"><span>${esc(mm.medio)} · ${mm.moneda === 'USD' ? 'u$s ' : '$ '}${mm.valor.toLocaleString('es-AR')}</span><button onclick="entDelMedio(${i})">×</button></div>`).join('');
+  document.getElementById('ent-medios-tags').innerHTML = contextoApp.entMedios.map((mm, i) => `<div class="medio-tag"><span>${esc(mm.medio)} · ${mm.moneda === 'USD' ? 'u$s ' : '$ '}${mm.valor.toLocaleString('es-AR')}</span><button ${on('click', 'entDelMedio', i)}>×</button></div>`).join('');
   const t = entTotals();
   document.getElementById('ent-pagado').textContent = [t.pARS ? contextoApp.fmtARS(Math.round(t.pARS)) : null, t.pUSD ? 'u$s ' + Math.round(t.pUSD * 100) / 100 : null].filter(Boolean).join(' / ') || '—';
   const resto = t.tc ? t.saldoUSD - t.pUSD : t.x?.moneda === 'USD' ? t.saldoUSD - t.pUSD : t.saldoARS - t.pARS;

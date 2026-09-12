@@ -3,18 +3,18 @@
 
       <!-- Date range filter -->
             <div class="period-tabs" id="gl-presets">
-        <button class="ptab active" onclick="setGastosPreset('hoy',this)">Hoy</button>
-        <button class="ptab" onclick="setGastosPreset('semana',this)">Semana</button>
-        <button class="ptab" onclick="setGastosPreset('mes',this)">Este mes</button>
-        <button class="ptab" onclick="setGastosPreset('mesant',this)">Mes anterior</button>
-        <button class="ptab" onclick="setGastosPreset('todo',this)">Todo</button>
+        <button class="ptab active" data-click="setGastosPreset" data-args='["hoy", "$this"]'>Hoy</button>
+        <button class="ptab" data-click="setGastosPreset" data-args='["semana", "$this"]'>Semana</button>
+        <button class="ptab" data-click="setGastosPreset" data-args='["mes", "$this"]'>Este mes</button>
+        <button class="ptab" data-click="setGastosPreset" data-args='["mesant", "$this"]'>Mes anterior</button>
+        <button class="ptab" data-click="setGastosPreset" data-args='["todo", "$this"]'>Todo</button>
       </div>
 <div class="date-range" id="gastos-date-range">
         <label>Desde</label>
-        <input type="date" id="fl-desde" onchange="onGastosRangeChange()">
+        <input type="date" id="fl-desde" data-change="onGastosRangeChange">
         <label>Hasta</label>
-        <input type="date" id="fl-hasta" onchange="onGastosRangeChange()">
-        <button class="btn-clear-range" onclick="clearGastosRange()">✕ Limpiar</button>
+        <input type="date" id="fl-hasta" data-change="onGastosRangeChange">
+        <button class="btn-clear-range" data-click="clearGastosRange">✕ Limpiar</button>
       </div>
       <!-- Quick month chips -->
       <div class="month-chips" id="month-chips"></div>

@@ -1,8 +1,9 @@
 import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe } from '../../shared/catalogo.js';
+import { on } from '../../shared/seguridad.js';
 import { configuracion } from '../core/config-publica.js';
 /** modulos/catalogo: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { esc, escJs, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
+import { esc, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { updateDoc, doc, setDoc } from 'firebase/firestore';
 import { kbUltimaLista } from './conocimiento.js';
@@ -41,8 +42,8 @@ export function renderPedidos() {
       <td>${p.entrega === 'envio' ? 'Envío' : 'Retira'}${p.direccion ? `<div class="sub" style="font-size:11px;color:var(--text3);">${esc(p.direccion)}</div>` : ''}</td>
       <td><span class="badge ${cls}">${esc(txt)}</span></td>
       <td style="white-space:nowrap;">${contextoApp.pedidoAbierto(p) ? `
-        <button class="btn-secondary" style="padding:5px 9px;font-size:11.5px;" onclick="cerrarPedido('${escJs(p.id)}','entregado')">✓ Entregado</button>
-        <button class="btn-secondary" style="padding:5px 9px;font-size:11.5px;" onclick="cerrarPedido('${escJs(p.id)}','cancelado')">✕</button>` : ''}</td>
+        <button class="btn-secondary" style="padding:5px 9px;font-size:11.5px;" ${on('click', 'cerrarPedido', p.id, 'entregado')}>✓ Entregado</button>
+        <button class="btn-secondary" style="padding:5px 9px;font-size:11.5px;" ${on('click', 'cerrarPedido', p.id, 'cancelado')}>✕</button>` : ''}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="7" style="color:var(--text3);">${contextoApp.pedidosFiltro === 'abiertos' ? 'No hay pedidos por atender.' : 'Todavía no hubo pedidos.'}</td></tr>`;
 }
@@ -81,10 +82,10 @@ export function renderCategoriasCatalogo() {
       <span class="n">${i + 1}</span>
       <span class="nombre">${esc(c)}</span>
       <span class="cnt">${n ? n + ' producto' + (n === 1 ? '' : 's') : 'vacía, no se muestra'}</span>
-      <button class="btn-secondary" ${i === 0 ? 'disabled' : ''} onclick="moverCategoria('${escJs(c)}',-1)">▲</button>
-      <button class="btn-secondary" ${i === orden.length - 1 ? 'disabled' : ''} onclick="moverCategoria('${escJs(c)}',1)">▼</button>
-      ${CATEGORIAS_CATALOGO.includes(c) ? '<span style="width:34px;"></span>' : `<button class="btn-secondary" title="Borrar esta categoría" onclick="borrarCategoria('${escJs(c)}')">✕</button>`}
-      ${n ? `<button class="btn-secondary" onclick="catTab('productos');document.getElementById('cat-f-cat').value='${escJs(c)}';renderCatalogo()">Ver</button>` : ''}
+      <button class="btn-secondary" ${i === 0 ? 'disabled' : ''} ${on('click', 'moverCategoria', c, -1)}>▲</button>
+      <button class="btn-secondary" ${i === orden.length - 1 ? 'disabled' : ''} ${on('click', 'moverCategoria', c, 1)}>▼</button>
+      ${CATEGORIAS_CATALOGO.includes(c) ? '<span style="width:34px;"></span>' : `<button class="btn-secondary" title="Borrar esta categoría" ${on('click', 'borrarCategoria', c)}>✕</button>`}
+      ${n ? `<button class="btn-secondary" ${on('click', 'verCategoriaCatalogo', c)}>Ver</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -223,8 +224,8 @@ export function renderCatalogo() {
   document.getElementById('cat-grid').innerHTML = visibles.map(p => {
     const foto = p.fotos[0];
     const estado = !p.precioUSD ? ['no', 'Sin precio'] : !p._sale ? ['no', 'Eliminado'] : p._entrega === 'pedido' ? ['ped', 'A pedido'] : ['ok', 'Inmediato'];
-    return `<div class="cat-prod${p._sale ? '' : ' off'}${contextoApp.catSeleccion.has(p.id) ? ' sel' : ''}" onclick="abrirFichaCatalogo('${escJs(p.id)}')">
-      <input type="checkbox" class="sel-box" ${contextoApp.catSeleccion.has(p.id) ? 'checked' : ''} onclick="event.stopPropagation()" onchange="seleccionarCatalogo('${escJs(p.id)}',this.checked)">
+    return `<div class="cat-prod${p._sale ? '' : ' off'}${contextoApp.catSeleccion.has(p.id) ? ' sel' : ''}" ${on('click', 'abrirFichaCatalogo', p.id)}>
+      <input type="checkbox" class="sel-box" ${contextoApp.catSeleccion.has(p.id) ? 'checked' : ''} data-stop ${on('change', 'seleccionarCatalogo', p.id, '$checked')}>
       <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : esc((String(p.nombre).match(/\d+/) || [String(p.nombre).slice(0, 1)])[0].slice(0, 2))}</div>
       <div class="cuerpo">
         <div class="nombre">${esc(p.nombre)}</div>
@@ -258,8 +259,8 @@ export function renderFichaCatalogo() {
     <div class="cat-sec">
       <div class="cat-sec-t">Estado</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        ${!p.precioUSD ? '<span class="cat-pill">Sin precio</span>' : p._sale ? '<span class="cat-pill on">Publicado en la tienda</span>' : `<span class="cat-pill" style="color:var(--neg);">Eliminado del catálogo</span><button class="btn-secondary" style="width:auto;padding:6px 10px;font-size:12.5px;" onclick="toggleCatalogo('${escJs(p.id)}',true);renderFichaCatalogo()">Restaurar</button>`}
-        <select onchange="ajusteCatalogo('${escJs(p.id)}','entrega',this.value);renderFichaCatalogo()" style="${campo}width:auto;">
+        ${!p.precioUSD ? '<span class="cat-pill">Sin precio</span>' : p._sale ? '<span class="cat-pill on">Publicado en la tienda</span>' : `<span class="cat-pill" style="color:var(--neg);">Eliminado del catálogo</span><button class="btn-secondary" style="width:auto;padding:6px 10px;font-size:12.5px;" ${on('click', 'restaurarEnCatalogo', p.id)}>Restaurar</button>`}
+        <select ${on('change', 'ajusteCatalogoFicha', p.id, 'entrega', '$value')} style="${campo}width:auto;">
           <option value="inmediato" ${p._entrega === 'inmediato' ? 'selected' : ''}>Entrega inmediata</option>
           <option value="pedido" ${p._entrega === 'pedido' ? 'selected' : ''}>A pedido</option>
         </select>
@@ -270,9 +271,9 @@ export function renderFichaCatalogo() {
     <div class="cat-sec">
       <div class="cat-sec-t">Título y descripción</div>
       <div class="field"><label>Título en la tienda</label>
-        <input type="text" value="${esc(meta.titulo || '')}" placeholder="${esc(tituloSeo)}" onchange="metaCatalogo('${escJs(p.id)}','titulo',this.value)"></div>
+        <input type="text" value="${esc(meta.titulo || '')}" placeholder="${esc(tituloSeo)}" ${on('change', 'metaCatalogo', p.id, 'titulo', '$value')}></div>
       <div class="field"><label>Descripción</label>
-        <textarea rows="4" placeholder="Lo que quieras contar: estado, qué incluye, garantía…" onchange="notaCatalogo('${escJs(p.id)}',this.value)">${esc(p.descripcion)}</textarea></div>
+        <textarea rows="4" placeholder="Lo que quieras contar: estado, qué incluye, garantía…" ${on('change', 'notaCatalogo', p.id, '$value')}>${esc(p.descripcion)}</textarea></div>
     </div>
 
     <div class="cat-sec">
@@ -283,7 +284,7 @@ export function renderFichaCatalogo() {
         <div class="cat-img${k === 0 ? ' principal' : ''}">
           <img src="${esc(contextoApp.FOTOS_BASE + a)}" loading="lazy" alt="">
           ${k === 0 ? '<span class="tag">Principal</span>' : ''}
-          <select onchange="vistaFoto('${escJs(a)}',this.value)" title="Qué muestra (la de frente y dorso va primera)">
+          <select ${on('change', 'vistaFoto', a, '$value')} title="Qué muestra (la de frente y dorso va primera)">
             <option value="">vista ?</option>
             ${Object.entries(contextoApp.VISTAS).map(([v, t]) => `<option value="${esc(v)}" ${v === c.vista ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
@@ -295,7 +296,7 @@ export function renderFichaCatalogo() {
     <div class="cat-sec">
       <div class="cat-sec-t">Organización</div>
       <div class="field"><label>Categoría</label>
-        <select onchange="ajusteCatalogo('${escJs(p.id)}','categoria',this.value);renderFichaCatalogo()">
+        <select ${on('change', 'ajusteCatalogoFicha', p.id, 'categoria', '$value')}>
           ${ordenCategorias().map(c => `<option value="${esc(c)}" ${c === p.categoria ? 'selected' : ''}>${esc(c)}${c === p._catAuto ? ' (automática)' : ''}</option>`).join('')}
         </select></div>
     </div>
@@ -318,22 +319,22 @@ export function renderFichaCatalogo() {
     <div class="cat-sec">
       <div class="cat-sec-t">SEO y metadatos</div>
       <div class="field"><label>Descripción para buscadores (meta description)</label>
-        <textarea rows="2" maxlength="160" placeholder="${esc(descSeo)}" onchange="metaCatalogo('${escJs(p.id)}','seoDescripcion',this.value)">${esc(meta.seoDescripcion || '')}</textarea></div>
+        <textarea rows="2" maxlength="160" placeholder="${esc(descSeo)}" ${on('change', 'metaCatalogo', p.id, 'seoDescripcion', '$value')}>${esc(meta.seoDescripcion || '')}</textarea></div>
       <div class="field"><label>Palabras clave <span style="color:var(--text3);font-weight:400;">(separadas por coma)</span></label>
-        <input type="text" value="${esc(meta.keywords || '')}" placeholder="iphone 13, usado, mar del plata" onchange="metaCatalogo('${escJs(p.id)}','keywords',this.value)"></div>
+        <input type="text" value="${esc(meta.keywords || '')}" placeholder="iphone 13, usado, mar del plata" ${on('change', 'metaCatalogo', p.id, 'keywords', '$value')}></div>
       <div class="cat-seo-prev">
         <div class="t">${esc(tituloSeo)} — MarplaCity</div>
         <div class="u">${esc(urlProd)}</div>
         <div class="d">${esc(descSeo.slice(0, 160))}</div>
       </div>
       <div style="display:flex;gap:8px;margin-top:10px;">
-        <button class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;" onclick="navigator.clipboard.writeText('${escJs(urlProd)}').then(()=>showToast('Link copiado ✓'))">📋 Copiar link del producto</button>
+        <button class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;" ${on('click', 'copiarLink', urlProd)}>📋 Copiar link del producto</button>
         <a class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;text-decoration:none;text-align:center;" href="${esc(urlProd)}" target="_blank" rel="noopener">↗ Ver en la tienda</a>
       </div>
     </div>
 
     ${p._sale ? `<div class="cat-sec">
-      <button class="btn-danger" onclick="eliminarDelCatalogo('${escJs(p.id)}')">Eliminar del catálogo</button>
+      <button class="btn-danger" ${on('click', 'eliminarDelCatalogo', p.id)}>Eliminar del catálogo</button>
       <div style="font-size:11.5px;color:var(--text3);margin-top:6px;">Deja de publicarse en la tienda. Sigue en ${esc(p._origen)} y se puede restaurar.</div>
     </div>` : ''}`;
 }
@@ -377,7 +378,7 @@ export function renderFotosCatalogo() {
   if (btnAmz && !btnAmz.disabled) btnAmz.textContent = faltan.length ? `🛒 Buscar en Amazon (${faltan.length} sin foto)` : '🛒 Buscar en Amazon';
   document.getElementById('cat-fotos').innerHTML = !claves.length && !sueltas.length ? '<div class="proveedor-alerta alerta-atencion">La base de fotos está vacía. Subí archivos a <code>fotos/</code> y tocá Clasificar.</div>' : `<div class="proveedor-alerta" style="margin-bottom:10px;"><b>${total}</b> imagen${total === 1 ? '' : 'es'} de <b>${claves.length}</b> modelo${claves.length === 1 ? '' : 's'}${faltan.length ? ` · <b>${faltan.length}</b> producto${faltan.length === 1 ? '' : 's'} sin foto` : ''}. Tocá una para ver sus fotos y moverlas.</div>
        <div style="display:grid;grid-template-columns:repeat(auto-fill,82px);gap:10px;">${claves.map(k => `
-         <div style="width:82px;text-align:center;cursor:pointer;" onclick="abrirFotoCat('${escJs(k)}')">
+         <div style="width:82px;text-align:center;cursor:pointer;" ${on('click', 'abrirFotoCat', k)}>
            <img src="${esc(contextoApp.FOTOS_BASE + contextoApp.FOTOS[k][0])}" loading="lazy"
                 style="width:82px;height:82px;object-fit:contain;background:#fff;border:1px solid ${contextoApp.fotoAbierta === k ? 'var(--text)' : 'var(--border)'};border-radius:var(--radius-sm);">
            <div style="font-family:'DM Mono',monospace;font-size:9.5px;color:var(--text3);margin-top:4px;word-break:break-all;line-height:1.25;">${esc(k)}${contextoApp.FOTOS[k].length > 1 ? ` ·${contextoApp.FOTOS[k].length}` : ''}</div>
@@ -676,6 +677,8 @@ export function inicializarCatalogo() {
   };
   contextoApp.catSeleccion = new Set();
   /** Seleccionar un producto (id) o todos los visibles (id null). */
+  window.seleccionarTodoCatalogo = () => window.seleccionarCatalogo(null, contextoApp.catSeleccion.size === 0 || contextoApp.catSeleccion.size < catalogoFiltrados().length);
+  window.moverSeleccionACategoria = el => { if (!el.value) return; window.accionCatalogo('categoria', el.value); el.value = ''; };
   window.seleccionarCatalogo = function (id, on) {
     if (id) on ? contextoApp.catSeleccion.add(id) : contextoApp.catSeleccion.delete(id);else if (on) catalogoFiltrados().forEach(p => contextoApp.catSeleccion.add(p.id));else contextoApp.catSeleccion.clear();
     renderCatalogo();
@@ -759,6 +762,10 @@ export function inicializarCatalogo() {
     renderCatalogo();
   };
   window.LINK_CATALOGO_PUBLICO = () => contextoApp.LINK_CATALOGO;
+  window.verCategoriaCatalogo = c => { window.catTab('productos'); document.getElementById('cat-f-cat').value = c; renderCatalogo(); };
+  window.restaurarEnCatalogo = id => { window.toggleCatalogo(id, true); renderFichaCatalogo(); };
+  window.ajusteCatalogoFicha = (id, campo, valor) => { window.ajusteCatalogo(id, campo, valor); renderFichaCatalogo(); };
+  window.abrirTiendaPublica = () => window.open(contextoApp.LINK_CATALOGO, '_blank');
 
   /** La clave de foto de un producto (modelo + color), la misma que usa la página. */
   contextoApp.claveFotoDe = p => slugFoto(p.nombre) + (p.color ? '-' + slugFoto(p.color) : '');
@@ -811,14 +818,14 @@ export function inicializarCatalogo() {
     caja: 'caja',
     otro: 'otro'
   };
-  contextoApp.selectVista = (archivo, actual) => `<select onchange="vistaFoto('${escJs(archivo)}',this.value)"
+  contextoApp.selectVista = (archivo, actual) => `<select ${on('change', 'vistaFoto', archivo, '$value')}
       style="width:100%;font-size:11px;padding:4px 6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);">
     <option value="">vista: ?</option>
     ${Object.entries(contextoApp.VISTAS).map(([k, v]) => `<option value="${esc(k)}" ${k === actual ? 'selected' : ''}>vista: ${v}</option>`).join('')}
   </select>`;
   contextoApp.selectClave = (archivo, actual) => {
     const opciones = [...new Set([...clavesDeProductos(), ...Object.keys(contextoApp.FOTOS)])].sort();
-    return `<select onchange="asignarFoto('${escJs(archivo)}',this.value)"
+    return `<select ${on('change', 'asignarFoto', archivo, '$value')}
       style="width:100%;font-size:11px;padding:4px 6px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);">
     <option value="">— sin asignar —</option>
     ${opciones.map(k => `<option value="${esc(k)}" ${k === actual ? 'selected' : ''}>${esc(k)}</option>`).join('')}

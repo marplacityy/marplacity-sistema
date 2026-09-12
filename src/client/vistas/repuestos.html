@@ -5,18 +5,18 @@
       </div>
 
       <div class="tab-btns" style="margin-bottom:14px;">
-        <button class="tab-btn active" id="rp-tab-inv" onclick="setRepuestosTab('inv',this)">📦 Mi caja</button>
-        <button class="tab-btn" id="rp-tab-add" onclick="setRepuestosTab('add',this)">➕ Cargar piezas</button>
-        <button class="tab-btn" id="rp-tab-precios" onclick="setRepuestosTab('precios',this)">💲 Precios de referencia</button>
+        <button class="tab-btn active" id="rp-tab-inv" data-click="setRepuestosTab" data-args='["inv", "$this"]'>📦 Mi caja</button>
+        <button class="tab-btn" id="rp-tab-add" data-click="setRepuestosTab" data-args='["add", "$this"]'>➕ Cargar piezas</button>
+        <button class="tab-btn" id="rp-tab-precios" data-click="setRepuestosTab" data-args='["precios", "$this"]'>💲 Precios de referencia</button>
       </div>
 
       <!-- TAB: Inventario -->
       <div id="rp-sec-inv">
         <div id="rp-metrics" class="metrics"></div>
         <div class="filters-bar" style="margin:12px 0;">
-          <input type="text" id="rp-fl-buscar" placeholder="🔎 Buscar modelo, pieza, color... (ej: 13 pro, batería, purple)" oninput="deb('rpB',renderRepInv)" style="flex:2;">
-          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="vaciarCaja()" title="Borrar todas las piezas cargadas">🗑 Vaciar caja</button>
-          <select id="rp-fl-tipo" onchange="renderRepInv()">
+          <input type="text" id="rp-fl-buscar" placeholder="🔎 Buscar modelo, pieza, color... (ej: 13 pro, batería, purple)" data-input="deb" data-args='["rpB", "$fn:renderRepInv"]' style="flex:2;">
+          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" data-click="vaciarCaja" title="Borrar todas las piezas cargadas">🗑 Vaciar caja</button>
+          <select id="rp-fl-tipo" data-change="renderRepInv">
             <option value="">Todas las piezas</option>
             <option value="modulo">Módulo (pantalla)</option>
             <option value="chasis">Chasis</option>
@@ -44,7 +44,7 @@
           <div class="card-title">🤖 Pegar lista (la IA la interpreta)</div>
           <p style="font-size:12px;color:var(--text2);margin-bottom:10px;">Pegá tu lista tal cual, como la anotás vos. Entiende "x2", colores separados por /, "todo menos módulo", equipos enteros, etc.</p>
           <textarea id="rp-bulk-text" placeholder="Módulo iphone 16 pro x2&#10;Batería 16 pro x2&#10;Chasis 14 pro purple esim x2&#10;iPhone 11 todo menos módulo blanco&#10;..." style="width:100%;height:150px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13px;color:var(--text);outline:none;resize:vertical;margin-bottom:8px;"></textarea>
-          <button class="btn-save" id="btn-rp-bulk" onclick="cargarCajaIA()">🤖 Interpretar y cargar</button>
+          <button class="btn-save" id="btn-rp-bulk" data-click="cargarCajaIA">🤖 Interpretar y cargar</button>
           <div id="rp-bulk-status" style="font-size:12px;color:var(--text2);margin-top:8px;"></div>
         </div>
 
@@ -59,8 +59,8 @@
           </div>
           <div class="field"><label>Notas <span style="color:var(--text3);font-weight:400">(opcional)</span></label><input type="text" id="rp-notas" placeholder="De qué equipo salió, estado, etc."></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn-save" id="btn-rp-guardar" onclick="guardarPiezas()">Agregar a la caja</button>
-            <button class="btn-secondary" onclick="llenarEquipoEntero()" title="Pone 1 en las piezas principales">⚡ Equipo entero</button>
+            <button class="btn-save" id="btn-rp-guardar" data-click="guardarPiezas">Agregar a la caja</button>
+            <button class="btn-secondary" data-click="llenarEquipoEntero" title="Pone 1 en las piezas principales">⚡ Equipo entero</button>
           </div>
         </div>
       </div>
@@ -79,7 +79,7 @@
             </select></div>
           </div>
           <textarea id="rpp-bulk-text" placeholder="Pegá acá el contenido de la página..." style="width:100%;height:160px;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12px;color:var(--text);outline:none;resize:vertical;margin-bottom:8px;"></textarea>
-          <button class="btn-save" id="btn-rpp-bulk" onclick="importarPreciosIA()">🤖 Extraer precios y cargar</button>
+          <button class="btn-save" id="btn-rpp-bulk" data-click="importarPreciosIA">🤖 Extraer precios y cargar</button>
           <div id="rpp-bulk-status" style="font-size:12px;color:var(--text2);margin-top:8px;"></div>
         </div>
 
@@ -100,7 +100,7 @@
             <div class="field"><label>Valor USD</label>
               <div style="display:flex;gap:6px;">
                 <input type="number" id="rpp-valor" placeholder="0" step="0.01" style="flex:1;">
-                <button class="btn-add" onclick="guardarPrecioRef()">✓</button>
+                <button class="btn-add" data-click="guardarPrecioRef">✓</button>
               </div>
             </div>
           </div>

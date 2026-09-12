@@ -1,5 +1,6 @@
 /** modulos/costos: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { updateDoc, doc } from 'firebase/firestore';
 import { esc, showToast } from '../core/interfaz.js';
 import { cmpModeloRep } from './repuestos.js';
@@ -78,7 +79,7 @@ export function populateRepuestoSelects() {
   });
 }
 export function renderRepuestosTags() {
-  document.getElementById('r-repuestos-tags').innerHTML = contextoApp.repRepuestos.map((r, i) => `<div class="medio-tag"><span>${r.libre ? '' : origenRep(r) === 'rep' ? '🧩 ' : '📦 '}${r.qty}x ${esc(r.nombre)}${r.libre ? ' · u$s ' + (r.costo || 0) + ' 🛒' : ''}</span><button onclick="delRepuesto(${i})">×</button></div>`).join('');
+  document.getElementById('r-repuestos-tags').innerHTML = contextoApp.repRepuestos.map((r, i) => `<div class="medio-tag"><span>${r.libre ? '' : origenRep(r) === 'rep' ? '🧩 ' : '📦 '}${r.qty}x ${esc(r.nombre)}${r.libre ? ' · u$s ' + (r.costo || 0) + ' 🛒' : ''}</span><button ${on('click', 'delRepuesto', i)}>×</button></div>`).join('');
 }
 export function costoMap(tipo) {
   const cch = contextoApp._costoCache[tipo];

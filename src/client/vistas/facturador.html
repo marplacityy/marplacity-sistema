@@ -10,16 +10,16 @@
         <div class="card-title">Cliente</div>
         <div class="grid2">
           <div class="field"><label>Razón social o nombre</label><input type="text" id="fac-nombre" placeholder="Consumidor Final"></div>
-          <div class="field"><label>Condición frente al IVA</label><select id="fac-cond" onchange="facCondCambio()"></select></div>
+          <div class="field"><label>Condición frente al IVA</label><select id="fac-cond" data-change="facCondCambio"></select></div>
         </div>
         <div class="grid2">
-          <div class="field"><label>Tipo de documento</label><select id="fac-doctipo" onchange="facPintarAviso()"></select></div>
-          <div class="field"><label>Número de documento</label><input type="text" id="fac-docnro" placeholder="Sin guiones" oninput="facPintarAviso()"></div>
+          <div class="field"><label>Tipo de documento</label><select id="fac-doctipo" data-change="facPintarAviso"></select></div>
+          <div class="field"><label>Número de documento</label><input type="text" id="fac-docnro" placeholder="Sin guiones" data-input="facPintarAviso"></div>
         </div>
         <div class="grid2">
           <div class="field">
             <label>Tipo de comprobante</label>
-            <select id="fac-tipo" onchange="facPintarAviso()">
+            <select id="fac-tipo" data-change="facPintarAviso">
               <option value="1">Factura A</option>
               <option value="6">Factura B</option>
             </select>
@@ -34,7 +34,7 @@
         <div class="card-title">Renglones</div>
         <div class="field" style="max-width:340px;">
           <label>Los precios que cargo son…</label>
-          <select id="fac-modo" onchange="facTotales()">
+          <select id="fac-modo" data-change="facTotales">
             <option value="final">Precio final — lo que le cobro (con IVA adentro)</option>
             <option value="neto">Neto — el sistema le suma el IVA</option>
           </select>
@@ -49,11 +49,11 @@
           </tr></thead>
           <tbody id="fac-items"></tbody>
         </table></div>
-        <button class="btn-secondary" style="margin-top:10px;" onclick="facAgregarRenglon()">＋ Agregar renglón</button>
+        <button class="btn-secondary" style="margin-top:10px;" data-click="facAgregarRenglon">＋ Agregar renglón</button>
         <div id="fac-totales" class="permuta-box" style="margin-top:14px;"></div>
         <div class="pos-actions" style="margin-top:14px;">
-          <button class="pos-btn-cancel" onclick="facLimpiar()">✕ Limpiar</button>
-          <button class="pos-btn-checkout" id="btn-fac-emitir" onclick="facEmitir()">🧾 Emitir y pedir el CAE</button>
+          <button class="pos-btn-cancel" data-click="facLimpiar">✕ Limpiar</button>
+          <button class="pos-btn-checkout" id="btn-fac-emitir" data-click="facEmitir">🧾 Emitir y pedir el CAE</button>
         </div>
       </div>
 

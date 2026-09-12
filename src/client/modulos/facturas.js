@@ -1,4 +1,5 @@
 import { configuracion } from '../core/config-publica.js';
+import { on } from '../../shared/seguridad.js';
 /** modulos/facturas: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
 import { esc, showToast } from '../core/interfaz.js';
@@ -12,14 +13,14 @@ import imprimirDocumentoUrl from '../core/imprimir-documento.js?url&no-inline';
 export function renderFE() {
   document.getElementById('fe-items').innerHTML = contextoApp.feItems.length ? contextoApp.feItems.map((it, i) => `
     <div class="cart-item">
-      <input type="text" class="cart-precio" style="flex:1;width:auto;text-align:left;font-family:inherit;" value="${esc(it.nombre)}" onchange="feSetNombre(${i},this.value)">
+      <input type="text" class="cart-precio" style="flex:1;width:auto;text-align:left;font-family:inherit;" value="${esc(it.nombre)}" ${on('change', 'feSetNombre', i, '$value')}>
       ${it.tipo === 'inv' || it.tipo === 'imp' || it.tipo === 'manual' ? `
         <div class="cart-qty">
-          <button onclick="feQty(${i},-1)">−</button><span>${it.qty || 1}</span><button onclick="feQty(${i},1)">+</button>
+          <button ${on('click', 'feQty', i, -1)}>−</button><span>${it.qty || 1}</span><button ${on('click', 'feQty', i, 1)}>+</button>
         </div>` : `<span style="font-size:11px;color:var(--text3);">×1</span>`}
-      <input type="number" class="cart-precio" value="${esc(it.precio)}" step="0.01" min="0" onchange="feSetPrecio(${i},this.value)">
+      <input type="number" class="cart-precio" value="${esc(it.precio)}" step="0.01" min="0" ${on('change', 'feSetPrecio', i, '$value')}>
       <span style="font-size:10px;color:var(--text3);">${it.moneda}</span>
-      <button class="cart-del" onclick="feDel(${i})">×</button>
+      <button class="cart-del" ${on('click', 'feDel', i)}>×</button>
     </div>`).join('') : '<div class="home-empty">Sin items — agregá al menos uno.</div>';
   renderFETot();
 }
@@ -68,7 +69,7 @@ export function feTotals() {
   };
 }
 export function renderFEMedios() {
-  document.getElementById('fe-medios-tags').innerHTML = contextoApp.feMedios.map((mm, i) => `<div class="medio-tag"><span>${esc(mm.medio)} · ${mm.moneda === 'USD' ? 'u$s ' : '$ '}${(mm.valor || 0).toLocaleString('es-AR')}</span><button onclick="feDelMedio(${i})">×</button></div>`).join('');
+  document.getElementById('fe-medios-tags').innerHTML = contextoApp.feMedios.map((mm, i) => `<div class="medio-tag"><span>${esc(mm.medio)} · ${mm.moneda === 'USD' ? 'u$s ' : '$ '}${(mm.valor || 0).toLocaleString('es-AR')}</span><button ${on('click', 'feDelMedio', i)}>×</button></div>`).join('');
   renderFETot();
 }
 export function renderFETot() {

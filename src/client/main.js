@@ -32,8 +32,10 @@ import { inicializarCatalogo } from './modulos/catalogo.js';
 import { inicializarAsistente } from './modulos/asistente.js';
 import { inicializarFacturador } from './modulos/facturador.js';
 import { inicializarSesion } from './core/sesion.js';
+import { activarEventos } from './core/eventos.js';
 
 export async function iniciarSistema() {
+  activarEventos();
   await cargarConfiguracion();
   inicializarFirebase();
   inicializarDatos();

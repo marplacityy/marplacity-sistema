@@ -24,8 +24,8 @@ import { populateProveedoresDL, populateConsigFilters, renderConsig, renderProve
 import { renderReporte } from '../modulos/reportes.js';
 import { renderAmort } from '../modulos/amortizaciones.js';
 
-import { esc, escJs } from '../../shared/seguridad.js';
-export { esc, escJs };
+import { esc, escJs, on } from '../../shared/seguridad.js';
+export { esc, escJs, on };
 export function showToast(msg, err = false) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -72,10 +72,10 @@ export function populateMedioSelects() {
   });
 }
 export function renderCatTags() {
-  document.getElementById('cats-tags').innerHTML = contextoApp.cats.map(c => `<div class="tag"><span>${esc(c)}</span><button onclick="eliminarCat('${escJs(c)}')" title="Eliminar">×</button></div>`).join('');
+  document.getElementById('cats-tags').innerHTML = contextoApp.cats.map(c => `<div class="tag"><span>${esc(c)}</span><button ${on('click', 'eliminarCat', c)} title="Eliminar">×</button></div>`).join('');
 }
 export function renderMedioTags() {
-  document.getElementById('medios-tags').innerHTML = contextoApp.medios.map(m => `<div class="tag"><span>${esc(m)}</span><button onclick="eliminarMedio('${escJs(m)}')" title="Eliminar">×</button></div>`).join('');
+  document.getElementById('medios-tags').innerHTML = contextoApp.medios.map(m => `<div class="tag"><span>${esc(m)}</span><button ${on('click', 'eliminarMedio', m)} title="Eliminar">×</button></div>`).join('');
 }
 export async function saveCfgData() {
   setSyncDot('syncing');
@@ -103,6 +103,11 @@ export function updateConceptosDL() {
 
 // ── Guardar nuevo gasto ──
 export function inicializarInterfaz() {
+  // Reemplazan los onclick inline que tocaban el DOM directo (ver core/eventos.js).
+  window.cerrarCapa = id => document.getElementById(id)?.classList.remove('open');
+  window.clickEn = id => document.getElementById(id)?.click();
+  window.copiarLink = url => navigator.clipboard.writeText(url).then(() => showToast('Link copiado ✓'));
+
   // ── Helpers ──
   // Fecha LOCAL (no UTC): evita que después de las 21:00 (AR) las operaciones se fechen "mañana"
   contextoApp.isoLocal = d => {
@@ -188,8 +193,8 @@ export function inicializarInterfaz() {
     document.getElementById('page-' + page).classList.add('active');
     document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
     document.querySelectorAll('.mobile-tab').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll(`nav a[onclick*="'${page}'"]`).forEach(a => a.classList.add('active'));
-    const enLaBarra = document.querySelectorAll(`.mobile-tab[onclick*="'${page}'"]`);
+    document.querySelectorAll(`nav a[data-args='["${page}"]']`).forEach(a => a.classList.add('active'));
+    const enLaBarra = document.querySelectorAll(`.mobile-tab[data-args='["${page}"]']`);
     enLaBarra.forEach(b => b.classList.add('active'));
     // Si la pantalla no es una de las cuatro fijas, se marca "Más": en el teléfono la
     // barra tiene que decir siempre dónde estás parado.

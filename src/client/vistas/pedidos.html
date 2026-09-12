@@ -5,8 +5,8 @@
       </div>
       <div class="card">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
-          <button class="btn-secondary" id="ped-f-abiertos" onclick="filtrarPedidos('abiertos')">Por atender</button>
-          <button class="btn-secondary" id="ped-f-todos" onclick="filtrarPedidos('todos')">Todos</button>
+          <button class="btn-secondary" id="ped-f-abiertos" data-click="filtrarPedidos" data-args='["abiertos"]'>Por atender</button>
+          <button class="btn-secondary" id="ped-f-todos" data-click="filtrarPedidos" data-args='["todos"]'>Todos</button>
         </div>
         <div style="overflow-x:auto;"><table class="tkh-table">
           <thead><tr><th style="width:120px;">Cuándo</th><th>Cliente</th><th>Producto</th><th>Pago</th><th>Entrega</th><th style="width:100px;">Estado</th><th style="width:170px;"></th></tr></thead>

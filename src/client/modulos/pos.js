@@ -1,6 +1,7 @@
 /** modulos/pos: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
-import { esc, escJs, showToast } from '../core/interfaz.js';
+import { on } from '../../shared/seguridad.js';
+import { esc, showToast } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { resolverCliente } from './clientes.js';
 import { addDoc, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
@@ -157,7 +158,7 @@ export function renderPosGrid() {
   if (!fBus && !contextoApp.posNav) {
     bc.innerHTML = '<span>⌂ Categorías</span>';
     const grupos = posGrupos(todos);
-    document.getElementById('pos-grid').innerHTML = grupos.length ? grupos.map(g => `<div class="pos-cat-tile" onclick="posGoCat('${g.tipo}',${g.cat ? `'${escJs(g.cat)}'` : 'null'})">
+    document.getElementById('pos-grid').innerHTML = grupos.length ? grupos.map(g => `<div class="pos-cat-tile" ${on('click', 'posGoCat', g.tipo, g.cat || null)}>
           <div class="pos-cat-icon">${g.icon}</div>
           <div class="pos-cat-nombre">${esc(g.nombre)}</div>
           <div class="pos-cat-count">${g.n} ${g.n === 1 ? 'item' : 'items'}</div>
@@ -168,11 +169,11 @@ export function renderPosGrid() {
   // NIVEL ITEMS (categoría elegida o búsqueda global)
   let items = todos;
   if (fBus) {
-    bc.innerHTML = `<a onclick="posGoCat(null)">⌂ Categorías</a><span>›</span><span>Búsqueda: "${esc(fBus)}"</span>`;
+    bc.innerHTML = `<a ${on('click', 'posGoCat', null)}>⌂ Categorías</a><span>›</span><span>Búsqueda: "${esc(fBus)}"</span>`;
     items = items.filter(p => ((p.nombre || '') + ' ' + (p.sku || '') + ' ' + (p.imei || '')).toLowerCase().includes(fBus));
   } else {
     const g = posGrupos(todos).find(x => x.tipo === contextoApp.posNav.tipo && (x.cat || null) === (contextoApp.posNav.cat || null));
-    bc.innerHTML = `<a onclick="posGoCat(null)">⌂ Categorías</a><span>›</span><span>${esc(g ? g.nombre : '')}</span>`;
+    bc.innerHTML = `<a ${on('click', 'posGoCat', null)}>⌂ Categorías</a><span>›</span><span>${esc(g ? g.nombre : '')}</span>`;
     items = items.filter(p => p.tipo === contextoApp.posNav.tipo && (contextoApp.posNav.tipo !== 'inv' || (p.cat || 'Accesorios') === contextoApp.posNav.cat));
   }
   renderPosTiles(items);
@@ -188,7 +189,7 @@ export function renderPosTiles(items) {
     const enCarrito = contextoApp.cart.filter(ci => ci.refId === p.refId).reduce((s, ci) => s + ci.qty, 0);
     const disp = p.tipo === 'inv' ? p.qty - enCarrito : enCarrito ? 0 : 1;
     const off = disp <= 0;
-    return `<div class="pos-tile ${off ? 'agotado' : ''}" onclick="${off ? '' : `addToCart('${p.tipo}','${p.refId}')`}">
+    return `<div class="pos-tile ${off ? 'agotado' : ''}" ${off ? '' : on('click', 'addToCart', p.tipo, p.refId)}>
       <div>${badge(p.tipo)}<div class="pos-tile-nombre">${esc(p.nombre)}</div></div>
       <div>
         <div class="pos-tile-precio">${m(p)}</div>
@@ -275,7 +276,7 @@ export function fmtDual(ars, usd, tc) {
 }
 export function renderCartTotalsOnly() {
   const t = cartTotals();
-  document.getElementById('pos-medios-tags').innerHTML = contextoApp.posMedios.map((m, i) => `<div class="medio-tag"><span>${esc(m.medio)} · ${m.moneda === 'USD' ? 'u$s ' : '$ '}${m.valor.toLocaleString('es-AR')}</span><button onclick="removePosMedio(${i})">×</button></div>`).join('');
+  document.getElementById('pos-medios-tags').innerHTML = contextoApp.posMedios.map((m, i) => `<div class="medio-tag"><span>${esc(m.medio)} · ${m.moneda === 'USD' ? 'u$s ' : '$ '}${m.valor.toLocaleString('es-AR')}</span><button ${on('click', 'removePosMedio', i)}>×</button></div>`).join('');
   document.getElementById('pos-total').textContent = fmtDual(t.totARS, t.totUSD, t.tc);
 
   // La barra del cajón, en el celular. Se actualiza acá y no en otro lado: este es el
@@ -323,11 +324,11 @@ export function renderCart() {
       <div class="cart-nombre">${esc(ci.nombre)}${ci.imei ? `<small>IMEI ${esc(ci.imei)}</small>` : ''}</div>
       ${ci.tipo === 'inv' ? `
         <div class="cart-qty">
-          <button onclick="cartQty(${i},-1)">−</button><span>${ci.qty}</span><button onclick="cartQty(${i},1)">+</button>
+          <button ${on('click', 'cartQty', i, -1)}>−</button><span>${ci.qty}</span><button ${on('click', 'cartQty', i, 1)}>+</button>
         </div>` : ''}
-      <input type="number" class="cart-precio" value="${esc(ci.precio)}" step="0.01" min="0" onchange="cartPrecio(${i},this.value)" title="Precio en ${ci.moneda}">
+      <input type="number" class="cart-precio" value="${esc(ci.precio)}" step="0.01" min="0" ${on('change', 'cartPrecio', i, '$value')} title="Precio en ${ci.moneda}">
       <span style="font-size:10px;color:var(--text3);">${ci.moneda}</span>
-      <button class="cart-del" onclick="cartDel(${i})">×</button>
+      <button class="cart-del" ${on('click', 'cartDel', i)}>×</button>
     </div>
   `).join('');
   renderCartTotalsOnly();
@@ -486,7 +487,7 @@ export function inicializarPos() {
         const pag = (a.getAttribute('onclick').match(/goTo\('([^']+)'\)/) || [])[1];
         const svg = a.querySelector('svg')?.outerHTML || '';
         const nombre = a.textContent.trim();
-        return `<button class="mas-item ${pag === contextoApp.currentPage ? 'activa' : ''}" onclick="irDesdeMas('${escJs(pag)}')">${svg}<span>${esc(nombre)}</span></button>`;
+        return `<button class="mas-item ${pag === contextoApp.currentPage ? 'activa' : ''}" ${on('click', 'irDesdeMas', pag)}>${svg}<span>${esc(nombre)}</span></button>`;
       }).join('');
     }
     panel.classList.toggle('abierto', abriendo);

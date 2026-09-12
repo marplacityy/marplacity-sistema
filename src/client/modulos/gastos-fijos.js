@@ -1,5 +1,6 @@
 /** modulos/gastos-fijos: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { on } from '../../shared/seguridad.js';
 import { esc, showToast } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { addDoc, serverTimestamp, deleteDoc, doc, writeBatch } from 'firebase/firestore';
@@ -128,9 +129,9 @@ export function renderFijos() {
         <td class="gf-monto">${importeStr}</td>
         <td>${statusBadge(status)}</td>
         <td style="display:flex;gap:4px;flex-wrap:wrap;">
-          <button class="btn-pagar" onclick="abrirPagoFijo('${f.id}')">💳 Pagar</button>
-          <button class="btn-pagar-outline" onclick="verHistorialFijo('${f.id}')" title="Historial de pagos">📋</button>
-          <button class="btn-pagar-outline" onclick="eliminarFijo('${f.id}')">×</button>
+          <button class="btn-pagar" ${on('click', 'abrirPagoFijo', f.id)}>💳 Pagar</button>
+          <button class="btn-pagar-outline" ${on('click', 'verHistorialFijo', f.id)} title="Historial de pagos">📋</button>
+          <button class="btn-pagar-outline" ${on('click', 'eliminarFijo', f.id)}>×</button>
         </td>
       </tr>`;
     }).join('');

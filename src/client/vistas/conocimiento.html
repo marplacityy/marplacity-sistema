@@ -5,11 +5,11 @@
       </div>
 
       <div class="tab-btns" style="margin-bottom:14px;">
-        <button class="tab-btn active" id="kb-tab-datos" onclick="setKbTab('datos',this)">🏪 Datos del local</button>
-        <button class="tab-btn" id="kb-tab-mdp" onclick="setKbTab('mdp',this)">📋 Lista Mar del Plata</button>
-        <button class="tab-btn" id="kb-tab-caba" onclick="setKbTab('caba',this)">🚚 Lista CABA</button>
-        <button class="tab-btn" id="kb-tab-prov" onclick="setKbTab('prov',this)">🏭 Lista del proveedor</button>
-        <button class="tab-btn" id="kb-tab-prompt" onclick="setKbTab('prompt',this)">🧠 Prompt del bot</button>
+        <button class="tab-btn active" id="kb-tab-datos" data-click="setKbTab" data-args='["datos", "$this"]'>🏪 Datos del local</button>
+        <button class="tab-btn" id="kb-tab-mdp" data-click="setKbTab" data-args='["mdp", "$this"]'>📋 Lista Mar del Plata</button>
+        <button class="tab-btn" id="kb-tab-caba" data-click="setKbTab" data-args='["caba", "$this"]'>🚚 Lista CABA</button>
+        <button class="tab-btn" id="kb-tab-prov" data-click="setKbTab" data-args='["prov", "$this"]'>🏭 Lista del proveedor</button>
+        <button class="tab-btn" id="kb-tab-prompt" data-click="setKbTab" data-args='["prompt", "$this"]'>🧠 Prompt del bot</button>
       </div>
 
       <!-- TAB: Datos del local -->
@@ -18,7 +18,7 @@
           <div class="card-title">Cómo habla el bot</div>
           <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Escribí con tus palabras cómo querés que se exprese: si tutea o vosea, si usa emojis, si los mensajes son cortos o largos, qué muletillas usás vos. <b>Esto pisa las reglas de estilo que el bot trae de fábrica</b>, así que es el campo para ir afinando hasta que suene como vos. No cambia los precios ni cuándo te pasa una consulta a la bandeja.</p>
           <div class="field"><textarea id="kb-tono" placeholder="Ej: hablale de vos, nada de usted. Mensajes cortos, de un renglón. Sin emojis. Si no entendés algo, preguntá en vez de suponer. Cuando cierran la compra, decile que lo esperás por el local." style="height:130px;"></textarea></div>
-          <button class="btn-save" id="btn-kb-guardar-tono" onclick="guardarConocimiento()">Guardar</button>
+          <button class="btn-save" id="btn-kb-guardar-tono" data-click="guardarConocimiento">Guardar</button>
         </div>
 
         <div class="card">
@@ -26,7 +26,7 @@
           <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Contale cómo resolvés vos las situaciones que se repiten: cómo encarás una permuta, qué decís cuando te regatean, cómo cerrás una venta, qué hacés si preguntan por algo que no tenés. Pegá charlas reales tuyas si querés — el bot aprende del criterio, no copia las palabras.</p>
           <p style="font-size:12px;color:var(--text3);margin-bottom:12px;"><b>Los precios que pongas acá el bot los toma como inventados</b> y siempre cotiza con el stock y las listas reales. Escribí tranquilo.</p>
           <div class="field"><textarea id="kb-entrenamiento" placeholder="Ej:&#10;&#10;— Si preguntan por un modelo que no tengo, no digo solo &quot;no tengo&quot;: le ofrezco lo más parecido que sí tengo y le digo el precio.&#10;&#10;— Si me regatean: aguanto el precio una vez, y si insisten le digo que pagando en efectivo es el mejor precio que tengo.&#10;&#10;— Cuando dicen que lo llevan: le digo que lo separo, le paso la dirección y le pregunto cuándo pasa." style="height:220px;font-size:13px;"></textarea></div>
-          <button class="btn-save" id="btn-kb-guardar-entrenamiento" onclick="guardarConocimiento()">Guardar</button>
+          <button class="btn-save" id="btn-kb-guardar-entrenamiento" data-click="guardarConocimiento">Guardar</button>
         </div>
 
         <div class="card">
@@ -34,7 +34,7 @@
           <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Este mensaje el bot lo manda <b>textual</b>, sin pasar por la IA, cuando invita al canal. Por eso está escrito en primera persona del plural: si el modelo lo tuviera a la vista, le contagiaría ese "nosotros" al resto de la conversación.</p>
           <p style="font-size:12px;color:var(--neg);margin-bottom:12px;"><b>No pongas links.</b> Instagram rechaza los mensajes con enlaces de invitación (<i>"Link can't be shared"</i>): el mensaje no llega y encima corta la respuesta a la mitad. Referí al perfil en vez de linkear.</p>
           <div class="field"><textarea id="kb-canal" style="height:150px;font-size:13px;" placeholder="Para ver los precios de todo tenemos un canal de difusión: lo encontrás en nuestro perfil..."></textarea></div>
-          <button class="btn-save" id="btn-kb-guardar-canal" onclick="guardarCanal()">Guardar</button>
+          <button class="btn-save" id="btn-kb-guardar-canal" data-click="guardarCanal">Guardar</button>
         </div>
 
         <div class="card">
@@ -47,7 +47,7 @@
           <div class="field"><label>Política de seña</label><textarea id="kb-politicaSena" placeholder="Cuánto se seña, si se devuelve, cuánto se reserva el equipo..."></textarea></div>
           <div class="field"><label>Cómo llegar</label><textarea id="kb-comoLlegar" placeholder="Referencias, colectivos, estacionamiento..."></textarea></div>
           <div class="field"><label>Notas extra</label><textarea id="kb-notasExtra" placeholder="Cualquier otra cosa que el bot deba saber." style="height:110px;"></textarea></div>
-          <button class="btn-save" id="btn-kb-guardar-datos" onclick="guardarConocimiento()">Guardar</button>
+          <button class="btn-save" id="btn-kb-guardar-datos" data-click="guardarConocimiento">Guardar</button>
         </div>
       </div>
 
@@ -65,22 +65,22 @@
             <label>Moneda de los precios</label>
             <select id="kb-mdp-moneda"><option value="USD">USD u$s</option><option value="ARS">ARS $</option></select>
           </div>
-          <button class="btn-save" id="btn-kb-mdp-interpretar" onclick="interpretarListaKb('mdp')">✨ Interpretar con IA</button>
+          <button class="btn-save" id="btn-kb-mdp-interpretar" data-click="interpretarListaKb" data-args='["mdp"]'>✨ Interpretar con IA</button>
         </div>
         <div id="kb-mdp-preview" style="display:none;">
           <div class="card">
             <div class="card-title">Vista previa — confirmá antes de guardar</div>
             <div id="kb-mdp-preview-items"></div>
             <div style="display:flex;gap:8px;margin-top:1rem;">
-              <button class="btn-secondary" onclick="cancelarListaKb('mdp')">Cancelar</button>
-              <button class="btn-save" id="btn-kb-mdp-guardar" style="width:auto;padding:11px 18px;" onclick="guardarListaKb('mdp','agregar')">＋ Agregar a la lista</button>
-              <button class="btn-pagar-outline" id="btn-kb-mdp-reemplazar" onclick="guardarListaKb('mdp','reemplazar')">Reemplazar toda la lista</button>
+              <button class="btn-secondary" data-click="cancelarListaKb" data-args='["mdp"]'>Cancelar</button>
+              <button class="btn-save" id="btn-kb-mdp-guardar" style="width:auto;padding:11px 18px;" data-click="guardarListaKb" data-args='["mdp", "agregar"]'>＋ Agregar a la lista</button>
+              <button class="btn-pagar-outline" id="btn-kb-mdp-reemplazar" data-click="guardarListaKb" data-args='["mdp", "reemplazar"]'>Reemplazar toda la lista</button>
             </div>
           </div>
         </div>
         <div class="filters-bar" style="margin:12px 0;">
-          <input type="text" id="kb-mdp-buscar" placeholder="🔎 Buscar producto, GB, color..." oninput="deb('kbMdpB',function(){renderKbLista('mdp')})" style="flex:2;">
-          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="borrarListaKb('mdp')" title="Borrar la lista mostrada">🗑 Borrar lista</button>
+          <input type="text" id="kb-mdp-buscar" placeholder="🔎 Buscar producto, GB, color..." data-input="renderKbListaDeb" data-args='["mdp"]' style="flex:2;">
+          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" data-click="borrarListaKb" data-args='["mdp"]' title="Borrar la lista mostrada">🗑 Borrar lista</button>
         </div>
         <div id="kb-mdp-cambios"></div>
         <div class="card" style="padding:0;overflow:hidden;">
@@ -107,22 +107,22 @@
             <label>Moneda de los precios</label>
             <select id="kb-caba-moneda"><option value="USD">USD u$s</option><option value="ARS">ARS $</option></select>
           </div>
-          <button class="btn-save" id="btn-kb-caba-interpretar" onclick="interpretarListaKb('caba')">✨ Interpretar con IA</button>
+          <button class="btn-save" id="btn-kb-caba-interpretar" data-click="interpretarListaKb" data-args='["caba"]'>✨ Interpretar con IA</button>
         </div>
         <div id="kb-caba-preview" style="display:none;">
           <div class="card">
             <div class="card-title">Vista previa — confirmá antes de guardar</div>
             <div id="kb-caba-preview-items"></div>
             <div style="display:flex;gap:8px;margin-top:1rem;">
-              <button class="btn-secondary" onclick="cancelarListaKb('caba')">Cancelar</button>
-              <button class="btn-save" id="btn-kb-caba-guardar" style="width:auto;padding:11px 18px;" onclick="guardarListaKb('caba','agregar')">＋ Agregar a la lista</button>
-              <button class="btn-pagar-outline" id="btn-kb-caba-reemplazar" onclick="guardarListaKb('caba','reemplazar')">Reemplazar toda la lista</button>
+              <button class="btn-secondary" data-click="cancelarListaKb" data-args='["caba"]'>Cancelar</button>
+              <button class="btn-save" id="btn-kb-caba-guardar" style="width:auto;padding:11px 18px;" data-click="guardarListaKb" data-args='["caba", "agregar"]'>＋ Agregar a la lista</button>
+              <button class="btn-pagar-outline" id="btn-kb-caba-reemplazar" data-click="guardarListaKb" data-args='["caba", "reemplazar"]'>Reemplazar toda la lista</button>
             </div>
           </div>
         </div>
         <div class="filters-bar" style="margin:12px 0;">
-          <input type="text" id="kb-caba-buscar" placeholder="🔎 Buscar producto, GB, color..." oninput="deb('kbCabaB',function(){renderKbLista('caba')})" style="flex:2;">
-          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="borrarListaKb('caba')" title="Borrar la lista mostrada">🗑 Borrar lista</button>
+          <input type="text" id="kb-caba-buscar" placeholder="🔎 Buscar producto, GB, color..." data-input="renderKbListaDeb" data-args='["caba"]' style="flex:2;">
+          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" data-click="borrarListaKb" data-args='["caba"]' title="Borrar la lista mostrada">🗑 Borrar lista</button>
         </div>
         <div id="kb-caba-cambios"></div>
         <div class="card" style="padding:0;overflow:hidden;">
@@ -148,8 +148,8 @@
             <tbody id="kb-prov-tramos"></tbody>
           </table></div>
           <div style="display:flex;gap:8px;margin-top:10px;">
-            <button class="btn-secondary" onclick="agregarTramoProv()">＋ Agregar escalón</button>
-            <button class="btn-save" style="width:auto;padding:9px 16px;" onclick="guardarTramosProv()">Guardar el margen</button>
+            <button class="btn-secondary" data-click="agregarTramoProv">＋ Agregar escalón</button>
+            <button class="btn-save" style="width:auto;padding:9px 16px;" data-click="guardarTramosProv">Guardar el margen</button>
           </div>
         </div>
 
@@ -158,7 +158,7 @@
           <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Abrí la lista del proveedor, tocá dentro de la tabla y hacé <b>Ctrl+A</b> (o <b>Cmd+A</b>): copia todo lo visible. Volvé acá y pegá con <b>Ctrl+V</b>. No hace falta que borres nada ni que la ordenes.</p>
           <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">Los productos <b>sin stock</b> se descartan solos: el bot no puede ofrecer lo que el proveedor no tiene.</p>
           <div class="field">
-            <textarea id="kb-prov-texto" style="height:200px;font-family:'DM Mono',monospace;font-size:12.5px;" placeholder="Pegá acá con Ctrl+V…" oninput="procesarListaProv()"></textarea>
+            <textarea id="kb-prov-texto" style="height:200px;font-family:'DM Mono',monospace;font-size:12.5px;" placeholder="Pegá acá con Ctrl+V…" data-input="procesarListaProv"></textarea>
           </div>
           <div class="field" style="max-width:220px;display:none;">
             <select id="kb-prov-moneda"><option value="USD">USD u$s</option></select>
@@ -171,15 +171,15 @@
             <div class="card-title">Vista previa — confirmá antes de guardar</div>
             <div id="kb-prov-preview-items"></div>
             <div style="display:flex;gap:8px;margin-top:1rem;">
-              <button class="btn-secondary" onclick="cancelarListaKb('prov')">Cancelar</button>
-              <button class="btn-save" id="btn-kb-prov-guardar" style="width:auto;padding:11px 18px;" onclick="guardarListaKb('prov','reemplazar')">Reemplazar la lista del proveedor</button>
+              <button class="btn-secondary" data-click="cancelarListaKb" data-args='["prov"]'>Cancelar</button>
+              <button class="btn-save" id="btn-kb-prov-guardar" style="width:auto;padding:11px 18px;" data-click="guardarListaKb" data-args='["prov", "reemplazar"]'>Reemplazar la lista del proveedor</button>
             </div>
           </div>
         </div>
 
         <div class="filters-bar" style="margin:12px 0;">
-          <input type="text" id="kb-prov-buscar" placeholder="🔎 Buscar producto, GB, color..." oninput="deb('kbProvB',function(){renderKbLista('prov')})" style="flex:2;">
-          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" onclick="borrarListaKb('prov')" title="Borrar la lista mostrada">🗑 Borrar lista</button>
+          <input type="text" id="kb-prov-buscar" placeholder="🔎 Buscar producto, GB, color..." data-input="renderKbListaDeb" data-args='["prov"]' style="flex:2;">
+          <button class="btn-secondary" style="white-space:nowrap;color:var(--neg);border-color:var(--neg);" data-click="borrarListaKb" data-args='["prov"]' title="Borrar la lista mostrada">🗑 Borrar lista</button>
         </div>
         <div id="kb-prov-cambios"></div>
         <div class="card" style="padding:0;overflow:hidden;">
@@ -201,13 +201,13 @@
           <p style="font-size:12px;color:var(--neg);margin-bottom:12px;"><b>Cuidado.</b> Si rompés el final del texto (la parte del formato de salida), el bot deja de contestar bien. Ante la duda, tocá <i>Volver al original</i>. Para probar de a poco, mejor usá <i>Cómo habla el bot</i> y <i>Entrenamiento</i> en la primera pestaña: eso se suma sin pisar nada.</p>
           <div id="kb-prompt-estado" style="margin-bottom:12px;"></div>
           <div class="field">
-            <textarea id="kb-prompt" spellcheck="false" style="height:60vh;min-height:340px;font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.5;" oninput="kbPromptContar()"></textarea>
+            <textarea id="kb-prompt" spellcheck="false" style="height:60vh;min-height:340px;font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.5;" data-input="kbPromptContar"></textarea>
             <div style="font-size:11px;color:var(--text3);margin-top:4px;" id="kb-prompt-contador"></div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn-save" id="btn-kb-guardar-prompt" style="width:auto;padding:11px 18px;" onclick="guardarPromptBot()">Guardar</button>
-            <button class="btn-secondary" onclick="verPromptOriginal()">👁 Ver el original</button>
-            <button class="btn-secondary" style="color:var(--neg);border-color:var(--neg);" onclick="volverAlPromptOriginal()">↩ Volver al original</button>
+            <button class="btn-save" id="btn-kb-guardar-prompt" style="width:auto;padding:11px 18px;" data-click="guardarPromptBot">Guardar</button>
+            <button class="btn-secondary" data-click="verPromptOriginal">👁 Ver el original</button>
+            <button class="btn-secondary" style="color:var(--neg);border-color:var(--neg);" data-click="volverAlPromptOriginal">↩ Volver al original</button>
           </div>
         </div>
       </div>

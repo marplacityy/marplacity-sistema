@@ -5,7 +5,7 @@
       </div>
       <div class="date-range" style="margin-top:.25rem;">
         <label>Día</label>
-        <input type="date" id="caja-fecha" onchange="renderCaja()">
+        <input type="date" id="caja-fecha" data-change="renderCaja">
       </div>
       <div id="caja-metrics" class="metrics"></div>
       <div class="card" style="overflow-x:auto;">
@@ -17,7 +17,7 @@
       </div>
       <div class="card">
         <div class="field"><label>Notas del cierre <span style="color:var(--text3);font-weight:400">(opcional — diferencias, retiros, etc.)</span></label><input type="text" id="caja-notas" placeholder="Ej: Retiré $50.000 para el proveedor"></div>
-        <button class="btn-save" id="btn-cerrar-caja" onclick="cerrarCaja()">🔒 Cerrar caja del día</button>
+        <button class="btn-save" id="btn-cerrar-caja" data-click="cerrarCaja">🔒 Cerrar caja del día</button>
       </div>
       <div class="card">
         <div class="card-title">Cierres anteriores</div>
