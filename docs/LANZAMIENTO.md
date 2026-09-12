@@ -58,6 +58,26 @@ Al trasladarlos, desactivar primero el cron de Cloudflare y después usar
 `SEGUIMIENTOS_ACTIVOS=true` con Instagram en modo local. Debe existir una única
 instancia encargada de estos seguimientos.
 
+## VPS (Hostinger, Debian 13)
+
+Instalado el 12/09/2026 en `srv1976120.hstgr.cloud`. Node 24 en `/usr/local`, Caddy para
+HTTPS y proxy, ufw con 22, 80 y 443. La app vive en `/opt/marplacity/app` como usuario de
+sistema `marplacity`, con `.env` (`HOST=0.0.0.0`, `TRUST_PROXY=loopback`, servicios en
+`remoto`) y el servicio systemd `marplacity`.
+
+Actualizar a lo último de `main`:
+
+```sh
+cd /opt/marplacity/app
+sudo -u marplacity git pull
+sudo -u marplacity HOME=/opt/marplacity npm ci
+sudo -u marplacity HOME=/opt/marplacity npm run build
+systemctl restart marplacity
+```
+
+Logs: `journalctl -u marplacity -f`. Para un dominio propio, cambiar el nombre en
+`/etc/caddy/Caddyfile` y `systemctl reload caddy`: el certificado se emite solo.
+
 ## Publicación desde main
 
 GitHub Pages se configura con **GitHub Actions**. El workflow
