@@ -22,7 +22,7 @@ La carga de etiquetas se cambió a un documento Blob autónomo con scripts exter
 
 | Categoría | Revisión y resultado |
 | --- | --- |
-| A01 — Control de acceso | Reglas entre cuentas, catálogo, pedidos y cuentas de servicio corregidas y probadas en emulador. Pendiente activar en Firebase. |
+| A01 — Control de acceso | Reglas entre cuentas, catálogo, pedidos y cuentas de servicio corregidas, probadas en emulador y desplegadas en Firebase el 12/09/2026. |
 | A02 — Configuración de seguridad | Servidor enlazado a loopback, origen/host, cabeceras, CSP y archivos privados revisados. |
 | A03 — Cadena de suministro | Dependencias fijadas y lockfile; auditoría npm; verificación agregada a CI. No se inspeccionó manualmente el código de cada dependencia. |
 | A04 — Criptografía | AES-GCM fiscal y separación por identidad/entorno probados; TLS hacia proveedores; firmas HMAC/JWT revisadas. |
@@ -52,7 +52,7 @@ npm audit --audit-level=high
 
 La aplicación local sigue conectada a Firebase y, por configuración, utiliza los Workers remotos existentes. Reiniciar Node **no publica las reglas ni actualiza esos Workers**.
 
-La comprobación `firebase deploy --only firestore:rules --dry-run` no pudo autenticarse: no hay sesión administrativa de Firebase en esta PC. Las reglas compilaron y pasaron las pruebas del emulador, pero **no fueron desplegadas**. El catálogo existente debe tener el `userId` del dueño legítimo; una instalación sin catálogo necesita inicialización administrativa. La cuenta nueva creada para esta PC administra sus propios registros, no el catálogo compartido del dueño anterior.
+Las reglas se desplegaron el 12/09/2026 desde una sesión autorizada, tras verificar que `catalogo/publico` y `catalogo/fotos` llevan el `userId` del dueño. El catálogo existente debe tener el `userId` del dueño legítimo; una instalación sin catálogo necesita inicialización administrativa. La cuenta nueva creada para esta PC administra sus propios registros, no el catálogo compartido del dueño anterior.
 
 Con una sesión autorizada del proyecto:
 
