@@ -60,7 +60,8 @@ instancia encargada de estos seguimientos.
 
 ## VPS (Hostinger, Debian 13)
 
-Instalado el 12/09/2026 en `srv1976120.hstgr.cloud`. Node 24 en `/usr/local`, Caddy para
+Instalado el 12/09/2026 en `srv1976120.hstgr.cloud`; desde ese día responde también en
+`https://contify.tech` (dominio registrado en Hostinger, `www` redirige al apex). Node 24 en `/usr/local`, Caddy para
 HTTPS y proxy, ufw con 22, 80 y 443. La app vive en `/opt/marplacity/app` como usuario de
 sistema `marplacity`, con `.env` (`HOST=0.0.0.0`, `TRUST_PROXY=loopback`, servicios en
 `remoto`) y el servicio systemd `marplacity`.
