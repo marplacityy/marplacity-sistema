@@ -197,6 +197,28 @@ export function inicializarInventario() {
     document.getElementById('im-notas2').value = p.notas || '';
     document.getElementById('inv-modal').classList.add('open');
   };
+  // Duplicar: precarga el formulario de alta con los datos del producto abierto. No
+  // escribe nada hasta que el usuario toque "Agregar al inventario"; la cantidad
+  // arranca vacía para no duplicar el capital en stock.
+  window.duplicarInv = function () {
+    const p = contextoApp.invItems.find(x => x.id === contextoApp.invEditId);
+    if (!p) return;
+    window.closeInvModal();
+    populateICatSelects();
+    document.getElementById('i-nombre').value = p.nombre || '';
+    document.getElementById('i-cat').value = p.categoria || '';
+    document.getElementById('i-sku').value = '';
+    document.getElementById('i-qty').value = '';
+    document.getElementById('i-costo').value = p.costo || '';
+    document.getElementById('i-moneda').value = p.moneda || 'ARS';
+    document.getElementById('i-sugerido').value = p.sugerido || '';
+    document.getElementById('i-minimo').value = p.minimo ?? 3;
+    document.getElementById('i-prov').value = p.proveedor || '';
+    document.getElementById('i-notas').value = p.notas || '';
+    window.setInvTab('nuevo', document.querySelector('#page-inv .tab-btn[data-args*="nuevo"]'));
+    document.getElementById('i-nombre').focus();
+    showToast('Datos copiados: ajustá el nombre y la cantidad');
+  };
   window.closeInvModal = function () {
     document.getElementById('inv-modal').classList.remove('open');
     contextoApp.invEditId = null;
