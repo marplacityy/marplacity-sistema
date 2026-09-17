@@ -1,4 +1,5 @@
 import { configuracion } from '../core/config-publica.js';
+import { armarCortesia, ajustarInventarioPorCortesias } from './inventario.js';
 import { on } from '../../shared/seguridad.js';
 /** modulos/facturas: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
@@ -661,23 +662,11 @@ export function inicializarFacturas() {
         }
       });
       const cortesias = [];
-      let cUSD = 0;
-      if (contextoApp.feCort.vidrio) {
-        const cv = parseFloat(contextoApp.cfg.cortVidrio) || 2;
-        cortesias.push({
-          nombre: 'Vidrio templado',
-          costoUSD: cv
-        });
-        cUSD += cv;
-      }
-      if (contextoApp.feCort.funda) {
-        const cf = parseFloat(contextoApp.cfg.cortFunda) || 5;
-        cortesias.push({
-          nombre: 'Funda silicone case',
-          costoUSD: cf
-        });
-        cUSD += cf;
-      }
+      const equipoVendido = contextoApp.feItems.find(it => it.tipo === 'eq' || it.tipo === 'consig')?.nombre;
+      if (contextoApp.feCort.vidrio) cortesias.push(armarCortesia('vidrio', equipoVendido));
+      if (contextoApp.feCort.funda) cortesias.push(armarCortesia('funda', equipoVendido));
+      const cUSD = cortesias.reduce((s, co) => s + co.costoUSD, 0);
+      await ajustarInventarioPorCortesias(v.cortesias || [], cortesias);
       if (cUSD > 0) {
         hayCosto = true;
         gUSD -= cUSD;

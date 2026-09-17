@@ -89,7 +89,7 @@ test('venta con equipo y accesorio actualiza inventario, cliente y comprobante',
   const errores = await preparar(page);
   await entrar(page);
   await ir(page, 'ingresos');
-  await page.evaluate(() => { window.addToCart('eq', 'equipo-1'); window.addToCart('inv', 'funda-1'); window.cartPrecio(0, 550); window.cartPrecio(1, 10); });
+  await page.evaluate(() => { window.addToCart('eq', 'equipo-1'); window.addToCart('inv', 'funda-1'); window.cartPrecio(0, 550); window.cartPrecio(1, 10); window.toggleCortesia('funda'); window.toggleCortesia('vidrio'); });
   await page.locator('#pos-cliente').fill('Cliente de prueba');
   await page.locator('#pos-cliente-tel').fill('2235555555');
   await page.locator('#pos-medio-moneda').selectOption('USD');
@@ -97,10 +97,12 @@ test('venta con equipo y accesorio actualiza inventario, cliente y comprobante',
   await page.evaluate(() => window.cobrarPos(false));
   await expect.poll(() => page.evaluate(() => window.__datosPrueba.listar('ingresos').length)).toBe(1);
   expect(await page.evaluate(() => window.__datosPrueba.leer('stock/equipo-1').status)).toBe('vendido');
-  expect(await page.evaluate(() => window.__datosPrueba.leer('inventario/funda-1').qty)).toBe(4);
   expect(await page.evaluate(() => window.__datosPrueba.listar('clientes').length)).toBe(1);
   const venta = await page.evaluate(() => window.__datosPrueba.listar('ingresos')[0]);
   expect(venta.items).toHaveLength(2);
+  expect(venta.cortesias.map(co => co.refId || null)).toEqual([null, 'funda-1']);
+  // la funda vendida y la funda de cortesía salen las dos del inventario; el vidrio no existe y no descuenta nada
+  expect(await page.evaluate(() => window.__datosPrueba.leer('inventario/funda-1').qty)).toBe(3);
   expect(venta.totalUSD).toBe(560);
   await ir(page, 'facturas');
   await expect(page.locator('#page-facturas')).toContainText('iPhone 15');

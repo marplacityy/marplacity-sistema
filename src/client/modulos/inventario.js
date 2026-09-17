@@ -1,9 +1,10 @@
 /** modulos/inventario: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { buscarCortesiaEnInventario, deltaCortesias } from '../../shared/cortesias.js';
 import { on } from '../../shared/seguridad.js';
 import { esc, saveCfgData, showToast } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
-import { addDoc, serverTimestamp, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { addDoc, serverTimestamp, updateDoc, doc, deleteDoc, increment } from 'firebase/firestore';
 
 export
 // ── Inventario ────────────────────────────────────────
@@ -86,6 +87,28 @@ export function renderInv() {
     </div>`;
   }).join('');
 }
+/** Arma la cortesía de una venta. Si hay un artículo del inventario para ese equipo,
+ * queda enlazado (refId) y se va a descontar; si no, se avisa y solo cuenta el costo. */
+export function armarCortesia(tipo, equipoNombre) {
+  const nombre = tipo === 'vidrio' ? 'Vidrio templado' : 'Funda silicone case';
+  const costoUSD = parseFloat(tipo === 'vidrio' ? contextoApp.cfg.cortVidrio : contextoApp.cfg.cortFunda) || (tipo === 'vidrio' ? 2 : 5);
+  const p = equipoNombre ? buscarCortesiaEnInventario(tipo, equipoNombre, contextoApp.invItems) : null;
+  if (!p) {
+    showToast(`Sin ${nombre.toLowerCase()} en inventario para "${equipoNombre || 'este equipo'}": no se descuenta stock`, true);
+    return { nombre, costoUSD };
+  }
+  return { nombre, costoUSD, refId: p.id, invNombre: p.nombre, qty: 1 };
+}
+
+/** Descuenta (o devuelve) inventario según cambien las cortesías de una venta.
+ * Con increment(): el mismo producto puede estar también vendido como ítem en la
+ * misma operación, y una escritura absoluta pisaría a la otra. */
+export async function ajustarInventarioPorCortesias(antes, despues) {
+  for (const [refId, delta] of deltaCortesias(antes, despues)) {
+    if (contextoApp.invItems.some(x => x.id === refId)) await updateDoc(doc(contextoApp.db, 'inventario', refId), { qty: increment(-delta) });
+  }
+}
+
 export function inicializarInventario() {
   window.agregarICat = async function () {
     const v = document.getElementById('nueva-icat').value.trim();

@@ -1,5 +1,6 @@
 /** modulos/pos: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { armarCortesia, ajustarInventarioPorCortesias } from './inventario.js';
 import { on } from '../../shared/seguridad.js';
 import { esc, showToast } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
@@ -680,14 +681,9 @@ export function inicializarPos() {
     // Cortesías: costo directo que resta ganancia
     const cortUSD = costoCortesiasUSD();
     const cortesias = [];
-    if (contextoApp.posCortesias.vidrio) cortesias.push({
-      nombre: 'Vidrio templado',
-      costoUSD: parseFloat(contextoApp.cfg.cortVidrio) || 2
-    });
-    if (contextoApp.posCortesias.funda) cortesias.push({
-      nombre: 'Funda silicone case',
-      costoUSD: parseFloat(contextoApp.cfg.cortFunda) || 5
-    });
+    const equipoVendido = contextoApp.cart.find(ci => ci.tipo === 'eq' || ci.tipo === 'consig')?.nombre;
+    if (contextoApp.posCortesias.vidrio) cortesias.push(armarCortesia('vidrio', equipoVendido));
+    if (contextoApp.posCortesias.funda) cortesias.push(armarCortesia('funda', equipoVendido));
     if (cortUSD > 0) {
       costoTieneDatos = true;
       ganUSD -= cortUSD;
@@ -782,6 +778,9 @@ export function inicializarPos() {
           }
         }
       }
+      // Las cortesías salen del inventario después del carrito: el carrito escribe
+      // cantidades absolutas y esto incrementa, así no se pisan.
+      await ajustarInventarioPorCortesias([], cortesias);
 
       // 3. Permuta → entra a equipos
       if (permuta && (permuta.descripcion || permuta.imei)) {

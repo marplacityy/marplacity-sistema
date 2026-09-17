@@ -23,6 +23,7 @@ export const getFirestore = initializeFirestore;
 export const persistentLocalCache = () => ({});
 export const getAuth = () => autenticacion;
 export const serverTimestamp = () => ({ seconds: Date.now() / 1000 });
+export const increment = n => ({ __incremento: n });
 export const collection = (_db, nombre) => ({ path: nombre, coleccion: true });
 export function doc(base, ...partes) { return { path: [base.path, ...partes].filter(Boolean).join('/') }; }
 export const where = (campo, op, valor) => ({ tipo: 'where', campo, op, valor });
@@ -59,7 +60,12 @@ function emitir(entrada) {
 function avisar(path) {
   for (const entrada of suscripciones) if (path === entrada.ref.path || path.startsWith(entrada.ref.path + '/')) queueMicrotask(() => emitir(entrada));
 }
-export async function setDoc(ref, datos, opciones = {}) { docs.set(ref.path, copiar(opciones.merge ? { ...docs.get(ref.path), ...datos } : datos)); avisar(ref.path); }
+export async function setDoc(ref, datos, opciones = {}) {
+  const previo = docs.get(ref.path) || {};
+  const resueltos = Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, v && typeof v === 'object' && '__incremento' in v ? (Number(previo[k]) || 0) + v.__incremento : v]));
+  docs.set(ref.path, copiar(opciones.merge ? { ...previo, ...resueltos } : resueltos));
+  avisar(ref.path);
+}
 export async function updateDoc(ref, datos) { if (!docs.has(ref.path)) throw new Error('Documento inexistente.'); return setDoc(ref, datos, { merge: true }); }
 export async function addDoc(ref, datos) { const nuevo = doc(ref, crypto.randomUUID()); await setDoc(nuevo, datos); return { ...nuevo, id: nuevo.path.split('/').at(-1) }; }
 export async function deleteDoc(ref) { docs.delete(ref.path); avisar(ref.path); }

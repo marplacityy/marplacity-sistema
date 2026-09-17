@@ -1,5 +1,6 @@
 /** modulos/ingresos: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
+import { ajustarInventarioPorCortesias } from './inventario.js';
 import { on } from '../../shared/seguridad.js';
 import { esc, showToast } from '../core/interfaz.js';
 import { setSyncDot, avisoVentana } from '../core/datos.js';
@@ -563,7 +564,8 @@ export function inicializarIngresos() {
     if (!confirm(msg)) return;
     setSyncDot('syncing');
     try {
-      // ── Revertir stock de cada item ──
+      // ── Revertir stock de cada item (y las cortesías que salieron del inventario) ──
+      await ajustarInventarioPorCortesias(v.cortesias || [], []);
       for (const ci of v.items || []) {
         if (ci.tipo === 'inv') {
           // devolver unidades al inventario
