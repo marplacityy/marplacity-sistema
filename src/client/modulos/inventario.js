@@ -105,7 +105,16 @@ export function armarCortesia(tipo, equipoNombre) {
  * misma operación, y una escritura absoluta pisaría a la otra. */
 export async function ajustarInventarioPorCortesias(antes, despues) {
   for (const [refId, delta] of deltaCortesias(antes, despues)) {
-    if (contextoApp.invItems.some(x => x.id === refId)) await updateDoc(doc(contextoApp.db, 'inventario', refId), { qty: increment(-delta) });
+    const p = contextoApp.invItems.find(x => x.id === refId);
+    if (!p) continue;
+    if (delta > 0 && (p.qty || 0) < delta) { showToast(`"${p.nombre}" no tiene stock: la cortesía no se descuenta`, true); continue; }
+    try {
+      await updateDoc(doc(contextoApp.db, 'inventario', refId), { qty: increment(-delta) });
+    } catch (e) {
+      // La venta ya está guardada: un fallo acá no la tiene que tirar abajo.
+      console.error(e);
+      showToast(`No se pudo ajustar "${p.nombre}" en inventario: ${e.message}`, true);
+    }
   }
 }
 
