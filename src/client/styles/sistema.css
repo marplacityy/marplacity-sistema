@@ -114,6 +114,9 @@
   .cat-drop:hover,.cat-drop.sobre{border-color:var(--text);background:var(--bg);}
   .cat-drop b{display:block;font-size:14px;color:var(--text);margin-bottom:2px;}
   .cat-drop.ocupado{cursor:default;opacity:.7;}
+  .cat-link-foto{display:flex;gap:8px;margin-top:10px;}
+  .cat-link-foto input{flex:1;min-width:0;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;color:var(--text);}
+  .cat-link-foto .btn-secondary{width:auto;padding:7px 12px;font-size:12.5px;white-space:nowrap;}
   /* Las fotos encontradas en internet, para elegir cuáles quedan. */
   .cat-cands-cab{font-size:12.5px;color:var(--text2);margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);}
   .cat-cands{display:grid;grid-template-columns:repeat(auto-fill,124px);gap:10px;margin-top:8px;}

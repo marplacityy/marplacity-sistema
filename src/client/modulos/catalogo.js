@@ -464,8 +464,12 @@ export function renderFichaCatalogo() {
         <b>📷 Subir fotos</b>Tocá acá para elegirlas en tu PC o celular, o arrastralas hasta este recuadro. JPG, PNG o WebP; se achican solas.
       </div>
       <div class="cat-foto-acciones">
-        <button class="btn-secondary" id="btn-cat-buscar-fotos" ${on('click', 'buscarFotosProducto', p.id)}>🔍 Buscar fotos en internet</button>
-        <span style="font-size:11.5px;color:var(--text3);align-self:center;">Amazon y Google Imágenes, en grande; elegís vos cuáles quedan. Archivo: <code>${esc(clave)}.jpg</code></span>
+        <button class="btn-secondary" id="btn-cat-buscar-fotos" ${on('click', 'buscarFotosProducto', p.id)}>🛒 Buscar en Amazon</button>
+        <span style="font-size:11.5px;color:var(--text3);align-self:center;">Te muestra lo que encuentra y elegís cuáles quedan. Archivo: <code>${esc(clave)}.jpg</code></span>
+      </div>
+      <div class="cat-link-foto">
+        <input type="url" id="cat-link-foto" placeholder="🔗 O pegá el link de una foto (clic derecho → Copiar dirección de imagen) y tocá Traer" ${on('enter', 'traerFotoPorLink', p.id)}>
+        <button class="btn-secondary" id="btn-cat-link-foto" ${on('click', 'traerFotoPorLink', p.id)}>⬇️ Traer</button>
       </div>
       ${contextoApp.catCandidatos?.id === p.id ? candidatasHTML(p) : ''}
     </div>
@@ -1300,14 +1304,31 @@ export function inicializarCatalogo() {
 
   /** Bajar y subir las elegidas, y dejarlas asignadas al producto. */
   window.guardarFotosElegidas = async function (id) {
-    if (!requiereDuenoDelLocal()) return;
     const c = contextoApp.catCandidatos;
-    const p = catalogoCandidatos().find(x => x.id === id);
-    if (!c || c.id !== id || !p) return;
+    if (!c || c.id !== id) return;
     const urls = c.lista.filter(x => x.elegida).map(x => x.url).slice(0, 6);
     if (!urls.length) return;
     const btn = document.getElementById('btn-cat-traer');
     if (btn) { btn.disabled = true; btn.textContent = `Trayendo ${urls.length}…`; }
+    await traerFotosDeUrls(id, urls);
+  };
+
+  /** Un link de foto pegado a mano: la baja en su tamaño original y la asigna al producto. */
+  window.traerFotoPorLink = async function (id) {
+    const caja = document.getElementById('cat-link-foto');
+    const url = String(caja?.value || '').trim();
+    if (!url) { showToast('Pegá primero el link de la foto', true); return; }
+    if (!/^https:\/\/[^\s/]+\.[^\s/]+\/\S+/.test(url)) { showToast('Eso no parece un link de imagen (tiene que empezar con https://)', true); return; }
+    const btn = document.getElementById('btn-cat-link-foto');
+    if (btn) { btn.disabled = true; btn.textContent = 'Trayendo…'; }
+    await traerFotosDeUrls(id, [url]);
+  };
+
+  /** Lo común: el Worker baja las URLs y las sube al servidor del local con el nombre del producto. */
+  async function traerFotosDeUrls(id, urls) {
+    if (!requiereDuenoDelLocal()) return;
+    const p = catalogoCandidatos().find(x => x.id === id);
+    if (!p) return;
     const clave = contextoApp.claveFotoDe(p);
     const conocidos = archivosConocidos();
     // El número desde el que nombrar: después de las que ya tiene y de cualquier archivo con ese nombre.
@@ -1327,13 +1348,14 @@ export function inicializarCatalogo() {
       }
       if (d.subidos?.length) await guardarFotos([...conocidos]);
       contextoApp.catCandidatos = null;
-      showToast(`${d.subidos?.length || 0} foto${d.subidos?.length === 1 ? '' : 's'} guardada${d.subidos?.length === 1 ? '' : 's'} ✓${d.fallidas?.length ? ` · ${d.fallidas.length} no se pudo bajar` : ''}`);
+      const n = d.subidos?.length || 0;
+      showToast(n ? `${n} foto${n === 1 ? '' : 's'} guardada${n === 1 ? '' : 's'} ✓${d.fallidas?.length ? ` · ${d.fallidas.length} no se pudo bajar` : ''}` : 'No se pudo bajar esa foto: el sitio no la entrega o no es una imagen', !n);
     } catch (e) {
       showToast('No pude traerlas: ' + e.message, true);
       setSyncDot('error');
     }
     renderFichaCatalogo();
-  };
+  }
 
   /**
    * La descripción pulida por la IA. Devuelve el borrador si la IA no está o falla: el

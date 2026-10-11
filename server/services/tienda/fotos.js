@@ -160,9 +160,11 @@ export function candidatosDeGoogle(resultados, { nombre, color, esAccesorio = fa
  */
 export async function candidatosDeFotos(env, { nombre, gb, color, esAccesorio }) {
   const q = [nombreParaAmazon(nombre), gb, nombreParaAmazon(color)].filter(Boolean).join(' ');
+  // Google Imágenes trae mucha basura para esto (lo vio Juni el 12/10/2026): queda apagado
+  // salvo que FOTOS_GOOGLE sea "si". Lo manual de verdad es pegar el link de la foto.
   const [amazon, google] = await Promise.all([
     buscarEnAmazon(env, q).catch(e => { console.log('amazon', e.message); return []; }),
-    buscarEnGoogleImagenes(env, q).catch(e => { console.log('google imágenes', e.message); return []; }),
+    env.FOTOS_GOOGLE === 'si' ? buscarEnGoogleImagenes(env, q).catch(e => { console.log('google imágenes', e.message); return []; }) : Promise.resolve([]),
   ]);
   const deAmazon = elegirImagenes(amazon, { nombre, color, esAccesorio, max: 6 }).map(url => ({ url, thumb: url.replace(/\.jpg$/, '._AC_UL320_.jpg'), ancho: 0, alto: 0, fuente: 'Amazon', titulo: '', color: true }));
   return { consulta: q, candidatos: [...candidatosDeGoogle(google, { nombre, color, esAccesorio }), ...deAmazon] };
