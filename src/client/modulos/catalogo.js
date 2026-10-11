@@ -6,7 +6,7 @@ import { contextoApp } from '../core/estado.js';
 import { esc, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { updateDoc, doc, setDoc } from 'firebase/firestore';
-import { kbUltimaLista } from './conocimiento.js';
+import { kbUltimaLista, kbFecha } from './conocimiento.js';
 import { workerHeaders, textoDeIA } from './reportes.js';
 export function pintarBadgePedidos() {
   const n = contextoApp.pedidosItems.filter(contextoApp.pedidoAbierto).length;
@@ -163,7 +163,10 @@ function catalogoFiltrados() {
   const q = (document.getElementById('cat-q')?.value || '').trim().toLowerCase();
   const fc = document.getElementById('cat-f-cat')?.value || '';
   const ft = document.getElementById('cat-f-tipo')?.value || '';
-  return catalogoCandidatos().filter(p => (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft && (p._sale || !p.precioUSD) || ft === 'tienda' && estadoPublicacion(p) === 'tienda' || ft === 'porpublicar' && PENDIENTES.includes(estadoPublicacion(p)) || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
+  // En la pestaña "En la tienda" solo lo que la tienda muestra hoy; en "Fuentes", la fuente elegida.
+  const fuente = contextoApp.catVista === 'tienda' ? '' : contextoApp.catFuente || '';
+  const soloTienda = contextoApp.catVista === 'tienda';
+  return catalogoCandidatos().filter(p => (!fuente || p._origen === fuente) && (!soloTienda || EN_TIENDA.includes(estadoPublicacion(p))) && (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft && (p._sale || !p.precioUSD) || ft === 'tienda' && estadoPublicacion(p) === 'tienda' || ft === 'porpublicar' && PENDIENTES.includes(estadoPublicacion(p)) || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
 }
 
 /** JSON con las claves ordenadas: Firestore devuelve los mapas ordenados y acá no. */
@@ -203,6 +206,7 @@ const ESTADOS_PUB = {
   eliminado: ['no', 'Eliminado'],
 };
 const PENDIENTES = ['nuevo', 'cambio', 'sacar'];
+const EN_TIENDA = ['tienda', 'cambio', 'sacar'];   // lo que la tienda muestra en este momento
 const estadoCatalogo = p => ESTADOS_PUB[estadoPublicacion(p)];
 const inicialCatalogo = p => (String(p.nombre).match(/\d+/) || [String(p.nombre).slice(0, 1)])[0].slice(0, 2);
 const subCatalogo = p => [p.gb, p.color, p.condicion === 'usado' ? 'usado' : '', p._entrega === 'pedido' ? 'a pedido' : ''].filter(Boolean).join(' · ');
@@ -276,26 +280,40 @@ export function renderCatalogo() {
   const existentes = new Set(items.map(p => p.id));
   contextoApp.catSeleccion = new Set([...contextoApp.catSeleccion].filter(id => existentes.has(id)));
 
-  // Las métricas: qué hay en la tienda y qué falta. Tocarlas filtra la lista.
   const ft = document.getElementById('cat-f-tipo').value;
   const estados = new Map(items.map(p => [p.id, estadoPublicacion(p)]));
-  const cuentaEstado = (...ks) => items.filter(p => ks.includes(estados.get(p.id))).length;
-  // Lo que está en la tienda y ya no existe acá (se vendió, salió de la lista): también se va al publicar.
-  const ids = new Set(items.map(p => p.id));
-  const idos = productosEnTienda().filter(x => !ids.has(x.id)).length;
-  const porPublicar = cuentaEstado(...PENDIENTES) + idos;
-  const metricas = [
-    ['tienda', 'En la tienda', cuentaEstado('tienda'), 'publicados y al día', ''],
-    ['porpublicar', 'Por publicar', porPublicar, porPublicar ? (idos ? `${idos} ya no están · tocá Publicar` : 'tocá Publicar') : 'nada pendiente', '#854F0B'],
-    ['pedido', 'A pedido', salen.filter(p => p._entrega === 'pedido').length, 'se traen a pedido', ''],
-    ['sinfoto', 'Sin foto', salen.filter(p => !p.fotos.length).length, 'publicados sin imagen', '#854F0B'],
-    ['sinprecio', 'Sin precio', items.filter(p => !p.precioUSD).length, 'no se publican', 'var(--neg)'],
-    ['fuera', 'Eliminados', items.filter(p => p.precioUSD > 0 && !p._sale).length, 'sacados a mano', ''],
-  ];
-  document.getElementById('cat-metricas').innerHTML = metricas.map(([v, t, n, sub, color]) => `<div class="metric cat-metric${ft === v ? ' on' : ''}" ${on('click', 'filtrarCatalogoPor', v)}>
-    <div class="m-label">${t}</div><div class="m-val" style="color:${!n ? 'var(--text3)' : color || 'var(--text)'};">${n}</div><div class="m-sub">${sub}</div></div>`).join('');
+  const estadoDe = p => estados.get(p.id);
+  const enTienda = lista => lista.filter(p => EN_TIENDA.includes(estadoDe(p))).length;
+  const fuentes = document.getElementById('cat-fuentes');
+  const resumen = document.getElementById('cat-resumen');
 
-  document.getElementById('cat-resumen').textContent = `${visibles.length} producto${visibles.length === 1 ? '' : 's'}` + (ft ? ' con este filtro' : '') + ' · tocá uno para editarlo';
+  if (contextoApp.catVista === 'tienda') {
+    // Lo que la tienda muestra hoy, y qué queda por publicar.
+    fuentes.style.display = 'none';
+    const ids = new Set(items.map(p => p.id));
+    const idos = productosEnTienda().filter(x => !ids.has(x.id)).length;   // vendidos o fuera de la lista: se van al publicar
+    const porPublicar = items.filter(p => PENDIENTES.includes(estadoDe(p))).length + idos;
+    const sinFoto = salen.filter(p => !p.fotos.length).length;
+    resumen.textContent = `${enTienda(items)} en la tienda` + (porPublicar ? ` · ${porPublicar} por publicar` : ' · todo al día') + (sinFoto ? ` · ${sinFoto} sin foto` : '') + ' · tocá uno para editar título, fotos y SEO';
+  } else {
+    // Las fuentes: de dónde sale cada producto. Tocar una muestra lo suyo.
+    fuentes.style.display = '';
+    const listas = Object.entries(contextoApp.KB_ORIGENES || {}).map(([k, n]) => {
+      const l = kbUltimaLista(k);
+      return ['Lista ' + n, 'Lista ' + n, l ? 'lista del ' + kbFecha(l.fecha) : 'sin lista cargada'];
+    });
+    const FUENTES = [['Propio', 'Stock equipos', 'equipos con IMEI'], ['Consignación', 'Consignación', 'equipos de proveedores'], ['Inventario', 'Inventario', 'accesorios y repuestos'], ...listas];
+    fuentes.innerHTML = FUENTES.map(([origen, titulo, sub]) => {
+      const lista = items.filter(p => p._origen === origen);
+      const sinPrecio = lista.filter(p => !p.precioUSD).length;
+      return `<div class="metric cat-metric${contextoApp.catFuente === origen ? ' on' : ''}" ${on('click', 'filtrarFuente', origen)}>
+        <div class="m-label">${esc(titulo)}</div>
+        <div class="m-val" style="color:${lista.length ? 'var(--text)' : 'var(--text3)'};">${lista.length}</div>
+        <div class="m-sub">${lista.length ? `${enTienda(lista)} en la tienda${sinPrecio ? ` · ${sinPrecio} sin precio` : ''}` : esc(sub)}</div>
+      </div>`;
+    }).join('');
+    resumen.textContent = (contextoApp.catFuente ? `${visibles.length} de ${FUENTES.find(f => f[0] === contextoApp.catFuente)?.[1] || contextoApp.catFuente}` : `${visibles.length} producto${visibles.length === 1 ? '' : 's'} de todas las fuentes`) + (ft ? ' con este filtro' : '') + ' · tocá uno para editarlo';
+  }
   document.getElementById('cat-sel-todos-btn').textContent = contextoApp.catSeleccion.size && contextoApp.catSeleccion.size >= visibles.length ? 'Deseleccionar' : 'Seleccionar todo';
   document.getElementById('cat-bulk').style.display = contextoApp.catSeleccion.size ? 'flex' : 'none';
   document.getElementById('cat-bulk-n').textContent = `${contextoApp.catSeleccion.size} seleccionado${contextoApp.catSeleccion.size === 1 ? '' : 's'}`;
@@ -314,7 +332,7 @@ export function renderCatalogo() {
     const sinFoto = lista.filter(p => p._sale && !p.fotos.length).length;
     return `<div class="cat-grupo-cab"><span class="rubro">${esc(rubroDe(c))}</span><b>${esc(c)}</b><span class="cnt">${lista.length}</span>${sinFoto ? `<span class="falta">${sinFoto} sin foto</span>` : ''}</div>` +
       lista.map(p => modo === 'lista' ? filaCatalogo(p) : tarjetaCatalogo(p)).join('');
-  }).join('') || `<div class="empty" style="grid-column:1/-1;">${items.length ? 'Nada coincide con el filtro.' : 'No hay productos para publicar.'}</div>`;
+  }).join('') || `<div class="empty" style="grid-column:1/-1;">${contextoApp.catVista === 'tienda' && !ft && !document.getElementById('cat-q').value ? 'Todavía no hay nada en la tienda. Elegí productos en Fuentes y tocá Publicar.' : items.length ? 'Nada coincide con el filtro.' : 'No hay productos para publicar.'}</div>`;
 }
 
 // ── La ficha de un producto ──────────────────────────────────
@@ -842,12 +860,6 @@ export function inicializarCatalogo() {
     } else window.cerrarFichaCatalogo();
   };
   window.filtrarCatalogo = () => renderCatalogo();
-  /** Tocar una métrica filtra por ese estado; tocarla de nuevo saca el filtro. */
-  window.filtrarCatalogoPor = v => {
-    const sel = document.getElementById('cat-f-tipo');
-    sel.value = sel.value === v ? '' : v;
-    renderCatalogo();
-  };
   /** Tarjetas o lista. Queda guardado en la config, como el resto de las preferencias. */
   window.modoCatalogo = () => {
     contextoApp.cfg.catalogoModo = contextoApp.cfg.catalogoModo === 'lista' ? 'tarjetas' : 'lista';
@@ -872,14 +884,23 @@ export function inicializarCatalogo() {
     }).catch(() => {});
   };
 
-  // Qué pestaña del catálogo está abierta: productos, categorias, fotos.
+  // Qué pestaña del catálogo está abierta: productos (las fuentes), tienda, categorias, fotos.
+  // Fuentes y En la tienda comparten la grilla y la ficha; cambia qué se lista.
   contextoApp.catVista = 'productos';
+  contextoApp.catFuente = '';   // la fuente elegida en Fuentes, o todas
   window.catTab = function (v) {
     contextoApp.catVista = v;
     ['productos', 'categorias', 'fotos'].forEach(t => {
-      document.getElementById('cat-vista-' + t).style.display = t === v ? '' : 'none';
-      document.getElementById('cat-tab-' + t).classList.toggle('on', t === v);
+      document.getElementById('cat-vista-' + t).style.display = t === v || t === 'productos' && v === 'tienda' ? '' : 'none';
     });
+    ['productos', 'tienda', 'categorias', 'fotos'].forEach(t => document.getElementById('cat-tab-' + t).classList.toggle('on', t === v));
+    contextoApp.catSeleccion.clear();
+    renderCatalogo();
+  };
+  /** Tocar una fuente muestra solo lo suyo; tocarla de nuevo vuelve a todas. */
+  window.filtrarFuente = origen => {
+    contextoApp.catFuente = contextoApp.catFuente === origen ? '' : origen;
+    contextoApp.catSeleccion.clear();
     renderCatalogo();
   };
   window.LINK_CATALOGO_PUBLICO = () => contextoApp.LINK_CATALOGO;

@@ -14,15 +14,16 @@
       <div id="cat-estado" style="margin-bottom:12px;"></div>
 
       <div class="cat-tabs">
-        <button class="cat-tab on" id="cat-tab-productos" data-click="catTab" data-args='["productos"]'>Productos</button>
+        <button class="cat-tab on" id="cat-tab-productos" data-click="catTab" data-args='["productos"]'>Fuentes</button>
+        <button class="cat-tab" id="cat-tab-tienda" data-click="catTab" data-args='["tienda"]'>En la tienda</button>
         <button class="cat-tab" id="cat-tab-categorias" data-click="catTab" data-args='["categorias"]'>Categorías</button>
         <button class="cat-tab" id="cat-tab-fotos" data-click="catTab" data-args='["fotos"]'>Fotos</button>
       </div>
 
       <!-- Productos -->
       <div id="cat-vista-productos">
-        <!-- Qué hay publicado y qué falta. Tocar una métrica filtra la lista. -->
-        <div id="cat-metricas" class="metrics" style="margin-bottom:12px;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));"></div>
+        <!-- De dónde salen los productos: Stock, Consignación, Inventario y las listas de precios. Tocar una fuente muestra lo suyo. -->
+        <div id="cat-fuentes" class="metrics" style="margin-bottom:12px;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));"></div>
         <div class="cat-filtros">
           <input type="search" id="cat-q" placeholder="Buscar producto…" data-input="filtrarCatalogo">
           <select id="cat-f-cat" data-change="filtrarCatalogo"></select>
