@@ -849,17 +849,23 @@ ${texto}`
     });
     btn.textContent = txtOriginal;
   };
+  /**
+   * Borrar la lista de un proveedor: TODAS sus versiones. Antes se borraba solo la
+   * última y la anterior pasaba a ser la vigente, así que parecía que no borraba nada.
+   */
   window.borrarListaKb = async function (origen) {
     const l = kbUltimaLista(origen);
+    const todas = contextoApp.listasItems.filter(x => x.origen === origen);
     if (!l) {
       showToast('No hay ninguna lista cargada.', true);
       return;
     }
-    if (!confirm(`¿Borrar la lista de ${contextoApp.KB_ORIGENES[origen]} del ${kbFecha(l.fecha)} (${(l.items || []).length} productos)?`)) return;
+    if (!confirm(`¿Borrar TODA la lista de ${contextoApp.KB_ORIGENES[origen]}?\n\nSe van los ${(l.items || []).length} productos de la lista del ${kbFecha(l.fecha)}${todas.length > 1 ? ` y las ${todas.length - 1} versiones anteriores` : ''}. La pestaña queda vacía para cargar de cero.`)) return;
+    contextoApp.kbEdicion[origen] = null;
     setSyncDot('syncing');
     try {
-      await deleteDoc(doc(contextoApp.db, 'listas_precios', l.id));
-      showToast('Lista borrada ✓');
+      await Promise.all(todas.map(x => deleteDoc(doc(contextoApp.db, 'listas_precios', x.id))));
+      showToast(`Lista de ${contextoApp.KB_ORIGENES[origen]} borrada ✓`);
     } catch (e) {
       console.error(e);
       showToast('Error al borrar', true);

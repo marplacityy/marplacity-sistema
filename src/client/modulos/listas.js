@@ -26,12 +26,19 @@ function seccionHTML(p) {
   const id = esc(p.id);
   const costo = p.tipo === 'costo';
   return `<div id="listas-sec-${id}" style="display:none;">
-    <div class="card" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <div style="flex:1;min-width:200px;">
-        <div class="card-title" style="margin:0;">${esc(p.nombre)}</div>
-        <div style="font-size:12.5px;color:var(--text2);margin-top:2px;">${costo ? 'Los precios de esta lista son tu <b>costo</b>: se les suma tu margen al pegarla.' : 'Los precios de esta lista ya son el <b>precio final al público</b>.'}${p.vence ? ' Es la lista del día: vence a la medianoche.' : ''}</div>
-      </div>
-      <button class="btn-secondary" style="width:auto;" ${on('click', 'editarProveedor', p.id)}>✏️ Editar</button>
+    <div class="card" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div class="field" style="flex:2;min-width:200px;margin:0;"><label>Nombre del proveedor</label>
+        <input type="text" value="${esc(p.nombre)}" placeholder="Nombre" ${on('change', 'cambiarProveedor', p.id, 'nombre', '$value')}></div>
+      <div class="field" style="flex:1;min-width:180px;margin:0;"><label>Los precios de la lista son…</label>
+        <select ${on('change', 'cambiarProveedor', p.id, 'tipo', '$value')}>
+          <option value="publico" ${costo ? '' : 'selected'}>el precio final al público</option>
+          <option value="costo" ${costo ? 'selected' : ''}>mi costo (se suma el margen)</option>
+        </select></div>
+      <div class="field" style="flex:1;min-width:160px;margin:0;"><label>La lista…</label>
+        <select ${on('change', 'cambiarProveedor', p.id, 'vence', '$value')}>
+          <option value="no" ${p.vence ? '' : 'selected'}>no vence</option>
+          <option value="si" ${p.vence ? 'selected' : ''}>es del día, vence a la medianoche</option>
+        </select></div>
       <button class="btn-secondary" style="width:auto;color:var(--neg);border-color:var(--neg);" ${on('click', 'borrarProveedor', p.id)}>Quitar proveedor</button>
     </div>
     <div id="kb-${id}-estado"></div>
@@ -165,16 +172,17 @@ export function inicializarListas() {
     }
   };
 
-  window.editarProveedor = async function (id) {
+  /** Cambiar el nombre, el tipo o el vencimiento desde los controles de arriba de la pestaña. Se guarda al instante. */
+  window.cambiarProveedor = async function (id, campo, valor) {
     const ps = proveedores();
     const p = ps.find(x => x.id === id);
     if (!p) return;
-    const nombre = String(prompt('Nombre del proveedor:', p.nombre) || '').trim();
-    if (!nombre) return;
-    const costo = confirm(`¿Los precios de "${nombre}" son tu COSTO?\n\nAceptar: costo (se suma el margen al pegar).\nCancelar: precio final al público.\n\nAhora: ${p.tipo === 'costo' ? 'costo' : 'precio final'}.`);
-    const vence = confirm(`¿Es una lista del día, que vence a la medianoche?\n\nAceptar: sí, avisar cuando sea de otro día.\nCancelar: no vence, se actualiza cuando quieras.\n\nAhora: ${p.vence ? 'vence' : 'no vence'}.`);
-    const lista = ps.map(x => x.id === id ? { ...x, nombre, tipo: costo ? 'costo' : 'publico', vence } : x);
-    if (await guardarProveedores(lista)) { showToast('Proveedor actualizado ✓'); renderListas(); }
+    const cambio = campo === 'nombre' ? { nombre: String(valor || '').trim() || p.nombre }
+      : campo === 'tipo' ? { tipo: valor === 'costo' ? 'costo' : 'publico' }
+      : { vence: valor === 'si' };
+    if (campo === 'nombre' && ps.some(x => x.id !== id && x.nombre.toLowerCase() === cambio.nombre.toLowerCase())) { showToast('Ya hay un proveedor con ese nombre', true); renderListas(); return; }
+    const lista = ps.map(x => x.id === id ? { ...x, ...cambio } : x);
+    if (await guardarProveedores(lista)) { showToast('Guardado ✓'); renderListas(); }
   };
 
   window.borrarProveedor = async function (id) {
