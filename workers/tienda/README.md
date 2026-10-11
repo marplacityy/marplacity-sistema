@@ -15,8 +15,8 @@ URL de producción: https://tienda.fiwind702050.workers.dev/
 | `GET /pedido/:id` | el estado del pedido, para la pantalla de vuelta del pago |
 | `POST /mp/webhook` | Mercado Pago avisa que un pago cambió |
 | `POST /stripe/webhook` | Stripe avisa que un pago cambió (`checkout.session.*`, `charge.refunded`) |
-| `POST /fotos` | busca en Amazon (SerpApi) las fotos de un producto y las sube a `fotos/` del repo. Solo el dueño, con `X-Firebase-Token`. Ver `fotos.js` |
-| `POST /fotos/subir` | sube a `fotos/` una imagen que el dueño eligió desde la ficha del producto (`{archivo, datos}`, base64, hasta 2 MB; el sistema la achica antes). Solo el dueño, con `X-Firebase-Token` |
+| `POST /fotos` | busca en Amazon (SerpApi) las fotos de un producto y las sube al servidor del local (`FOTOS_SUBIR_URL`, con el token del dueño) o, si no está configurado, a `fotos/` del repo. Solo el dueño, con `X-Firebase-Token`. Ver `fotos.js` |
+| `POST /fotos/subir` | sube a `fotos/` del repo una imagen (`{archivo, datos}`, base64, hasta 2 MB). Quedó como respaldo: el sistema sube ahora a `/api/fotos/subir` del VPS |
 
 **El precio no viene de la página.** Se lee de `catalogo/publico` (lo que publicó el
 dueño) y las reglas de cobro (`cobro`: tipo de cambio, recargo de tarjeta, tope de MP)

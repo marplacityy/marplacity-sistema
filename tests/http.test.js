@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { get } from 'node:http';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { crearApp } from '../server/app.js';
 import { cargarConfig, configPublica } from '../server/config.js';
 import { crearTareas } from '../server/http/servicios.js';
@@ -18,10 +21,46 @@ async function levantar(t, env = {}, opciones = {}) {
 test('la configuración pública nunca incluye credenciales', () => {
   const config = cargarConfig({ ANTHROPIC_KEY: 'secreto-prueba', FAC_PASSWORD: 'otra-clave' });
   assert.equal(JSON.stringify(configPublica(config)).includes('secreto-prueba'), false);
-  assert.deepEqual(Object.keys(configPublica(config)).sort(), ['api', 'basePublica']);
+  assert.deepEqual(Object.keys(configPublica(config)).sort(), ['api', 'basePublica', 'fotosBase']);
   assert.throws(() => cargarConfig({ PORT: 'abc' }), /PORT/);
   assert.throws(() => cargarConfig({ IA_REMOTE_URL: 'http://inseguro.example' }), /HTTPS/);
   assert.throws(() => cargarConfig({ IA_REMOTE_URL: 'https://nombre:clave@example.com' }), /credenciales/);
+});
+
+test('las fotos se suben solo con el token del dueño y desde los orígenes permitidos', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'fotos-'));
+  const estatico = await mkdtemp(join(tmpdir(), 'dist-'));
+  t.after(() => Promise.all([rm(dir, { recursive: true, force: true }), rm(estatico, { recursive: true, force: true })]));
+  const base = await levantar(t, { OWNER_UID: 'dueno', FOTOS_DIR: dir }, {
+    directorioEstatico: estatico,
+    fetchImpl: async (url, opciones) => {
+      if (String(url).includes('identitytoolkit')) {
+        const { idToken } = JSON.parse(opciones.body);
+        return Response.json({ users: idToken === 'token-dueno' ? [{ localId: 'dueno' }] : idToken === 'token-otro' ? [{ localId: 'otro' }] : [] });
+      }
+      return Response.json({ ok: true });
+    },
+  });
+  const jpeg = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(2000, 1)]).toString('base64');
+  const subir = (token, body, headers = {}) => fetch(base + '/api/fotos/subir', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Firebase-Token': token } : {}), ...headers }, body: JSON.stringify(body),
+  });
+  assert.equal((await subir('', { archivo: 'iphone-15.jpg', datos: jpeg })).status, 401, 'sin token');
+  assert.equal((await subir('token-otro', { archivo: 'iphone-15.jpg', datos: jpeg })).status, 401, 'otra cuenta');
+  assert.equal((await subir('token-dueno', { archivo: '../index.html', datos: jpeg })).status, 400, 'nombre inválido');
+  const ok = await subir('token-dueno', { archivo: 'iphone-15.jpg', datos: jpeg });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).url, 'https://contify.tech/fotos/iphone-15.jpg');
+  assert.deepEqual((await (await fetch(base + '/api/fotos/lista')).json()).archivos, ['iphone-15.jpg']);
+  const servida = await fetch(base + '/fotos/iphone-15.jpg');
+  assert.equal(servida.status, 200);
+  assert.equal(servida.headers.get('access-control-allow-origin'), '*');
+  // Desde el sistema en GitHub Pages se puede; desde otro sitio, no; y el permiso es solo para las fotos.
+  const preflight = await fetch(base + '/api/fotos/subir', { method: 'OPTIONS', headers: { Origin: 'https://marplacityy.github.io', 'Sec-Fetch-Site': 'cross-site' } });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://marplacityy.github.io');
+  assert.equal((await subir('token-dueno', { archivo: 'x.jpg', datos: jpeg }, { Origin: 'https://sitio-ajeno.invalid', 'Sec-Fetch-Site': 'cross-site' })).status, 403);
+  assert.equal((await fetch(base + '/api/config', { headers: { Origin: 'https://marplacityy.github.io', 'Sec-Fetch-Site': 'cross-site' } })).status, 403);
 });
 
 test('el servidor expone salud y configuración, sin publicar el repositorio', async t => {

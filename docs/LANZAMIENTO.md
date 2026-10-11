@@ -79,6 +79,18 @@ systemctl restart marplacity
 Logs: `journalctl -u marplacity -f`. Para un dominio propio, cambiar el nombre en
 `/etc/caddy/Caddyfile` y `systemctl reload caddy`: el certificado se emite solo.
 
+### Fotos de los productos
+
+Desde el 11/10/2026 las fotos que sube el dueño viven en el VPS, en `/opt/marplacity/fotos`
+(`FOTOS_DIR` en `.env`, fuera del checkout para que un `git pull` no las toque). Node las
+sirve en `https://contify.tech/fotos/<archivo>` y las dos tiendas, el sistema y el bot las
+leen de ahí (`FOTOS_PUBLIC_URL`). Las viejas del repositorio siguen en `fotos/` y salen de
+`dist/fotos`. El sistema en GitHub Pages sube por `POST /api/fotos/subir` con el token del
+dueño; `FOTOS_ORIGENES` autoriza ese origen solo para esas rutas.
+
+Respaldo: `/etc/cron.daily/marplacity-fotos` guarda un `.tar.gz` diario de la carpeta en
+`/opt/marplacity/backups/` y conserva los últimos 14.
+
 ## Publicación desde main
 
 GitHub Pages se configura con **GitHub Actions**. El workflow

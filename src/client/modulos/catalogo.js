@@ -395,9 +395,9 @@ export function renderFichaCatalogo() {
     eliminado: 'No está en la tienda.',
   };
   const estiloPill = clsPub === 'no' ? 'color:var(--neg);' : clsPub === 'pend' ? 'color:#854F0B;border-color:#F2D399;background:#FFF6E5;' : '';
-  // La foto en la ficha se lee del repositorio directo: recién subida ya se ve, aunque
-  // GitHub todavía no la haya publicado en la tienda.
-  const srcFoto = a => esc(contextoApp.FOTOS_RAW + encodeURIComponent(a));
+  // La foto se lee del servidor del local; si no está ahí (una vieja que quedó solo en el
+  // repositorio), se prueba con la copia cruda de GitHub.
+  const srcFoto = a => esc(contextoApp.FOTOS_BASE + encodeURIComponent(a));
   const chips = [p.gb, p.color, p.bateria != null ? `Batería ${p.bateria}%` : '', p.estado].filter(Boolean);
 
   document.getElementById('cat-panel-cuerpo').innerHTML = `
@@ -405,7 +405,7 @@ export function renderFichaCatalogo() {
       <div class="cat-sec-t">Así se ve en la tienda</div>
       <div class="cat-prev">
         <div class="cat-prev-card">
-          <div class="foto">${p._entrega === 'pedido' ? '<span class="sello">A pedido</span>' : ''}${archivos.length ? `<img src="${srcFoto(archivos[0])}" alt="" ${on('error', 'fotoCatalogoPublicada', '$this', archivos[0])}>` : esc(inicialCatalogo(p))}</div>
+          <div class="foto">${p._entrega === 'pedido' ? '<span class="sello">A pedido</span>' : ''}${archivos.length ? `<img src="${srcFoto(archivos[0])}" alt="" ${on('error', 'fotoCatalogoCruda', '$this', archivos[0])}>` : esc(inicialCatalogo(p))}</div>
           <div class="nombre">${esc(meta.titulo || p.nombre)}</div>
           <div class="chips">${chips.map(c => `<span class="chip">${esc(c)}</span>`).join('')}</div>
           <div class="precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</div>
@@ -432,7 +432,7 @@ export function renderFichaCatalogo() {
     const c = contextoApp.FOTOS_CLAS[a] || {};
     return `
         <div class="cat-img${k === 0 ? ' principal' : ''}">
-          <img src="${srcFoto(a)}" loading="lazy" alt="" ${on('error', 'fotoCatalogoPublicada', '$this', a)}>
+          <img src="${srcFoto(a)}" loading="lazy" alt="" ${on('error', 'fotoCatalogoCruda', '$this', a)}>
           ${k === 0 ? '<span class="tag">Principal</span>' : `<button class="estrella" title="Que sea la primera foto" ${on('click', 'hacerPrincipalFoto', a, clave)}>★ Hacer principal</button>`}
           <button class="quitar" title="Sacar esta foto del producto" ${on('click', 'quitarFotoCatalogo', a)}>✕</button>
           <select ${on('change', 'vistaFoto', a, '$value')} title="Qué muestra la foto">
@@ -446,7 +446,7 @@ export function renderFichaCatalogo() {
       </div>
       <div class="cat-foto-acciones">
         <button class="btn-secondary" id="btn-cat-amazon-uno" ${on('click', 'fotoAmazonProducto', p.id)}>🛒 Buscar una foto en Amazon</button>
-        <span style="font-size:11.5px;color:var(--text3);align-self:center;">En la tienda aparecen en unos minutos. Archivo: <code>${esc(clave)}.jpg</code></span>
+        <span style="font-size:11.5px;color:var(--text3);align-self:center;">Se ven en la tienda al instante. Archivo: <code>${esc(clave)}.jpg</code></span>
       </div>
     </div>
 
@@ -570,11 +570,11 @@ export function renderFotosCatalogo() {
            ${contextoApp.selectClave(a, '')}
          </div>`).join('')}</div>` : ''}`;
 }
-/** Los archivos de imagen que hay de verdad en `fotos/`, según GitHub. */
+/** Los archivos de imagen que hay de verdad en el servidor: los subidos y los del repositorio. */
 export async function archivosDeFotos() {
-  const r = await fetch('https://api.github.com/repos/marplacityy/marplacity-sistema/contents/fotos');
-  if (!r.ok) throw new Error(r.status === 403 ? 'GitHub pidió esperar un rato (límite de consultas)' : 'GitHub contestó ' + r.status);
-  return (await r.json()).filter(f => f.type === 'file' && /\.(jpe?g|png|webp)$/i.test(f.name)).map(f => f.name);
+  const r = await fetch(contextoApp.FOTOS_API + '/lista');
+  if (!r.ok) throw new Error('el servidor de fotos contestó ' + r.status);
+  return (await r.json()).archivos || [];
 }
 
 /** Guarda el mapa y las decisiones. Solo se conservan decisiones de archivos que existen. */
@@ -587,7 +587,7 @@ export async function guardarFotos(archivos) {
   await setDoc(contextoApp.fotosDoc, contextoApp.withUser({
     mapa,
     clasificacion,
-    base: contextoApp.LINK_CATALOGO.replace(/[^/]+$/, '') + 'fotos/',
+    base: contextoApp.FOTOS_BASE,
     actualizado: new Date().toISOString()
   }), {
     merge: false
@@ -600,7 +600,7 @@ export async function guardarFotos(archivos) {
  * Las fotos del celular pesan 3 o 4 MB; así van a 150 KB y la clasificación sale igual.
  */
 export async function fotoParaIA(archivo) {
-  const r = await fetch(contextoApp.FOTOS_RAW + encodeURIComponent(archivo));
+  const r = await fetch(contextoApp.FOTOS_BASE + encodeURIComponent(archivo));
   if (!r.ok) throw new Error(`no pude leer ${archivo} (${r.status})`);
   return imagenJpegBase64(await r.blob(), 1024);
 }
@@ -715,7 +715,11 @@ export function inicializarCatalogo() {
   // sirve para cualquiera. Importa porque hay dos iPhone 15 en stock, uno negro y uno
   // rosa: con una sola foto por modelo, al rosa le saldría la del negro.
   contextoApp.FOTOS = {}; // { 'iphone-15-black': ['iphone-15-black.jpg'], ... }
-  contextoApp.FOTOS_BASE = 'fotos/'; // el prefijo, por si algún día se mudan a otro lado
+  // Las fotos viven en el servidor del local (Hostinger): de ahí las leen la tienda, el bot
+  // y esta pantalla, y ahí se suben (`/api/fotos`). Las viejas del repositorio también se
+  // sirven desde ahí (dist/fotos).
+  contextoApp.FOTOS_BASE = configuracion.fotosBase || 'fotos/';
+  contextoApp.FOTOS_API = configuracion.api.fotos;
   // Qué decidió la IA (o Juni a mano) de cada archivo: { 'IMG_0412.jpg': { clave, vista, confianza, manual } }.
   // `clave` en null es "mirada y no identificada". Manda sobre el nombre del archivo.
   contextoApp.FOTOS_CLAS = {};
@@ -1079,11 +1083,6 @@ export function inicializarCatalogo() {
     img.removeAttribute('data-error');
     img.src = contextoApp.FOTOS_RAW + encodeURIComponent(archivo);
   };
-  /** Al revés: la ficha lee del repositorio y, si falla, prueba con la copia publicada. */
-  window.fotoCatalogoPublicada = (img, archivo) => {
-    img.removeAttribute('data-error');
-    img.src = contextoApp.FOTOS_BASE + archivo;
-  };
 
   /**
    * Elegir una o varias imágenes de la PC o el celular. El input va al documento antes
@@ -1125,22 +1124,27 @@ export function inicializarCatalogo() {
         // El nombre es el del producto: iphone-15-black.jpg, y -2, -3 para las siguientes.
         let archivo;
         do { n++; archivo = `${clave}${n > 1 ? '-' + n : ''}.jpg`; } while (conocidos.has(archivo));
-        const r = await fetch(contextoApp.TIENDA_URL + '/fotos/subir', {
-          method: 'POST',
-          headers: await workerHeaders(),
-          body: JSON.stringify({ archivo, datos })
-        });
+        let r;
+        try {
+          r = await fetch(contextoApp.FOTOS_API + '/subir', {
+            method: 'POST',
+            headers: await workerHeaders(),
+            body: JSON.stringify({ archivo, datos })
+          });
+        } catch {
+          throw new Error('no se pudo conectar con el servidor de fotos (contify.tech). ¿Está caído?');
+        }
         const d = await r.json().catch(() => ({}));
         if (!r.ok) {
           console.error('subida de foto', archivo, r.status, d);
-          throw new Error(r.status === 404 ? 'el servicio tienda no tiene la subida de fotos (falta el deploy)' : r.status === 401 ? 'no autorizado: entrá con la cuenta del dueño del local' : r.status === 429 ? 'demasiadas subidas seguidas, esperá un minuto' : r.status === 413 ? 'la imagen es demasiado grande' : d.error || `el servicio respondió ${r.status}`);
+          throw new Error(r.status === 404 ? 'el servidor todavía no tiene la subida de fotos (falta actualizarlo)' : r.status === 401 ? 'no autorizado: entrá con la cuenta del dueño del local' : r.status === 429 ? 'demasiadas subidas seguidas, esperá un minuto' : r.status === 413 ? 'la imagen es demasiado grande' : d.error || `el servidor respondió ${r.status}`);
         }
         conocidos.add(archivo);
         contextoApp.FOTOS_CLAS = { ...contextoApp.FOTOS_CLAS, [archivo]: { clave, vista: n === 1 ? 'frente' : '', manual: true } };
         subidas++;
       }
       await guardarFotos([...conocidos]);
-      showToast(`${subidas} foto${subidas === 1 ? '' : 's'} subida${subidas === 1 ? '' : 's'} ✓ — en la tienda aparece en unos minutos`);
+      showToast(`${subidas} foto${subidas === 1 ? '' : 's'} subida${subidas === 1 ? '' : 's'} ✓`);
     } catch (e) {
       if (subidas) await guardarFotos([...conocidos]).catch(() => {});
       showToast('No pude subir: ' + e.message, true);

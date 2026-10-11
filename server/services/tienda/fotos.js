@@ -186,10 +186,25 @@ export function validarSubida(body) {
 }
 
 /**
- * El trabajo completo para un producto: buscar, elegir, bajar y subir. Devuelve los
- * nombres de archivo subidos (vacío si no encontró nada usable).
+ * Sube un archivo al servidor del local (FOTOS_SUBIR_URL, la ruta /api/fotos/subir de
+ * Node) con el token del dueño que vino en la solicitud. Es el camino de ahora: las fotos
+ * viven en el VPS y se ven al instante, sin token de GitHub que venza.
  */
-export async function fotosParaProducto(env, { nombre, gb, color, esAccesorio }) {
+export async function subirAlServidor(env, nombre, bytes, token) {
+  const r = await fetch(env.FOTOS_SUBIR_URL, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Firebase-Token': token || '' },
+    body: JSON.stringify({ archivo: nombre, datos: b64(bytes) }),
+  });
+  if (!r.ok) throw new Error(`el servidor de fotos respondió ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  return nombre;
+}
+
+/**
+ * El trabajo completo para un producto: buscar, elegir, bajar y subir. Devuelve los
+ * nombres de archivo subidos (vacío si no encontró nada usable). Sube al servidor del
+ * local si está configurado; si no, al repositorio como antes.
+ */
+export async function fotosParaProducto(env, { nombre, gb, color, esAccesorio }, token) {
   const q = [nombreParaAmazon(nombre), gb, nombreParaAmazon(color)].filter(Boolean).join(' ');
   const resultados = await buscarEnAmazon(env, q);
   const urls = elegirImagenes(resultados, { nombre, color, esAccesorio });
@@ -199,7 +214,8 @@ export async function fotosParaProducto(env, { nombre, gb, color, esAccesorio })
     const img = await bajarImagen(urls[i]);
     if (!img) continue;
     const archivo = `${base}${subidos.length ? '-' + (subidos.length + 1) : ''}.${img.ext}`;
-    await subirAlRepo(env, archivo, img.bytes);
+    if (env.FOTOS_SUBIR_URL) await subirAlServidor(env, archivo, img.bytes, token);
+    else await subirAlRepo(env, archivo, img.bytes);
     subidos.push(archivo);
   }
   return { consulta: q, candidatos: resultados.length, subidos };

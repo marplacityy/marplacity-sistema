@@ -7,11 +7,14 @@ export async function cargarConfiguracion() {
     // GitHub Pages sirve la interfaz compilada; las APIs siguen en sus Workers.
     configuracion = {
       basePublica: new URL(import.meta.env.BASE_URL, location.origin).href,
+      // Las fotos viven en el servidor del local (Hostinger), también para esta copia.
+      fotosBase: 'https://contify.tech/fotos/',
       api: {
         ia: 'https://anthropic-proxy.fiwind702050.workers.dev',
         tienda: 'https://tienda.fiwind702050.workers.dev',
         instagram: 'https://ig-bot.fiwind702050.workers.dev',
         facturador: 'https://facturador.fiwind702050.workers.dev',
+        fotos: 'https://contify.tech/api/fotos',
       },
     };
     return configuracion;

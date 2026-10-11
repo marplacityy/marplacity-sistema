@@ -228,7 +228,8 @@ async function verPedido(id, env) {
  * progreso a la vista, para que el dueño pueda frenar.
  */
 async function buscarFotos(request, env) {
-  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
+  const token = request.headers.get('X-Firebase-Token');
+  const uid = await uidDelToken(token, env);
   if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'json inválido' }, 400); }
@@ -237,7 +238,7 @@ async function buscarFotos(request, env) {
   try {
     const r = await fotosParaProducto(env, {
       nombre, gb: String(body.gb || '').trim(), color: String(body.color || '').trim(), esAccesorio: body.tipo === 'accesorio',
-    });
+    }, token);
     console.log('fotos', r.consulta, '->', r.subidos.length, 'subidas de', r.candidatos, 'resultados');
     return json(r);
   } catch (e) {
