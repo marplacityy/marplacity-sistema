@@ -98,6 +98,95 @@ export function elegirImagenes(resultados, { nombre, color, esAccesorio = false,
   return out;
 }
 
+/**
+ * Una URL de imagen que eligió el dueño a mano (de Google Imágenes). No se limita a
+ * Amazon, pero sí a hosts públicos con nombre: nada de IPs, localhost, puertos ni
+ * credenciales. Exportado para el test.
+ */
+export function urlPublicaSegura(valor) {
+  try {
+    const url = new URL(valor);
+    const h = url.hostname;
+    if (url.protocol !== 'https:' || url.username || url.password || url.port) return false;
+    if (!h.includes('.') || /^[\d.]+$/.test(h) || /^\[/.test(h) || /\.(local|localhost|internal|lan|home|arpa)$/i.test(h) || /^localhost$/i.test(h)) return false;
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Google Imágenes, vía SerpApi: devuelve la imagen original de cada resultado con su
+ * tamaño, así se puede ofrecer la grande sin bajarla. `tbs=isz:l` pide solo grandes.
+ */
+export async function buscarEnGoogleImagenes(env, q) {
+  if (!env.SERPAPI_KEY) throw new Error('falta SERPAPI_KEY');
+  const u = `${SERP}?engine=google_images&q=${encodeURIComponent(q)}&tbs=isz:l&hl=es&gl=ar&api_key=${env.SERPAPI_KEY}`;
+  const r = await fetch(u);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(`SerpApi: ${d.error || r.status}`);
+  return d.images_results || [];
+}
+
+/**
+ * Los candidatos de Google Imágenes para un producto: grandes (lado mayor ≥ 800), de un
+ * host público, sin accesorios cuando se busca un equipo, con el modelo en el título.
+ * Exportado para el test.
+ */
+export function candidatosDeGoogle(resultados, { nombre, color, esAccesorio = false, max = 12 } = {}) {
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const palabras = norm(nombreParaAmazon(nombre)).split(/[^a-z0-9]+/).filter(w => w && w !== 'apple' && !/^\d+(gb|tb|mm)$/.test(w));
+  const colorN = norm(nombreParaAmazon(color)).replace(/[^a-z0-9]+/g, ' ').trim().split(' ').pop() || '';
+  const minimo = Math.max(1, Math.ceil(palabras.length * 0.6));
+  const ACCESORIO = /\b(case|cover|funda|cable|charger|cargador|screen protector|glass|protector|holder|mount|stand|adapter|sleeve|skin|strap|band)\b/;
+  const vistas = new Set(), out = [];
+  for (const r of Array.isArray(resultados) ? resultados : []) {
+    const t = norm(`${r.title || ''} ${r.source || ''}`);
+    const ancho = Number(r.original_width) || 0, alto = Number(r.original_height) || 0;
+    if (Math.max(ancho, alto) < 800) continue;
+    if (palabras.filter(w => t.includes(w)).length < minimo) continue;
+    if (!esAccesorio && !/watch/i.test(nombre) && ACCESORIO.test(t)) continue;
+    const url = String(r.original || '');
+    if (!urlPublicaSegura(url) || vistas.has(url)) continue;
+    vistas.add(url);
+    out.push({ url, thumb: String(r.thumbnail || ''), ancho, alto, fuente: String(r.source || ''), titulo: String(r.title || '').slice(0, 120), color: !!(colorN && t.includes(colorN)) });
+    if (out.length >= max) break;
+  }
+  // Primero las del color pedido, después las más grandes.
+  return out.sort((a, b) => (b.color - a.color) || (b.ancho * b.alto - a.ancho * a.alto));
+}
+
+/**
+ * Todos los candidatos para elegir a mano: Amazon (la original de cada resultado que
+ * coincide) y Google Imágenes (grandes). Sin bajar nada: la elección es del dueño.
+ */
+export async function candidatosDeFotos(env, { nombre, gb, color, esAccesorio }) {
+  const q = [nombreParaAmazon(nombre), gb, nombreParaAmazon(color)].filter(Boolean).join(' ');
+  const [amazon, google] = await Promise.all([
+    buscarEnAmazon(env, q).catch(e => { console.log('amazon', e.message); return []; }),
+    buscarEnGoogleImagenes(env, q).catch(e => { console.log('google imágenes', e.message); return []; }),
+  ]);
+  const deAmazon = elegirImagenes(amazon, { nombre, color, esAccesorio, max: 6 }).map(url => ({ url, thumb: url.replace(/\.jpg$/, '._AC_UL320_.jpg'), ancho: 0, alto: 0, fuente: 'Amazon', titulo: '', color: true }));
+  return { consulta: q, candidatos: [...candidatosDeGoogle(google, { nombre, color, esAccesorio }), ...deAmazon] };
+}
+
+/**
+ * Baja y sube las fotos que el dueño eligió. Los nombres salen de `base` y `desde`
+ * (base-3, base-4…), con la extensión real de cada imagen.
+ */
+export async function traerFotos(env, { base, desde, urls }, token) {
+  const subidos = [], fallidas = [];
+  let n = Math.max(1, Number(desde) || 1);
+  for (const url of urls) {
+    const img = await bajarImagen(url, { externa: true });
+    if (!img) { fallidas.push(url); continue; }
+    const archivo = `${base}${n > 1 ? '-' + n : ''}.${img.ext}`;
+    if (env.FOTOS_SUBIR_URL) await subirAlServidor(env, archivo, img.bytes, token);
+    else await subirAlRepo(env, archivo, img.bytes);
+    subidos.push(archivo);
+    n++;
+  }
+  return { subidos, fallidas };
+}
+
 export async function buscarEnAmazon(env, q) {
   if (!env.SERPAPI_KEY) throw new Error('falta SERPAPI_KEY');
   const u = `${SERP}?engine=amazon&amazon_domain=amazon.com&k=${encodeURIComponent(q)}&api_key=${env.SERPAPI_KEY}`;
@@ -107,9 +196,9 @@ export async function buscarEnAmazon(env, q) {
   return d.organic_results || [];
 }
 
-/** Baja una imagen. Devuelve {bytes, ext} o null si no es una imagen. */
-export async function bajarImagen(url) {
-  if (!urlImagenPermitida(url)) return null;
+/** Baja una imagen. Devuelve {bytes, ext} o null si no es una imagen. `externa`: una URL que eligió el dueño, de cualquier host público. */
+export async function bajarImagen(url, { externa = false } = {}) {
+  if (!(externa ? urlPublicaSegura(url) : urlImagenPermitida(url))) return null;
   // Sin seguir redirecciones: una imagen de Amazon no debería redirigir a otro host, y
   // Cloudflare no acepta redirect "error" (solo "follow" o "manual"), así que se corta a mano.
   const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, redirect: 'manual', signal: AbortSignal.timeout(15_000) });

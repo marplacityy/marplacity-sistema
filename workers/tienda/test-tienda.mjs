@@ -5,7 +5,26 @@
  */
 import assert from 'node:assert/strict';
 import { validarPedido, montoDelPedido, firmaMPValida, firmaStripeValida } from './worker.js';
-import { elegirImagenes, slugFoto, nombreParaAmazon, validarSubida } from './fotos.js';
+import { elegirImagenes, slugFoto, nombreParaAmazon, validarSubida, urlPublicaSegura, candidatosDeGoogle } from './fotos.js';
+
+// ── urlPublicaSegura y candidatosDeGoogle ──
+{
+  assert.equal(urlPublicaSegura('https://www.apple.com/v/iphone/x.png'), true);
+  for (const mala of ['http://www.apple.com/a.png', 'https://127.0.0.1/a', 'https://169.254.169.254/a', 'https://localhost/a', 'https://interno.local/a', 'https://user:pw@x.com/a', 'https://x.com:8443/a', 'https://[::1]/a', 'file:///etc/passwd']) {
+    assert.equal(urlPublicaSegura(mala), false, mala);
+  }
+  const res = [
+    { title: 'Apple iPhone 13 Red 128GB', source: 'apple.com', original: 'https://www.apple.com/a.png', original_width: 2000, original_height: 2000, thumbnail: 'https://t/a' },
+    { title: 'iPhone 13 Red', source: 'x.com', original: 'https://x.com/chica.jpg', original_width: 400, original_height: 400 },
+    { title: 'Funda iPhone 13 Red', source: 'x.com', original: 'https://x.com/funda.jpg', original_width: 1500, original_height: 1500 },
+    { title: 'iPhone 13 Blue', source: 'x.com', original: 'https://x.com/azul.jpg', original_width: 3000, original_height: 3000 },
+    { title: 'iPhone 13 Red', source: 'x.com', original: 'https://127.0.0.1/a.jpg', original_width: 3000, original_height: 3000 },
+  ];
+  const c = candidatosDeGoogle(res, { nombre: 'iPhone 13', color: 'Red' });
+  assert.deepEqual(c.map(x => x.url), ['https://www.apple.com/a.png', 'https://x.com/azul.jpg'], 'sin chicas, sin fundas, sin hosts raros; el color pedido primero');
+  assert.equal(c[0].color, true);
+  assert.equal(c[1].color, false);
+}
 
 // ── validarSubida ──
 {

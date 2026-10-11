@@ -36,7 +36,7 @@
  */
 
 import { leerDoc, escribirDoc } from '../facturador/firestore.js';
-import { fotosParaProducto, subirAlRepo, validarSubida } from './fotos.js';
+import { fotosParaProducto, subirAlRepo, validarSubida, candidatosDeFotos, traerFotos, urlPublicaSegura } from './fotos.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -76,6 +76,8 @@ export default {
       if (request.method === 'POST' && url.pathname === '/stripe/webhook') return await webhookStripe(request, env, ctx);
       if (request.method === 'POST' && url.pathname === '/fotos') return await buscarFotos(request, env);
       if (request.method === 'POST' && url.pathname === '/fotos/subir') return await subirFoto(request, env);
+      if (request.method === 'POST' && url.pathname === '/fotos/buscar') return await buscarCandidatos(request, env);
+      if (request.method === 'POST' && url.pathname === '/fotos/traer') return await traerElegidas(request, env);
     } catch (e) {
       console.log('error en tienda', url.pathname, e.name);
       return json({ error: 'No se pudo completar la operación de la tienda.' }, 500);
@@ -243,6 +245,48 @@ async function buscarFotos(request, env) {
     return json(r);
   } catch (e) {
     console.log('fotos error', nombre, e.message);
+    return json({ error: e.message }, 502);
+  }
+}
+
+/**
+ * Los candidatos de foto para elegir a mano: Amazon y Google Imágenes, con tamaño y
+ * fuente, sin bajar nada. Dos búsquedas de SerpApi por click.
+ */
+async function buscarCandidatos(request, env) {
+  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
+  if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'json inválido' }, 400); }
+  const nombre = String(body.nombre || '').trim().slice(0, 120);
+  if (!nombre) return json({ error: 'falta el nombre' }, 400);
+  try {
+    const r = await candidatosDeFotos(env, { nombre, gb: String(body.gb || '').trim(), color: String(body.color || '').trim(), esAccesorio: body.tipo === 'accesorio' });
+    console.log('candidatos', r.consulta, '->', r.candidatos.length);
+    return json(r);
+  } catch (e) {
+    console.log('candidatos error', nombre, e.message);
+    return json({ error: e.message }, 502);
+  }
+}
+
+/** Baja y sube las fotos elegidas (hasta 6 URLs públicas) con el nombre del producto. */
+async function traerElegidas(request, env) {
+  const token = request.headers.get('X-Firebase-Token');
+  const uid = await uidDelToken(token, env);
+  if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'json inválido' }, 400); }
+  const base = String(body.base || '').trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,100}$/.test(base)) return json({ error: 'nombre inválido' }, 400);
+  const urls = (Array.isArray(body.urls) ? body.urls : []).map(String).filter(urlPublicaSegura).slice(0, 6);
+  if (!urls.length) return json({ error: 'no hay fotos para traer' }, 400);
+  try {
+    const r = await traerFotos(env, { base, desde: Number(body.desde) || 1, urls }, token);
+    console.log('traer', base, '->', r.subidos.length, 'subidas,', r.fallidas.length, 'fallidas');
+    return json(r);
+  } catch (e) {
+    console.log('traer error', base, e.message);
     return json({ error: e.message }, 502);
   }
 }

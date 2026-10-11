@@ -464,9 +464,10 @@ export function renderFichaCatalogo() {
         <b>📷 Subir fotos</b>Tocá acá para elegirlas en tu PC o celular, o arrastralas hasta este recuadro. JPG, PNG o WebP; se achican solas.
       </div>
       <div class="cat-foto-acciones">
-        <button class="btn-secondary" id="btn-cat-amazon-uno" ${on('click', 'fotoAmazonProducto', p.id)}>🛒 Buscar una foto en Amazon</button>
-        <span style="font-size:11.5px;color:var(--text3);align-self:center;">Se ven en la tienda al instante. Archivo: <code>${esc(clave)}.jpg</code></span>
+        <button class="btn-secondary" id="btn-cat-buscar-fotos" ${on('click', 'buscarFotosProducto', p.id)}>🔍 Buscar fotos en internet</button>
+        <span style="font-size:11.5px;color:var(--text3);align-self:center;">Amazon y Google Imágenes, en grande; elegís vos cuáles quedan. Archivo: <code>${esc(clave)}.jpg</code></span>
       </div>
+      ${contextoApp.catCandidatos?.id === p.id ? candidatasHTML(p) : ''}
     </div>
 
     <div class="cat-sec">
@@ -547,6 +548,26 @@ export function renderFichaCatalogo() {
     const archivos = [...(e.dataTransfer?.files || [])].filter(f => /^image\//.test(f.type));
     if (archivos.length) window.subirFotosDe(p.id, archivos);
   });
+}
+
+/** Las fotos encontradas en internet para elegir: miniatura, tamaño, fuente y una casilla. */
+function candidatasHTML(p) {
+  const c = contextoApp.catCandidatos;
+  if (!c.lista.length) return '<div class="proveedor-alerta alerta-atencion" style="margin-top:10px;">No encontré fotos grandes que coincidan con el modelo. Probá subiendo una.</div>';
+  const elegidas = c.lista.filter(x => x.elegida).length;
+  return `<div class="cat-cands-cab">
+      <b>${c.lista.length} foto${c.lista.length === 1 ? '' : 's'} encontrada${c.lista.length === 1 ? '' : 's'}</b> para "${esc(c.consulta)}" · marcá las que quieras (las más grandes primero)
+    </div>
+    <div class="cat-cands">${c.lista.map((x, i) => `
+      <label class="cat-cand${x.elegida ? ' on' : ''}">
+        <input type="checkbox" ${x.elegida ? 'checked' : ''} ${on('change', 'elegirCandidata', i, '$checked')}>
+        <img src="${esc(x.thumb || x.url)}" loading="lazy" alt="" referrerpolicy="no-referrer" ${on('error', 'quitarImagen', '$this')}>
+        <div class="d">${x.ancho ? `${x.ancho}×${x.alto}` : 'Amazon'}${x.fuente && x.fuente !== 'Amazon' ? ` · ${esc(x.fuente)}` : ''}${x.color ? '' : ' · <span style="color:#854F0B;">otro color?</span>'}</div>
+      </label>`).join('')}</div>
+    <div class="cat-foto-acciones">
+      <button class="btn-add" id="btn-cat-traer" style="width:auto;padding:8px 14px;font-size:13px;" ${on('click', 'guardarFotosElegidas', p.id)} ${elegidas ? '' : 'disabled'}>⬇️ Guardar ${elegidas || ''} elegida${elegidas === 1 ? '' : 's'}</button>
+      <button class="btn-secondary" ${on('click', 'cancelarCandidatas')}>Cancelar</button>
+    </div>`;
 }
 
 /**
@@ -1237,34 +1258,78 @@ export function inicializarCatalogo() {
     renderFichaCatalogo();
   };
 
-  /** Buscar en Amazon la foto de este producto solo. Una búsqueda paga por click. */
-  window.fotoAmazonProducto = async function (id) {
+  // ── Fotos de internet, a elección ──────────────────────────
+  //
+  // El Worker busca en Amazon y en Google Imágenes (dos búsquedas de SerpApi) y devuelve
+  // candidatas con tamaño y fuente, sin bajar nada. Acá se muestran, Juni marca las que
+  // quiere y recién ahí el Worker las baja y las sube al servidor del local.
+  const urlTiendaRemota = () => configuracion.api.tiendaRemota || contextoApp.TIENDA_URL;
+  contextoApp.catCandidatos = null;   // { id, consulta, lista: [{url, thumb, ancho, alto, fuente, color, elegida}] }
+
+  window.buscarFotosProducto = async function (id) {
     if (!requiereDuenoDelLocal()) return;
     const p = catalogoCandidatos().find(x => x.id === id);
     if (!p) return;
-    if (!confirm(`¿Buscar en Amazon una foto de "${p.nombre}${p.color ? ' ' + p.color : ''}"?\n\nEs una búsqueda (hay 250 gratis por mes). Lo que encuentre se sube a fotos/ y queda asignado a este producto.`)) return;
-    const btn = document.getElementById('btn-cat-amazon-uno');
-    if (btn) { btn.disabled = true; btn.textContent = 'Buscando en Amazon…'; }
+    const btn = document.getElementById('btn-cat-buscar-fotos');
+    if (btn) { btn.disabled = true; btn.textContent = 'Buscando en Amazon y Google…'; }
     try {
-      // Siempre al Worker de Cloudflare: es el que tiene la clave de SerpApi.
-      const r = await fetch((configuracion.api.tiendaRemota || contextoApp.TIENDA_URL) + '/fotos', {
+      const r = await fetch(urlTiendaRemota() + '/fotos/buscar', {
         method: 'POST',
         headers: await workerHeaders(),
         body: JSON.stringify({ nombre: p.nombre, gb: p.gb, color: p.color, tipo: p.tipo })
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.error || `el Worker respondió ${r.status}`);
-      if (!d.subidos?.length) { showToast('Amazon no tiene nada parecido. Probá subiendo una foto.', true); return; }
-      const clave = contextoApp.claveFotoDe(p);
-      const conocidos = archivosConocidos();
-      for (const a of d.subidos) {
-        conocidos.add(a);
-        contextoApp.FOTOS_CLAS = { ...contextoApp.FOTOS_CLAS, [a]: { ...(contextoApp.FOTOS_CLAS[a] || {}), clave, manual: false } };
-      }
-      await guardarFotos([...conocidos]);
-      showToast(`${d.subidos.length} foto${d.subidos.length === 1 ? '' : 's'} de Amazon ✓ — revisá que sea el modelo y el color`);
+      if (!r.ok) throw new Error(r.status === 404 ? 'el servicio tienda todavía no tiene la búsqueda (falta el deploy)' : d.error || `el Worker respondió ${r.status}`);
+      const lista = (d.candidatos || []).map((x, i) => ({ ...x, elegida: i < 2 && x.color }));
+      contextoApp.catCandidatos = { id, consulta: d.consulta || p.nombre, lista };
+      if (!lista.length) showToast('No encontré fotos grandes que coincidan', true);
     } catch (e) {
       showToast('No pude buscar: ' + e.message, true);
+      setSyncDot('error');
+    }
+    renderFichaCatalogo();
+  };
+
+  window.elegirCandidata = (i, marcada) => {
+    const c = contextoApp.catCandidatos;
+    if (!c || !c.lista[i]) return;
+    c.lista[i].elegida = !!marcada;
+    renderFichaCatalogo();
+  };
+  window.cancelarCandidatas = () => { contextoApp.catCandidatos = null; renderFichaCatalogo(); };
+
+  /** Bajar y subir las elegidas, y dejarlas asignadas al producto. */
+  window.guardarFotosElegidas = async function (id) {
+    if (!requiereDuenoDelLocal()) return;
+    const c = contextoApp.catCandidatos;
+    const p = catalogoCandidatos().find(x => x.id === id);
+    if (!c || c.id !== id || !p) return;
+    const urls = c.lista.filter(x => x.elegida).map(x => x.url).slice(0, 6);
+    if (!urls.length) return;
+    const btn = document.getElementById('btn-cat-traer');
+    if (btn) { btn.disabled = true; btn.textContent = `Trayendo ${urls.length}…`; }
+    const clave = contextoApp.claveFotoDe(p);
+    const conocidos = archivosConocidos();
+    // El número desde el que nombrar: después de las que ya tiene y de cualquier archivo con ese nombre.
+    let desde = (contextoApp.FOTOS[clave] || []).length + 1;
+    while ([...conocidos].some(a => a.startsWith(`${clave}${desde > 1 ? '-' + desde : ''}.`))) desde++;
+    try {
+      const r = await fetch(urlTiendaRemota() + '/fotos/traer', {
+        method: 'POST',
+        headers: await workerHeaders(),
+        body: JSON.stringify({ base: clave, desde, urls })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `el Worker respondió ${r.status}`);
+      for (const a of d.subidos || []) {
+        conocidos.add(a);
+        contextoApp.FOTOS_CLAS = { ...contextoApp.FOTOS_CLAS, [a]: { clave, vista: '', manual: true } };
+      }
+      if (d.subidos?.length) await guardarFotos([...conocidos]);
+      contextoApp.catCandidatos = null;
+      showToast(`${d.subidos?.length || 0} foto${d.subidos?.length === 1 ? '' : 's'} guardada${d.subidos?.length === 1 ? '' : 's'} ✓${d.fallidas?.length ? ` · ${d.fallidas.length} no se pudo bajar` : ''}`);
+    } catch (e) {
+      showToast('No pude traerlas: ' + e.message, true);
       setSyncDot('error');
     }
     renderFichaCatalogo();
