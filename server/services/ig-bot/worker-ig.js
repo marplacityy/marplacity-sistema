@@ -21,7 +21,7 @@
  *   ANTHROPIC_KEY     (Secret)  -> API key de Anthropic (se llama la API directo)
  */
 
-import { construirSystem, MARCA_CANAL } from './prompt.js';
+import { construirSystem, MARCA_CANAL, PROVEEDORES_BASE } from './prompt.js';
 
 // La tienda web publica. Es la misma direccion que usa el sistema (LINK_CATALOGO).
 const URL_CATALOGO = 'https://contify.tech/tienda';
@@ -1278,24 +1278,29 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
 
   // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
   // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
-  const [stock, accesorios, conocimiento, listaMdp, listaCaba, listaProv, mensajesFijos, promptDoc, fotosDoc, catalogoDoc] = await Promise.all([
+  // El conocimiento va primero: trae la lista de proveedores (pantalla Listas de precios),
+  // y recién con eso se sabe qué listas pedir. Si el dueño nunca la armó, las de siempre.
+  const conocimiento = await leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`);
+  const proveedores = Array.isArray(conocimiento?.proveedores) && conocimiento.proveedores.length ? conocimiento.proveedores : PROVEEDORES_BASE;
+  const [stock, accesorios, mensajesFijos, promptDoc, fotosDoc, catalogoDoc, ...docsListas] = await Promise.all([
     equiposDisponibles(env, idToken),
     accesoriosDisponibles(env, idToken),
-    leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`),
-    ultimaLista(env, idToken, 'mdp'),
-    ultimaLista(env, idToken, 'caba'),
-    ultimaLista(env, idToken, 'prov'),
     leerDoc(env, idToken, 'config/mensajes'),
     leerDoc(env, idToken, 'config/prompt'),
     // Que fotos hay y donde. Es la misma fuente que usa el catalogo web: una sola.
     leerDoc(env, idToken, 'catalogo/fotos'),
     // Lo publicado en la tienda web, para ofrecer el link de cada categoria.
     leerDoc(env, idToken, 'catalogo/publico'),
+    ...proveedores.map(p => ultimaLista(env, idToken, p.id)),
   ]);
 
-  // La lista de MDP es la del día: si es de una fecha anterior, el prompt se lo avisa
-  // al modelo para que no prometa un precio viejo como si fuera el de hoy.
-  const mdpVencida = !!(listaMdp && listaMdp.fecha !== fechaAR(Date.now()));
+  // Una lista "que vence" es la del día: si es de una fecha anterior, el prompt se lo
+  // avisa al modelo para que no prometa un precio viejo como si fuera el de hoy.
+  const hoy = fechaAR(Date.now());
+  const listas = proveedores.map((p, i) => ({
+    nombre: p.nombre || p.id, tipo: p.tipo === 'costo' ? 'costo' : 'publico',
+    vencida: !!(p.vence && docsListas[i] && docsListas[i].fecha !== hoy), lista: docsListas[i],
+  }));
 
   // Las reglas del bot: las que el dueño escribió desde el sistema si las hay, y si no
   // las del archivo prompt.js. Se lee en cada mensaje a propósito: cambiar una regla
@@ -1306,7 +1311,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     return (fotosDoc?.mapa || {})[clave] ? { ...e, foto: clave } : e;
   });
 
-  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock: conFoto, accesorios, listaMdp, listaCaba, listaProv, mdpVencida,
+  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock: conFoto, accesorios, listas,
     catalogo: catalogoDoc, urlCatalogo: URL_CATALOGO });
   console.log('prompt:', promptDoc?.texto ? 'editado desde el sistema' : 'el de prompt.js');
   const textoCanal = mensajesFijos?.invitacionCanal || null;

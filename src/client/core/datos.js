@@ -19,7 +19,8 @@ import { renderConsig, renderPagos } from '../modulos/consignacion.js';
 import { renderStock } from '../modulos/stock.js';
 import { renderAmort } from '../modulos/amortizaciones.js';
 import { msDe, renderBandeja } from '../modulos/instagram.js';
-import { renderConocimiento, pintarConocimiento, pintarPromptBot } from '../modulos/conocimiento.js';
+import { pintarConocimiento, pintarPromptBot } from '../modulos/conocimiento.js';
+import { renderListas } from '../modulos/listas.js';
 import { waTpl } from '../modulos/whatsapp.js';
 
 export function applySnap(name, snap) {
@@ -371,7 +372,7 @@ export async function init() {
       // actualizan sumando productos hay varios guardados por día. Sin esto, cuál queda
       // como "la última" lo decide el orden en que Firestore devolvió los docs.
       contextoApp.listasItems.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || msDe(b.createdAt) - msDe(a.createdAt));
-      if (contextoApp.currentPage === 'conocimiento') deb('kb', renderConocimiento);
+      if (contextoApp.currentPage === 'listas') deb('listas', renderListas);
       if (contextoApp.currentPage === 'catalogo') deb('catalogo', renderCatalogo);
       setSyncDot('ok');
     }, snapErr);
@@ -412,6 +413,8 @@ export async function init() {
     onSnapshot(contextoApp.conocDoc, snap => {
       contextoApp.conoc = snap.exists() ? snap.data() : {};
       if (contextoApp.currentPage === 'conocimiento') pintarConocimiento();
+      if (contextoApp.currentPage === 'listas') renderListas();   // los proveedores viven en este doc
+      if (contextoApp.currentPage === 'catalogo') renderCatalogo();
     }, snapErr);
     onSnapshot(contextoApp.fotosDoc, snap => {
       const d = snap.exists() ? snap.data() : null;

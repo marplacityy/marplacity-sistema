@@ -722,10 +722,10 @@ function bloqueLista(titulo, lista, vencida = false) {
  * Los precios que llegan aca YA tienen el margen sumado: el sistema se lo aplica antes
  * de guardar la lista, asi que el costo del proveedor no existe de este lado.
  */
-function bloqueProveedor(lista) {
+function bloqueProveedor(lista, nombre = 'UN PROVEEDOR') {
   if (!lista || !Array.isArray(lista.items) || !lista.items.length) return '';
   const moneda = lista.moneda || 'USD';
-  return `## LISTA DE UN PROVEEDOR — A PEDIDO (${lista.fecha}, precios al público en ${moneda})
+  return `## LISTA DE ${String(nombre).toUpperCase()} — A PEDIDO (${lista.fecha}, precios al público en ${moneda})
 
 Esto NO esta en el local: son equipos de un proveedor, que se traen a pedido.
 
@@ -791,7 +791,34 @@ ${cats.map(c => `- ${c} (${conteo[c]} producto${conteo[c] === 1 ? '' : 's'}): ${
  * entre un DM y el siguiente? Si cambia, va en el segundo. Meter algo variable en el
  * primero no rompe nada, pero hace que el cache no sirva nunca y nadie se entera.
  */
-export function construirSystem({ base, conocimiento, stock, accesorios, listaMdp, listaCaba, listaProv, mdpVencida, catalogo, urlCatalogo } = {}) {
+/**
+ * Los proveedores de siempre, para cuando el dueño todavía no armó la lista en el
+ * sistema (pantalla Listas de precios) o para los llamados viejos con listaMdp/listaCaba.
+ */
+export const PROVEEDORES_BASE = [
+  { id: 'mdp', nombre: 'Mar del Plata', tipo: 'publico', vence: true },
+  { id: 'caba', nombre: 'CABA', tipo: 'publico', vence: false },
+  { id: 'prov', nombre: 'Proveedor', tipo: 'costo', vence: false },
+];
+
+/**
+ * Las listas de precios, una por proveedor: `listas` es [{nombre, tipo, vencida, lista}].
+ * Las de tipo "publico" son precios finales de equipos que se consiguen; las de tipo
+ * "costo" ya vienen con el margen sumado y son a pedido. Los llamados viejos pasan
+ * listaMdp/listaCaba/listaProv y se traducen acá.
+ */
+function bloquesListas({ listas, listaMdp, listaCaba, listaProv, mdpVencida }) {
+  const todas = Array.isArray(listas) ? listas : [
+    { nombre: 'Mar del Plata', tipo: 'publico', vencida: mdpVencida, lista: listaMdp },
+    { nombre: 'CABA', tipo: 'publico', vencida: false, lista: listaCaba },
+    { nombre: 'Proveedor', tipo: 'costo', vencida: false, lista: listaProv },
+  ];
+  return todas.map(l => l.tipo === 'costo'
+    ? bloqueProveedor(l.lista, l.nombre)
+    : bloqueLista(String(l.nombre || '').toUpperCase(), l.lista, !!l.vencida));
+}
+
+export function construirSystem({ base, conocimiento, stock, accesorios, listas, listaMdp, listaCaba, listaProv, mdpVencida, catalogo, urlCatalogo } = {}) {
   const fijo = [
     // `base` es la versión que el dueño editó desde el sistema. Si no editó nunca, o
     // si borró todo el texto, se usa la de este archivo.
@@ -804,9 +831,7 @@ export function construirSystem({ base, conocimiento, stock, accesorios, listaMd
   const variable = [
     bloqueStock(stock),
     bloqueAccesorios(accesorios),
-    bloqueLista('MAR DEL PLATA', listaMdp, mdpVencida),
-    bloqueLista('CABA', listaCaba),
-    bloqueProveedor(listaProv),
+    ...bloquesListas({ listas, listaMdp, listaCaba, listaProv, mdpVencida }),
     bloqueTienda(catalogo, urlCatalogo),
   ].filter(Boolean).join('\n\n');
 

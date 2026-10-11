@@ -27,6 +27,7 @@ import { inicializarAmortizaciones } from './modulos/amortizaciones.js';
 import { inicializarConfiguracion } from './modulos/configuracion.js';
 import { inicializarInstagram } from './modulos/instagram.js';
 import { inicializarConocimiento } from './modulos/conocimiento.js';
+import { inicializarListas } from './modulos/listas.js';
 import { inicializarArca } from './modulos/arca.js';
 import { inicializarCatalogo } from './modulos/catalogo.js';
 import { inicializarAsistente } from './modulos/asistente.js';
@@ -64,6 +65,7 @@ export async function iniciarSistema() {
   inicializarConfiguracion();
   inicializarInstagram();
   inicializarConocimiento();
+  inicializarListas();
   inicializarArca();
   inicializarCatalogo();
   inicializarAsistente();

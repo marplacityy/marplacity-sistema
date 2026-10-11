@@ -9,6 +9,7 @@ import { renderEncargues } from '../modulos/encargues.js';
 import { initRepPiezasGrid, populateRepModelosDL, renderRepInv, renderPreciosRef } from '../modulos/repuestos.js';
 import { renderBandeja } from '../modulos/instagram.js';
 import { pintarConocimiento, renderConocimiento } from '../modulos/conocimiento.js';
+import { renderListas } from '../modulos/listas.js';
 import { buildMonthChips, renderListado } from '../modulos/gastos.js';
 import { populateIncMedioSel, populateIncCatFilter, renderIngresos } from '../modulos/ingresos.js';
 import { renderStock } from '../modulos/stock.js';
@@ -223,6 +224,7 @@ export function inicializarInterfaz() {
       pintarConocimiento();
       renderConocimiento();
     }
+    if (page === 'listas') renderListas();
     if (page === 'listado') {
       if (!window._glInit) {
         window._glInit = true;

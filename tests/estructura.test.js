@@ -5,10 +5,10 @@ import { parse } from 'parse5';
 import { parse as parseJs } from '@babel/parser';
 import traverse from '@babel/traverse';
 
-test('las 23 pantallas conservan sus identificadores y no duplican controles', async () => {
+test('las 24 pantallas conservan sus identificadores y no duplican controles', async () => {
   let html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
   const marcas = [...html.matchAll(/<!-- @vista ([\w/.-]+) -->/g)];
-  assert.equal(marcas.length, 23);
+  assert.equal(marcas.length, 24);
   for (const [marca, archivo] of marcas) html = html.replace(marca, await readFile(new URL('../' + archivo, import.meta.url), 'utf8'));
   const ids = new Set();
   const duplicados = [];

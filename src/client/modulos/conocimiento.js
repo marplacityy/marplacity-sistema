@@ -73,6 +73,29 @@ export
 function kbUltimaLista(origen) {
   return contextoApp.listasItems.find(l => l.origen === origen) || null;
 }
+
+// ── Proveedores ──
+// Cada lista tiene un proveedor: id (el `origen` de los docs de listas_precios), nombre,
+// tipo ("publico": los precios ya son finales; "costo": se les suma el margen al pegar) y
+// si vence (es la lista del día). Viven en conocimiento/{uid}.proveedores, que el bot
+// lee; mientras el dueño no arme la lista, son los tres de siempre.
+export const PROVEEDORES_BASE = [
+  { id: 'mdp', nombre: 'Mar del Plata', tipo: 'publico', vence: true },
+  { id: 'caba', nombre: 'CABA', tipo: 'publico', vence: false },
+  { id: 'prov', nombre: 'Proveedor', tipo: 'costo', vence: false },
+];
+export function proveedores() {
+  const l = contextoApp.conoc?.proveedores;
+  return Array.isArray(l) && l.length
+    ? l.filter(p => p && p.id).map(p => ({ id: String(p.id), nombre: String(p.nombre || p.id), tipo: p.tipo === 'costo' ? 'costo' : 'publico', vence: !!p.vence }))
+    : PROVEEDORES_BASE;
+}
+export const proveedorDe = id => proveedores().find(p => p.id === id) || null;
+/** Lo que cada doc de lista lleva del proveedor, para que el bot y el catálogo no dependan del id. */
+const metaProveedor = origen => {
+  const p = proveedorDe(origen);
+  return { proveedor: p ? p.nombre : origen, tipo: p ? p.tipo : 'publico' };
+};
 export function kbFecha(iso) {
   const p = String(iso || '').split('-');
   return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso || '—';
@@ -88,17 +111,18 @@ export function renderKbEstado(origen) {
   if (!l) {
     box.innerHTML = `<div class="card" style="background:#FDF6EC;border-color:#F2C48D;">
       <div style="font-size:14px;color:#854F0B;font-weight:600;">Todavía no cargaste ninguna lista de ${esc(contextoApp.KB_ORIGENES[origen])}.</div>
-      <div style="font-size:13px;color:#854F0B;margin-top:4px;">Pegala abajo y dale a "Interpretar con IA".</div>
+      <div style="font-size:13px;color:#854F0B;margin-top:4px;">Pegala abajo.</div>
     </div>`;
     return;
   }
-  // Sólo la de MDP vence: es la lista del día. La de CABA se actualiza a demanda.
-  const vieja = origen === 'mdp' && l.fecha !== contextoApp.today();
+  // Solo vence la lista del día (según el proveedor); las otras se actualizan a demanda.
+  const p = proveedorDe(origen);
+  const vieja = !!(p && p.vence) && l.fecha !== contextoApp.today();
   const n = (l.items || []).length;
   box.innerHTML = `<div class="card" style="${vieja ? 'background:#FDF6EC;border-color:#F2C48D;' : ''}">
     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);font-weight:600;margin-bottom:4px;">Última lista cargada</div>
     <div style="font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.1;">${esc(kbFecha(l.fecha))}${l.fecha === contextoApp.today() ? ' <span style="font-size:12px;font-weight:500;vertical-align:middle;background:var(--inc-bg);color:var(--inc);border-radius:100px;padding:3px 10px;">hoy</span>' : ''}</div>
-    <div style="font-size:13px;color:var(--text2);margin-top:4px;">${n} producto${n === 1 ? '' : 's'} · precios al público en ${esc(l.moneda || 'USD')}${origen === 'caba' ? ' · no vence: actualizala cuando quieras' : ''}</div>
+    <div style="font-size:13px;color:var(--text2);margin-top:4px;">${n} producto${n === 1 ? '' : 's'} · precios al público en ${esc(l.moneda || 'USD')}${p && !p.vence ? ' · no vence: actualizala cuando quieras' : ''}</div>
     ${vieja ? `<div style="margin-top:12px;font-size:15px;font-weight:600;color:#854F0B;">⚠️ Lista desactualizada — es del ${esc(kbFecha(l.fecha))}. Pedí la de hoy y cargala.</div>` : ''}
     ${anterioresKb(origen, l)}
   </div>`;
@@ -147,13 +171,13 @@ export function kbEmpezarEdicion(origen) {
   }));
   return contextoApp.kbEdicion[origen];
 }
+/** Las listas ya no viven en esta pantalla (ver modulos/listas.js): solo los datos del local. */
 export function renderConocimiento() {
-  window.renderKbLista('mdp');
-  window.renderKbLista('caba');
+  pintarConocimiento();
 }
 export function renderKbPreview(origen) {
   const moneda = document.getElementById('kb-' + origen + '-moneda').value;
-  document.getElementById('kb-' + origen + '-preview-items').innerHTML = contextoApp.kbParseada[origen].map((it, i) => `<div class="stock-item" style="align-items:center;">
+  document.getElementById('kb-' + origen + '-preview-items').innerHTML = (contextoApp.kbParseada[origen] || []).map((it, i) => `<div class="stock-item" style="align-items:center;">
     <div class="stock-info">
       <div class="stock-nombre">${esc(it.producto || '')}</div>
       <div class="stock-meta" style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${[it.gb, it.color].filter(Boolean).map(ch => `<span style="font-size:10px;background:var(--bg);border:1px solid var(--border);border-radius:100px;padding:1px 7px;">${esc(ch)}</span>`).join('')}${contextoApp.badgeCondicion(it.condicion)}</div>
@@ -161,7 +185,7 @@ export function renderKbPreview(origen) {
     <div class="stock-val"><div class="stock-usd">${fmtPrecioKb(it.precioPublico, moneda)}</div></div>
     <button class="ei-btn del" ${on('click', 'quitarDeKbPreview', origen, i)} title="Quitar">×</button>
   </div>`).join('');
-  if (!contextoApp.kbParseada[origen].length) document.getElementById('kb-' + origen + '-preview').style.display = 'none';
+  if (!(contextoApp.kbParseada[origen] || []).length) document.getElementById('kb-' + origen + '-preview').style.display = 'none';
 }
 export
 /**
@@ -207,8 +231,8 @@ function conMargenProv(costo, tramos) {
     precio: costo
   };
 }
-export function pintarTramosProv() {
-  const tb = document.getElementById('kb-prov-tramos');
+export function pintarTramosProv(origen = contextoApp.listasTab) {
+  const tb = document.getElementById('kb-' + origen + '-tramos');
   if (!tb) return;
   const t = contextoApp.tramosProv();
   tb.innerHTML = t.map((x, i) => `
@@ -227,28 +251,18 @@ export function inicializarConocimiento() {
   // por lista cargada. OJO: el precio de esas listas YA ES el precio final al
   // público — no se le aplica margen en ningún punto del flujo.
   contextoApp.KB_CAMPOS = ['tono', 'entrenamiento', 'horarios', 'direccion', 'mediosPago', 'garantia', 'politicaSena', 'comoLlegar', 'notasExtra'];
-  contextoApp.KB_ORIGENES = {
-    mdp: 'Mar del Plata',
-    caba: 'CABA',
-    prov: 'Proveedor'
-  };
-  contextoApp.kbParseada = {
-    mdp: [],
-    caba: [],
-    prov: []
-  };
+  // id → nombre de cada proveedor, siempre al día con lo guardado (el catálogo lo recorre).
+  Object.defineProperty(contextoApp, 'KB_ORIGENES', { configurable: true, get: () => Object.fromEntries(proveedores().map(p => [p.id, p.nombre])) });
+  contextoApp.kbParseada = {};   // origen → lo interpretado y todavía no guardado
   window.setKbTab = function (tab, btn) {
     try {
       document.querySelectorAll('#page-conocimiento .tab-btn').forEach(b => b.classList.remove('active'));
       if (btn) btn.classList.add('active');
-      ['datos', 'mdp', 'caba', 'prov', 'prompt'].forEach(t => {
+      ['datos', 'prompt'].forEach(t => {
         const el = document.getElementById('kb-sec-' + t);
         if (el) el.style.display = t === tab ? 'block' : 'none';
       });
-      if (tab === 'datos') pintarConocimiento();else if (tab === 'prompt') pintarPromptBot();else if (tab === 'prov') {
-        pintarTramosProv();
-        window.renderKbLista('prov');
-      } else window.renderKbLista(tab);
+      if (tab === 'datos') pintarConocimiento();else if (tab === 'prompt') pintarPromptBot();
     } catch (e) {
       console.error('setKbTab', e);
       showToast('Error: ' + e.message, true);
@@ -405,6 +419,7 @@ export function inicializarConocimiento() {
     try {
       await addDoc(contextoApp.listasCol, contextoApp.withUser({
         origen,
+        ...metaProveedor(origen),
         fecha: contextoApp.today(),
         moneda: vieja.moneda || 'USD',
         items: vieja.items || [],
@@ -422,11 +437,7 @@ export function inicializarConocimiento() {
   // no se tocó nada y se muestra lo que hay en Firestore. En cuanto se edita un precio o
   // se borra un ítem, se trabaja sobre esta copia hasta que se guarde o se cancele: así
   // se pueden hacer diez cambios y que sea UN guardado, no diez versiones de la lista.
-  contextoApp.kbEdicion = {
-    mdp: null,
-    caba: null,
-    prov: null
-  };
+  contextoApp.kbEdicion = {};
   window.editarPrecioKb = function (origen, i, valor) {
     const items = kbEmpezarEdicion(origen);
     if (!items[i]) return;
@@ -462,6 +473,7 @@ export function inicializarConocimiento() {
     try {
       await addDoc(contextoApp.listasCol, contextoApp.withUser({
         origen,
+        ...metaProveedor(origen),
         fecha: contextoApp.today(),
         moneda: l && l.moneda || 'USD',
         items: items.map(contextoApp.itemKbLimpio),
@@ -604,7 +616,7 @@ ${texto}`
   // aclaran, y un "—" en cada fila sería ruido.
   contextoApp.badgeCondicion = c => !c ? '' : `<span class="consig-tipo ${c === 'nuevo' ? 'tipo-permuta' : 'tipo-consig'}" style="margin-left:6px;">${c === 'nuevo' ? 'nuevo' : 'usado'}</span>`;
   window.quitarDeKbPreview = function (origen, i) {
-    contextoApp.kbParseada[origen].splice(i, 1);
+    (contextoApp.kbParseada[origen] || []).splice(i, 1);
     renderKbPreview(origen);
   };
   window.cancelarListaKb = function (origen) {
@@ -704,8 +716,10 @@ ${texto}`
    * —categoría, código, producto, precio, stock— y la celda de categoría viene VACÍA salvo
    * en la primera fila de cada grupo, así que se arrastra la última que se vio.
    */
-  window.procesarListaProv = function () {
-    const texto = document.getElementById('kb-prov-texto').value || '';
+  window.procesarListaProv = function (origen = contextoApp.listasTab) {
+    const caja = document.getElementById('kb-' + origen + '-texto');
+    if (!caja || proveedorDe(origen)?.tipo !== 'costo') return;   // solo las listas de costo se leen así
+    const texto = caja.value || '';
     const tramos = contextoApp.tramosEditando || contextoApp.tramosProv();
     let categoria = '',
       descartadas = 0,
@@ -742,11 +756,11 @@ ${texto}`
         _cat: categoria
       });
     }
-    contextoApp.kbParseada.prov = items;
-    const res = document.getElementById('kb-prov-resumen');
+    contextoApp.kbParseada[origen] = items;
+    const res = document.getElementById('kb-' + origen + '-resumen');
     if (!texto.trim()) {
       res.innerHTML = '';
-      document.getElementById('kb-prov-preview').style.display = 'none';
+      document.getElementById('kb-' + origen + '-preview').style.display = 'none';
       return;
     }
 
@@ -763,7 +777,7 @@ ${texto}`
       <ul style="margin:6px 0 0 18px;">${raros.slice(0, 6).map(i => `<li>${esc(i.producto)} ${esc(i.gb)}: costo u$s ${i._costo} + ${i._suma} = <b>u$s ${i.precioPublico}</b></li>`).join('')}</ul>
       ${raros.length > 6 ? `<div style="margin-top:4px;">…y ${raros.length - 6} más.</div>` : ''}
     </div>` : ''}`;
-    const prev = document.getElementById('kb-prov-preview-items');
+    const prev = document.getElementById('kb-' + origen + '-preview-items');
     prev.innerHTML = `<div style="overflow-x:auto;"><table class="tkh-table">
     <thead><tr><th>Categoría</th><th>Producto</th><th style="width:70px;">GB</th><th style="text-align:right;width:80px;">Costo</th><th style="text-align:right;width:80px;">Margen</th><th style="text-align:right;width:100px;">Al cliente</th></tr></thead>
     <tbody>${items.slice(0, 60).map(i => `<tr${i._suma / i._costo > 0.6 ? ' style="background:#FDECEA;"' : ''}>
@@ -772,7 +786,7 @@ ${texto}`
       <td style="text-align:right;font-family:'DM Mono',monospace;">+${i._suma}</td>
       <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;">u$s ${i.precioPublico}</td></tr>`).join('')}</tbody></table></div>
     ${items.length > 60 ? `<div style="font-size:11.5px;color:var(--text3);margin-top:6px;">Mostrando 60 de ${items.length}. Se guardan todos.</div>` : ''}`;
-    document.getElementById('kb-prov-preview').style.display = items.length ? 'block' : 'none';
+    document.getElementById('kb-' + origen + '-preview').style.display = items.length ? 'block' : 'none';
   };
   contextoApp.itemKbLimpio = it => ({
     producto: String(it.producto || '').trim(),
@@ -815,6 +829,7 @@ ${texto}`
       // hacerlo le contestó a un cliente que no había AirPods teniéndolos cargados.
       await addDoc(contextoApp.listasCol, contextoApp.withUser({
         origen,
+        ...metaProveedor(origen),
         fecha: contextoApp.today(),
         moneda,
         items,

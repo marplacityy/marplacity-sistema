@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 import { preparar, entrar, ir } from './ayudas.js';
 import { readFile } from 'node:fs/promises';
 
-test('las 23 pantallas cargan y los controles mantienen sus funciones', async ({ page }) => {
+test('las 24 pantallas cargan y los controles mantienen sus funciones', async ({ page }) => {
   const errores = await preparar(page);
   await entrar(page);
   await page.screenshot({ path: '.runtime/home-escritorio.png', fullPage: true });
-  for (const nombre of ['cargar', 'listado', 'reportes', 'amort', 'config', 'ingresos', 'facturas', 'stock', 'consig', 'fijos', 'rep', 'inv', 'clientes', 'home', 'caja', 'encargues', 'repuestos', 'conocimiento', 'bandeja', 'pedidos', 'catalogo', 'asistente', 'facturador']) {
+  for (const nombre of ['cargar', 'listado', 'reportes', 'amort', 'config', 'ingresos', 'facturas', 'stock', 'consig', 'fijos', 'rep', 'inv', 'clientes', 'home', 'caja', 'encargues', 'repuestos', 'conocimiento', 'listas', 'bandeja', 'pedidos', 'catalogo', 'asistente', 'facturador']) {
     await ir(page, nombre);
     await expect(page.locator('#page-' + nombre + ' h1')).toBeVisible();
   }

@@ -148,6 +148,16 @@ console.log('\n── la tienda en el prompt ──');
   ok(!s.includes('#c=notebooks'), 'las vacias no se ofrecen');
   ok(s.includes('#c=fundas-raras'), 'las que no estan en el orden van igual');
   ok(!construirSystem({ conocimiento: null, stock: [], listaMdp: null, listaCaba: null }).includes('TIENDA WEB'), 'sin catalogo no hay bloque');
+
+  // Proveedores a medida (pantalla Listas de precios): un bloque por lista, con su nombre y su tipo.
+  const conProv = construirSystem({ conocimiento: null, stock: [], listas: [
+    { nombre: 'Cava', tipo: 'costo', vencida: false, lista: { fecha: '2026-10-12', moneda: 'USD', items: [{ producto: 'iPhone 15', gb: '128GB', precioPublico: 700 }] } },
+    { nombre: 'Lista CABA', tipo: 'publico', vencida: true, lista: { fecha: '2026-10-01', moneda: 'USD', items: [{ producto: 'iPhone 13', gb: '128GB', precioPublico: 400 }] } },
+  ] });
+  ok(conProv.includes('LISTA DE CAVA — A PEDIDO'), 'el proveedor de costo va como lista a pedido con su nombre');
+  ok(conProv.includes('LISTA LISTA CABA (2026-10-01'), 'la lista pública lleva su nombre');
+  ok(conProv.includes('esta lista es del 2026-10-01 y no es la de hoy'), 'la vencida avisa');
+  ok(!conProv.includes('## LISTA MAR DEL PLATA') && !conProv.includes('## LISTA CABA'), 'sin los proveedores de siempre no aparecen sus bloques');
 }
 
 console.log('\n── construirSystem con los docs vacios ──');
