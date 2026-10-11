@@ -41,9 +41,35 @@
   .cat-prod .pie{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:6px;}
   .cat-prod .precio{font-family:'DM Mono',monospace;font-size:13.5px;font-weight:600;}
   .cat-prod .estado{font-size:10px;padding:2px 7px;border-radius:100px;background:var(--bg);border:1px solid var(--border);color:var(--text2);white-space:nowrap;}
-  .cat-prod .estado.ok{background:var(--green-bg);border-color:#A8DFC3;color:var(--green);}
-  .cat-prod .estado.ped{background:#FFF6E5;border-color:#F2D399;color:#8A5A00;}
-  .cat-prod .estado.no{background:var(--neg-bg);border-color:transparent;color:var(--neg);}
+  .cat-prod .estado.ok,.cat-fila .estado.ok{background:var(--green-bg);border-color:#A8DFC3;color:var(--green);}
+  .cat-prod .estado.ped,.cat-fila .estado.ped{background:#FFF6E5;border-color:#F2D399;color:#8A5A00;}
+  .cat-prod .estado.no,.cat-fila .estado.no{background:var(--neg-bg);border-color:transparent;color:var(--neg);}
+  .cat-prod .foto{position:relative;flex-direction:column;gap:3px;}
+  .cat-prod .foto .sinfoto,.cat-grupo-cab .falta,.cat-fila .falta{font-size:10px;font-weight:500;color:#854F0B;background:#FFF6E5;border:1px solid #F2D399;border-radius:100px;padding:1px 7px;white-space:nowrap;}
+  .cat-prod .sub.origen{color:var(--text2);}
+  /* Las métricas de arriba filtran la lista al tocarlas. */
+  .cat-metric{cursor:pointer;transition:border-color .15s;}
+  .cat-metric:hover{border-color:var(--text3);}
+  .cat-metric.on{border-color:var(--text);box-shadow:0 0 0 1px var(--text);}
+  /* La grilla va agrupada por categoría, con el rubro arriba de cada grupo. */
+  .cat-grupo-cab{grid-column:1/-1;display:flex;align-items:baseline;gap:8px;padding:14px 2px 2px;font-size:14px;flex-wrap:wrap;}
+  .cat-grupo-cab:first-child{padding-top:0;}
+  .cat-grupo-cab .rubro{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);}
+  .cat-grupo-cab .cnt{font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text3);}
+  /* Modo lista: una fila por producto, con todo a la vista. */
+  .cat-lista{display:flex;flex-direction:column;gap:4px;}
+  .cat-fila{display:grid;grid-template-columns:18px 44px minmax(160px,2fr) 1fr 90px 80px 90px;align-items:center;gap:12px;padding:6px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;transition:border-color .15s;}
+  .cat-fila:hover{border-color:var(--text3);}
+  .cat-fila.off{opacity:.55;}
+  .cat-fila.sel{border-color:var(--text);box-shadow:0 0 0 1px var(--text);}
+  .cat-fila .sel-box{width:16px;height:16px;accent-color:var(--text);margin:0;}
+  .cat-fila .foto{width:44px;height:44px;background:#fff;border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);overflow:hidden;font-size:12px;}
+  .cat-fila .foto img{width:100%;height:100%;object-fit:contain;padding:3px;}
+  .cat-fila .nombre{font-weight:600;line-height:1.3;min-width:0;}
+  .cat-fila .sub{font-size:11px;color:var(--text3);font-weight:400;}
+  .cat-fila .col{font-size:12px;color:var(--text2);}
+  .cat-fila .col.precio{font-family:'DM Mono',monospace;font-weight:600;color:var(--text);}
+  .cat-fila .estado{font-size:10px;padding:2px 7px;border-radius:100px;background:var(--bg);border:1px solid var(--border);color:var(--text2);white-space:nowrap;justify-self:end;}
   /* La ficha del producto: panel lateral, como el editor de Shopify. */
   .cat-panel-fondo{position:fixed;inset:0;background:rgba(26,25,23,.35);z-index:900;display:none;}
   .cat-panel-fondo.open{display:block;}
@@ -78,6 +104,9 @@
   @media(max-width:640px){
     .cat-grid{grid-template-columns:repeat(2,1fr);gap:8px;}
     .cat-kv{grid-template-columns:1fr;}
+    .cat-fila{grid-template-columns:18px 40px 1fr auto auto;gap:8px;padding:6px 8px;}
+    .cat-fila .col{display:none;}
+    .cat-fila .col.precio{display:block;}
   }
 
   .permuta-box{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px;margin-top:8px;}

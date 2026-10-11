@@ -163,7 +163,41 @@ function catalogoFiltrados() {
   const q = (document.getElementById('cat-q')?.value || '').trim().toLowerCase();
   const fc = document.getElementById('cat-f-cat')?.value || '';
   const ft = document.getElementById('cat-f-tipo')?.value || '';
-  return catalogoCandidatos().filter(p => (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft && (p._sale || !p.precioUSD) || ft === 'inmediato' && p._entrega === 'inmediato' && p.precioUSD > 0 || ft === 'pedido' && p._entrega === 'pedido' && p.precioUSD > 0 || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && !p.fotos.length));
+  return catalogoCandidatos().filter(p => (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft && (p._sale || !p.precioUSD) || ft === 'publicados' && p._sale || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
+}
+
+const estadoCatalogo = p => !p.precioUSD ? ['no', 'Sin precio'] : !p._sale ? ['no', 'Eliminado'] : p._entrega === 'pedido' ? ['ped', 'A pedido'] : ['ok', 'En el local'];
+const inicialCatalogo = p => (String(p.nombre).match(/\d+/) || [String(p.nombre).slice(0, 1)])[0].slice(0, 2);
+
+/** La tarjeta de un producto en la grilla: foto, nombre, de dónde sale, precio y estado. */
+function tarjetaCatalogo(p) {
+  const foto = p.fotos[0];
+  const [cls, txt] = estadoCatalogo(p);
+  return `<div class="cat-prod${p._sale ? '' : ' off'}${contextoApp.catSeleccion.has(p.id) ? ' sel' : ''}" ${on('click', 'abrirFichaCatalogo', p.id)}>
+    <input type="checkbox" class="sel-box" ${contextoApp.catSeleccion.has(p.id) ? 'checked' : ''} data-stop ${on('change', 'seleccionarCatalogo', p.id, '$checked')}>
+    <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : `<span>${esc(inicialCatalogo(p))}</span><span class="sinfoto">sin foto</span>`}</div>
+    <div class="cuerpo">
+      <div class="nombre">${esc(p.nombre)}</div>
+      <div class="sub">${esc([p.gb, p.color, p.condicion === 'usado' ? 'usado' : ''].filter(Boolean).join(' · ') || ' ')}</div>
+      <div class="sub origen">${esc(p._origen)}</div>
+      <div class="pie"><span class="precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</span><span class="estado ${cls}">${txt}</span></div>
+    </div>
+  </div>`;
+}
+
+/** La fila del modo lista: lo mismo que la tarjeta, en una línea. */
+function filaCatalogo(p) {
+  const foto = p.fotos[0];
+  const [cls, txt] = estadoCatalogo(p);
+  return `<div class="cat-fila${p._sale ? '' : ' off'}${contextoApp.catSeleccion.has(p.id) ? ' sel' : ''}" ${on('click', 'abrirFichaCatalogo', p.id)}>
+    <input type="checkbox" class="sel-box" ${contextoApp.catSeleccion.has(p.id) ? 'checked' : ''} data-stop ${on('change', 'seleccionarCatalogo', p.id, '$checked')}>
+    <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : '—'}</div>
+    <div class="nombre">${esc(p.nombre)}<div class="sub">${esc([p.gb, p.color, p.condicion === 'usado' ? 'usado' : ''].filter(Boolean).join(' · '))}</div></div>
+    <div class="col">${esc(p._origen)}</div>
+    <div class="col precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</div>
+    <div class="col">${p.fotos.length ? `📷 ${p.fotos.length}` : '<span class="falta">sin foto</span>'}</div>
+    <span class="estado ${cls}">${txt}</span>
+  </div>`;
 }
 
 /** La descripción que escribe Juni para un producto. Vive en la config, por id. */
@@ -213,26 +247,39 @@ export function renderCatalogo() {
   const visibles = catalogoFiltrados();
   const ids = new Set(items.map(p => p.id));
   contextoApp.catSeleccion = new Set([...contextoApp.catSeleccion].filter(id => ids.has(id)));
-  const sinFoto = salen.filter(p => !p.fotos.length).length;
-  const sinPrecio = items.filter(p => !p.precioUSD).length;
-  const eliminados = items.filter(p => p.precioUSD > 0 && !p._sale).length;
-  document.getElementById('cat-resumen').textContent = `${visibles.length} producto${visibles.length === 1 ? '' : 's'}` + (sinFoto ? ` · ${sinFoto} sin foto` : '') + (sinPrecio ? ` · ${sinPrecio} sin precio (se cargan en Stock o Inventario)` : '') + (eliminados && !document.getElementById('cat-f-tipo').value ? ` · ${eliminados} eliminado${eliminados === 1 ? '' : 's'} del catálogo (ver con el filtro)` : '');
+
+  // Las métricas: qué hay en la tienda y qué falta. Tocarlas filtra la lista.
+  const ft = document.getElementById('cat-f-tipo').value;
+  const metricas = [
+    ['publicados', 'Publicados', salen.length, 'en la tienda', ''],
+    ['inmediato', 'En el local', salen.filter(p => p._entrega === 'inmediato').length, 'entrega inmediata', ''],
+    ['pedido', 'A pedido', salen.filter(p => p._entrega === 'pedido').length, 'de listas de precios', ''],
+    ['sinfoto', 'Sin foto', salen.filter(p => !p.fotos.length).length, 'publicados sin imagen', '#854F0B'],
+    ['sinprecio', 'Sin precio', items.filter(p => !p.precioUSD).length, 'no se publican', 'var(--neg)'],
+    ['fuera', 'Eliminados', items.filter(p => p.precioUSD > 0 && !p._sale).length, 'sacados a mano', ''],
+  ];
+  document.getElementById('cat-metricas').innerHTML = metricas.map(([v, t, n, sub, color]) => `<div class="metric cat-metric${ft === v ? ' on' : ''}" ${on('click', 'filtrarCatalogoPor', v)}>
+    <div class="m-label">${t}</div><div class="m-val" style="color:${!n ? 'var(--text3)' : color || 'var(--text)'};">${n}</div><div class="m-sub">${sub}</div></div>`).join('');
+
+  document.getElementById('cat-resumen').textContent = `${visibles.length} producto${visibles.length === 1 ? '' : 's'}` + (ft ? ' con este filtro' : '') + ' · tocá uno para editarlo';
   document.getElementById('cat-sel-todos-btn').textContent = contextoApp.catSeleccion.size && contextoApp.catSeleccion.size >= visibles.length ? 'Deseleccionar' : 'Seleccionar todo';
   document.getElementById('cat-bulk').style.display = contextoApp.catSeleccion.size ? 'flex' : 'none';
   document.getElementById('cat-bulk-n').textContent = `${contextoApp.catSeleccion.size} seleccionado${contextoApp.catSeleccion.size === 1 ? '' : 's'}`;
   document.getElementById('cat-bulk-cat').innerHTML = '<option value="">Mover a categoría…</option>' + ordenCategorias().map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  document.getElementById('cat-grid').innerHTML = visibles.map(p => {
-    const foto = p.fotos[0];
-    const estado = !p.precioUSD ? ['no', 'Sin precio'] : !p._sale ? ['no', 'Eliminado'] : p._entrega === 'pedido' ? ['ped', 'A pedido'] : ['ok', 'Inmediato'];
-    return `<div class="cat-prod${p._sale ? '' : ' off'}${contextoApp.catSeleccion.has(p.id) ? ' sel' : ''}" ${on('click', 'abrirFichaCatalogo', p.id)}>
-      <input type="checkbox" class="sel-box" ${contextoApp.catSeleccion.has(p.id) ? 'checked' : ''} data-stop ${on('change', 'seleccionarCatalogo', p.id, '$checked')}>
-      <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : esc((String(p.nombre).match(/\d+/) || [String(p.nombre).slice(0, 1)])[0].slice(0, 2))}</div>
-      <div class="cuerpo">
-        <div class="nombre">${esc(p.nombre)}</div>
-        <div class="sub">${esc([p.gb, p.color, p.categoria].filter(Boolean).join(' · '))}</div>
-        <div class="pie"><span class="precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</span><span class="estado ${estado[0]}">${estado[1]}</span></div>
-      </div>
-    </div>`;
+
+  // Tarjetas o lista, agrupadas por categoría en el orden de la tienda.
+  const modo = contextoApp.cfg.catalogoModo === 'lista' ? 'lista' : 'tarjetas';
+  document.getElementById('cat-modo-btn').textContent = modo === 'lista' ? '▦ Tarjetas' : '☰ Lista';
+  const grid = document.getElementById('cat-grid');
+  grid.className = modo === 'lista' ? 'cat-lista' : 'cat-grid';
+  const porCat = new Map();
+  for (const p of visibles) (porCat.get(p.categoria) || porCat.set(p.categoria, []).get(p.categoria)).push(p);
+  const orden = ordenCategorias();
+  grid.innerHTML = [...porCat.keys()].sort((a, b) => orden.indexOf(a) - orden.indexOf(b)).map(c => {
+    const lista = porCat.get(c);
+    const sinFoto = lista.filter(p => p._sale && !p.fotos.length).length;
+    return `<div class="cat-grupo-cab"><span class="rubro">${esc(rubroDe(c))}</span><b>${esc(c)}</b><span class="cnt">${lista.length}</span>${sinFoto ? `<span class="falta">${sinFoto} sin foto</span>` : ''}</div>` +
+      lista.map(p => modo === 'lista' ? filaCatalogo(p) : tarjetaCatalogo(p)).join('');
   }).join('') || `<div class="empty" style="grid-column:1/-1;">${items.length ? 'Nada coincide con el filtro.' : 'No hay productos para publicar.'}</div>`;
 }
 
@@ -737,6 +784,22 @@ export function inicializarCatalogo() {
     } else window.cerrarFichaCatalogo();
   };
   window.filtrarCatalogo = () => renderCatalogo();
+  /** Tocar una métrica filtra por ese estado; tocarla de nuevo saca el filtro. */
+  window.filtrarCatalogoPor = v => {
+    const sel = document.getElementById('cat-f-tipo');
+    sel.value = sel.value === v ? '' : v;
+    renderCatalogo();
+  };
+  /** Tarjetas o lista. Queda guardado en la config, como el resto de las preferencias. */
+  window.modoCatalogo = () => {
+    contextoApp.cfg.catalogoModo = contextoApp.cfg.catalogoModo === 'lista' ? 'tarjetas' : 'lista';
+    setDoc(contextoApp.cfgDoc, contextoApp.withUser({
+      catalogoModo: contextoApp.cfg.catalogoModo
+    }), {
+      merge: true
+    }).catch(() => {});
+    renderCatalogo();
+  };
   window.notaCatalogo = function (id, texto) {
     const notas = {
       ...(contextoApp.cfg.catalogoNotas || {})
