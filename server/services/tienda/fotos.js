@@ -143,7 +143,7 @@ const b64 = bytes => {
 };
 
 /** Sube (o pisa) un archivo en fotos/ del repo por la API de GitHub. Devuelve el nombre. */
-export async function subirAlRepo(env, nombre, bytes) {
+export async function subirAlRepo(env, nombre, bytes, motivo = 'desde Amazon') {
   if (!env.GITHUB_TOKEN) throw new Error('falta GITHUB_TOKEN');
   const repo = env.GITHUB_REPO || 'marplacityy/marplacity-sistema';
   const url = `https://api.github.com/repos/${repo}/contents/fotos/${encodeURIComponent(nombre)}`;
@@ -153,10 +153,36 @@ export async function subirAlRepo(env, nombre, bytes) {
   const sha = prev.ok ? (await prev.json()).sha : undefined;
   const r = await fetch(url, {
     method: 'PUT', headers: { ...cab, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: `fotos: ${nombre} (desde Amazon)`, content: b64(bytes), sha }),
+    body: JSON.stringify({ message: `fotos: ${nombre} (${motivo})`, content: b64(bytes), sha }),
   });
   if (!r.ok) throw new Error(`GitHub ${r.status}: ${(await r.text()).slice(0, 200)}`);
   return nombre;
+}
+
+const MAX_SUBIDA = 2 * 1024 * 1024;
+
+/**
+ * Una foto que el dueño sube desde el sistema: nombre de archivo como los que arma el
+ * sistema (modelo-color-2.jpg) y la imagen en base64. Devuelve {archivo, bytes} o {error}.
+ * Exportado para el test.
+ */
+export function validarSubida(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'subida inválida' };
+  const archivo = String(body.archivo || '').trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,118}\.(jpe?g|png|webp)$/.test(archivo)) return { error: 'nombre de archivo inválido' };
+  const datos = String(body.datos || '').replace(/^data:image\/\w+;base64,/, '').replace(/\s/g, '');
+  if (!datos || !/^[A-Za-z0-9+/]+=*$/.test(datos)) return { error: 'imagen inválida' };
+  if (datos.length > MAX_SUBIDA * 1.4) return { error: 'la imagen pesa más de 2 MB' };
+  let bytes;
+  try { bytes = Uint8Array.from(atob(datos), c => c.charCodeAt(0)); } catch { return { error: 'imagen inválida' }; }
+  if (bytes.length < 1000) return { error: 'la imagen está vacía' };
+  if (bytes.length > MAX_SUBIDA) return { error: 'la imagen pesa más de 2 MB' };
+  // Que sea de verdad una imagen: la firma de JPEG, PNG o WebP.
+  const jpeg = bytes[0] === 0xFF && bytes[1] === 0xD8;
+  const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+  const webp = bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+  if (!jpeg && !png && !webp) return { error: 'el archivo no es una imagen' };
+  return { archivo, bytes };
 }
 
 /**

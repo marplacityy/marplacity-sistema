@@ -5,7 +5,20 @@
  */
 import assert from 'node:assert/strict';
 import { validarPedido, montoDelPedido, firmaMPValida, firmaStripeValida } from './worker.js';
-import { elegirImagenes, slugFoto, nombreParaAmazon } from './fotos.js';
+import { elegirImagenes, slugFoto, nombreParaAmazon, validarSubida } from './fotos.js';
+
+// ── validarSubida ──
+{
+  const jpeg = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(2000, 1)]).toString('base64');
+  const ok = validarSubida({ archivo: 'iphone-15-black-2.jpg', datos: 'data:image/jpeg;base64,' + jpeg });
+  assert.equal(ok.error, undefined);
+  assert.equal(ok.bytes.length, 2004, 'el prefijo data: se saca y los bytes son los de la imagen');
+  assert.ok(validarSubida({ archivo: '../index.html', datos: jpeg }).error, 'no se puede salir de fotos/');
+  assert.ok(validarSubida({ archivo: 'iPhone 15.jpg', datos: jpeg }).error, 'solo nombres como los arma el sistema');
+  assert.ok(validarSubida({ archivo: 'x.jpg', datos: Buffer.from('<script>alert(1)</script>' + 'a'.repeat(2000)).toString('base64') }).error, 'un archivo que no es imagen no sube');
+  assert.ok(validarSubida({ archivo: 'x.jpg', datos: Buffer.from([0xFF, 0xD8]).toString('base64') }).error, 'vacía');
+  assert.ok(validarSubida({ archivo: 'x.jpg', datos: 'no-es-base64!!' }).error);
+}
 
 // ── validarPedido ──
 const ok = validarPedido({ productoId: 'stock_1', pago: 'mp', entrega: 'retiro', nombre: 'Ana', whatsapp: '223 555-1234', email: 'ANA@x.com' });

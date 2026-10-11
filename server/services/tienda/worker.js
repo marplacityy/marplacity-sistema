@@ -16,6 +16,7 @@
  *   POST /mp/webhook     Mercado Pago avisa que un pago cambió
  *   POST /stripe/webhook Stripe avisa que un pago cambió
  *   POST /fotos          busca en Amazon y sube a fotos/ las imágenes de un producto (solo el dueño)
+ *   POST /fotos/subir    sube a fotos/ una imagen que el dueño eligió desde el sistema (solo el dueño)
  *
  * Variables (Settings → Variables del panel de Cloudflare, o `wrangler secret put`):
  *   FIREBASE_PROJECT   (Text)    mis-gastos-21e7b
@@ -35,7 +36,7 @@
  */
 
 import { leerDoc, escribirDoc } from '../facturador/firestore.js';
-import { fotosParaProducto } from './fotos.js';
+import { fotosParaProducto, subirAlRepo, validarSubida } from './fotos.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -74,6 +75,7 @@ export default {
       if (request.method === 'POST' && url.pathname === '/mp/webhook') return await webhookMP(request, env, ctx, url);
       if (request.method === 'POST' && url.pathname === '/stripe/webhook') return await webhookStripe(request, env, ctx);
       if (request.method === 'POST' && url.pathname === '/fotos') return await buscarFotos(request, env);
+      if (request.method === 'POST' && url.pathname === '/fotos/subir') return await subirFoto(request, env);
     } catch (e) {
       console.log('error en tienda', url.pathname, e.name);
       return json({ error: 'No se pudo completar la operación de la tienda.' }, 500);
@@ -240,6 +242,27 @@ async function buscarFotos(request, env) {
     return json(r);
   } catch (e) {
     console.log('fotos error', nombre, e.message);
+    return json({ error: e.message }, 502);
+  }
+}
+
+/**
+ * Una foto que el dueño eligió en su computadora o celular. El sistema ya la achicó; acá
+ * solo se valida y se sube a fotos/ del repo, de donde la sirven la tienda y el bot.
+ */
+async function subirFoto(request, env) {
+  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
+  if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'json inválido' }, 400); }
+  const v = validarSubida(body);
+  if (v.error) return json({ error: v.error }, 400);
+  try {
+    await subirAlRepo(env, v.archivo, v.bytes, 'subida desde el sistema');
+    console.log('foto subida', v.archivo, v.bytes.length, 'bytes');
+    return json({ ok: true, archivo: v.archivo });
+  } catch (e) {
+    console.log('foto subida error', v.archivo, e.message);
     return json({ error: e.message }, 502);
   }
 }

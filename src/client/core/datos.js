@@ -13,7 +13,7 @@ import { renderRepInv, renderPreciosRef } from '../modulos/repuestos.js';
 import { populateRepuestoSelects } from '../modulos/costos.js';
 import { renderEncargues } from '../modulos/encargues.js';
 import { renderInv, renderICatTags, populateICatSelects } from '../modulos/inventario.js';
-import { renderCatalogo, pintarBadgePedidos, renderPedidos } from '../modulos/catalogo.js';
+import { renderCatalogo, renderFichaCatalogo, pintarBadgePedidos, renderPedidos } from '../modulos/catalogo.js';
 import { renderFijos } from '../modulos/gastos-fijos.js';
 import { renderConsig, renderPagos } from '../modulos/consignacion.js';
 import { renderStock } from '../modulos/stock.js';
@@ -420,7 +420,10 @@ export async function init() {
       // Se guarda la URL completa: el bot necesita una dirección absoluta para mandarla
       // por Instagram, y la página del catálogo funciona igual con las dos.
       contextoApp.FOTOS_BASE = d?.base || 'fotos/';
-      if (contextoApp.currentPage === 'catalogo') renderCatalogo();
+      if (contextoApp.currentPage === 'catalogo') {
+        renderCatalogo();
+        if (contextoApp.catFichaId) renderFichaCatalogo();   // la ficha abierta muestra las fotos nuevas
+      }
     }, snapErr);
     onSnapshot(contextoApp.catalogoDoc, snap => {
       contextoApp.catPublicado = snap.exists() ? snap.data() : null;
@@ -433,7 +436,10 @@ export async function init() {
         contextoApp.mensajesFijos = {};
         contextoApp.promptBot = {};
       }
-      if (contextoApp.currentPage === 'catalogo') renderCatalogo();
+      if (contextoApp.currentPage === 'catalogo') {
+        renderCatalogo();
+        if (contextoApp.catFichaId) renderFichaCatalogo();   // recién publicado: la ficha pasa a "en la tienda"
+      }
       if (contextoApp.currentPage === 'bandeja') renderBandeja();
       if (contextoApp.currentPage === 'conocimiento') pintarConocimiento();
     }, snapErr);

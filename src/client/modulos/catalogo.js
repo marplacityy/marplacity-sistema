@@ -163,11 +163,49 @@ function catalogoFiltrados() {
   const q = (document.getElementById('cat-q')?.value || '').trim().toLowerCase();
   const fc = document.getElementById('cat-f-cat')?.value || '';
   const ft = document.getElementById('cat-f-tipo')?.value || '';
-  return catalogoCandidatos().filter(p => (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft && (p._sale || !p.precioUSD) || ft === 'publicados' && p._sale || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
+  return catalogoCandidatos().filter(p => (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft && (p._sale || !p.precioUSD) || ft === 'tienda' && estadoPublicacion(p) === 'tienda' || ft === 'porpublicar' && PENDIENTES.includes(estadoPublicacion(p)) || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
 }
 
-const estadoCatalogo = p => !p.precioUSD ? ['no', 'Sin precio'] : !p._sale ? ['no', 'Eliminado'] : p._entrega === 'pedido' ? ['ped', 'A pedido'] : ['ok', 'En el local'];
+/** JSON con las claves ordenadas: Firestore devuelve los mapas ordenados y acá no. */
+const canon = v => Array.isArray(v) ? '[' + v.map(canon).join(',') + ']'
+  : v && typeof v === 'object' ? '{' + Object.keys(v).sort().map(k => JSON.stringify(k) + ':' + canon(v[k])).join(',') + '}'
+  : JSON.stringify(v);
+/**
+ * El producto como va al documento publicado: sin los campos de trabajo (los que empiezan
+ * con guion bajo). Se aplica también a lo leído del documento, porque las publicaciones
+ * viejas llevaban `_entrega` y compararlas tal cual decía "cambios" para siempre.
+ */
+const productoPublicado = p => Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith('_')));
+/** Lo que hay hoy en la tienda, si el catálogo publicado es de esta cuenta. */
+const productosEnTienda = () => contextoApp.puedeAdministrarLocal && Array.isArray(contextoApp.catPublicado?.productos) ? contextoApp.catPublicado.productos.filter(Boolean) : [];
+/**
+ * Qué pasa con un producto en la tienda, comparando con lo último publicado:
+ *   tienda     está en la tienda, al día
+ *   nuevo      califica pero todavía no se publicó
+ *   cambio     está en la tienda con datos viejos
+ *   sacar      está en la tienda pero ya no califica: se va al publicar
+ *   sinprecio  no califica (no tiene precio) y no está en la tienda
+ *   eliminado  lo sacó Juni a mano y no está en la tienda
+ */
+export function estadoPublicacion(p) {
+  const enTienda = productosEnTienda().find(x => x.id === p.id);
+  if (!p.precioUSD) return enTienda ? 'sacar' : 'sinprecio';
+  if (!p._sale) return enTienda ? 'sacar' : 'eliminado';
+  if (!enTienda) return 'nuevo';
+  return canon(productoPublicado(p)) === canon(productoPublicado(enTienda)) ? 'tienda' : 'cambio';
+}
+const ESTADOS_PUB = {
+  tienda: ['ok', 'En la tienda'],
+  nuevo: ['pend', 'Sin publicar'],
+  cambio: ['pend', 'Cambió · republicar'],
+  sacar: ['no', 'Se saca al publicar'],
+  sinprecio: ['no', 'Sin precio'],
+  eliminado: ['no', 'Eliminado'],
+};
+const PENDIENTES = ['nuevo', 'cambio', 'sacar'];
+const estadoCatalogo = p => ESTADOS_PUB[estadoPublicacion(p)];
 const inicialCatalogo = p => (String(p.nombre).match(/\d+/) || [String(p.nombre).slice(0, 1)])[0].slice(0, 2);
+const subCatalogo = p => [p.gb, p.color, p.condicion === 'usado' ? 'usado' : '', p._entrega === 'pedido' ? 'a pedido' : ''].filter(Boolean).join(' · ');
 
 /** La tarjeta de un producto en la grilla: foto, nombre, de dónde sale, precio y estado. */
 function tarjetaCatalogo(p) {
@@ -178,7 +216,7 @@ function tarjetaCatalogo(p) {
     <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : `<span>${esc(inicialCatalogo(p))}</span><span class="sinfoto">sin foto</span>`}</div>
     <div class="cuerpo">
       <div class="nombre">${esc(p.nombre)}</div>
-      <div class="sub">${esc([p.gb, p.color, p.condicion === 'usado' ? 'usado' : ''].filter(Boolean).join(' · ') || ' ')}</div>
+      <div class="sub">${esc(subCatalogo(p) || ' ')}</div>
       <div class="sub origen">${esc(p._origen)}</div>
       <div class="pie"><span class="precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</span><span class="estado ${cls}">${txt}</span></div>
     </div>
@@ -192,7 +230,7 @@ function filaCatalogo(p) {
   return `<div class="cat-fila${p._sale ? '' : ' off'}${contextoApp.catSeleccion.has(p.id) ? ' sel' : ''}" ${on('click', 'abrirFichaCatalogo', p.id)}>
     <input type="checkbox" class="sel-box" ${contextoApp.catSeleccion.has(p.id) ? 'checked' : ''} data-stop ${on('change', 'seleccionarCatalogo', p.id, '$checked')}>
     <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : '—'}</div>
-    <div class="nombre">${esc(p.nombre)}<div class="sub">${esc([p.gb, p.color, p.condicion === 'usado' ? 'usado' : ''].filter(Boolean).join(' · '))}</div></div>
+    <div class="nombre">${esc(p.nombre)}<div class="sub">${esc(subCatalogo(p))}</div></div>
     <div class="col">${esc(p._origen)}</div>
     <div class="col precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</div>
     <div class="col">${p.fotos.length ? `📷 ${p.fotos.length}` : '<span class="falta">sin foto</span>'}</div>
@@ -213,18 +251,8 @@ export function renderCatalogo() {
   } else if (!contextoApp.catPublicado) {
     el.innerHTML = '<div class="proveedor-alerta alerta-atencion">Todavía no publicaste nunca. La tienda no muestra nada hasta que lo hagas.</div>';
   } else {
-    const ahora = JSON.stringify(salen.map(p => {
-      const {
-        _sale,
-        _origen,
-        _entrega,
-        _entregaBase,
-        _catAuto,
-        ...q
-      } = p;
-      return q;
-    })) + JSON.stringify(ordenCategorias());
-    const antes = JSON.stringify(contextoApp.catPublicado.productos || []) + JSON.stringify(contextoApp.catPublicado.categorias || []);
+    const ahora = canon(salen.map(productoPublicado)) + canon(ordenCategorias());
+    const antes = canon((contextoApp.catPublicado.productos || []).filter(Boolean).map(productoPublicado)) + canon(contextoApp.catPublicado.categorias || []);
     const cuando = contextoApp.catPublicado.actualizado ? new Date(contextoApp.catPublicado.actualizado).toLocaleString('es-AR') : '';
     el.innerHTML = ahora === antes ? `<div class="proveedor-alerta">✅ La tienda está al día · ${salen.length} producto${salen.length === 1 ? '' : 's'} publicado${salen.length === 1 ? '' : 's'} · ${esc(cuando)}</div>` : `<div class="proveedor-alerta alerta-atencion">🔔 <b>Hay cambios sin publicar.</b> La tienda muestra lo de ${esc(cuando)}. Tocá Publicar para actualizarla.</div>`;
   }
@@ -245,15 +273,21 @@ export function renderCatalogo() {
     return n ? `<option value="${esc(c)}" ${c === catElegida ? 'selected' : ''}>${esc(c)} (${n})</option>` : '';
   }).join('');
   const visibles = catalogoFiltrados();
-  const ids = new Set(items.map(p => p.id));
-  contextoApp.catSeleccion = new Set([...contextoApp.catSeleccion].filter(id => ids.has(id)));
+  const existentes = new Set(items.map(p => p.id));
+  contextoApp.catSeleccion = new Set([...contextoApp.catSeleccion].filter(id => existentes.has(id)));
 
   // Las métricas: qué hay en la tienda y qué falta. Tocarlas filtra la lista.
   const ft = document.getElementById('cat-f-tipo').value;
+  const estados = new Map(items.map(p => [p.id, estadoPublicacion(p)]));
+  const cuentaEstado = (...ks) => items.filter(p => ks.includes(estados.get(p.id))).length;
+  // Lo que está en la tienda y ya no existe acá (se vendió, salió de la lista): también se va al publicar.
+  const ids = new Set(items.map(p => p.id));
+  const idos = productosEnTienda().filter(x => !ids.has(x.id)).length;
+  const porPublicar = cuentaEstado(...PENDIENTES) + idos;
   const metricas = [
-    ['publicados', 'Publicados', salen.length, 'en la tienda', ''],
-    ['inmediato', 'En el local', salen.filter(p => p._entrega === 'inmediato').length, 'entrega inmediata', ''],
-    ['pedido', 'A pedido', salen.filter(p => p._entrega === 'pedido').length, 'de listas de precios', ''],
+    ['tienda', 'En la tienda', cuentaEstado('tienda'), 'publicados y al día', ''],
+    ['porpublicar', 'Por publicar', porPublicar, porPublicar ? (idos ? `${idos} ya no están · tocá Publicar` : 'tocá Publicar') : 'nada pendiente', '#854F0B'],
+    ['pedido', 'A pedido', salen.filter(p => p._entrega === 'pedido').length, 'se traen a pedido', ''],
     ['sinfoto', 'Sin foto', salen.filter(p => !p.fotos.length).length, 'publicados sin imagen', '#854F0B'],
     ['sinprecio', 'Sin precio', items.filter(p => !p.precioUSD).length, 'no se publican', 'var(--neg)'],
     ['fuera', 'Eliminados', items.filter(p => p.precioUSD > 0 && !p._sale).length, 'sacados a mano', ''],
@@ -302,17 +336,28 @@ export function renderFichaCatalogo() {
   const descSeo = meta.seoDescripcion || p.descripcion || `${p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} a ${contextoApp.fmtUSD(p.precioUSD)} en MarplaCity, Mar del Plata.`;
   const urlProd = contextoApp.LINK_CATALOGO + '#p=' + encodeURIComponent(p.id);
   const campo = 'width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13.5px;color:var(--text);';
+  const ep = estadoPublicacion(p);
+  const TEXTO_PUB = {
+    tienda: '✅ Está en la tienda, al día.',
+    nuevo: '🔔 Todavía no está en la tienda: entra cuando toques Publicar.',
+    cambio: '🔔 Está en la tienda con datos viejos: tocá Publicar para actualizarla.',
+    sacar: '⚠️ Está en la tienda pero ya no califica: se saca cuando publiques.',
+    sinprecio: 'Sin precio de venta: no se publica. El precio se carga en Stock o Inventario.',
+    eliminado: 'Eliminado del catálogo a mano: no se publica. Podés restaurarlo.',
+  };
   document.getElementById('cat-panel-cuerpo').innerHTML = `
     <div class="cat-sec">
-      <div class="cat-sec-t">Estado</div>
+      <div class="cat-sec-t">En la tienda</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        ${!p.precioUSD ? '<span class="cat-pill">Sin precio</span>' : p._sale ? '<span class="cat-pill on">Publicado en la tienda</span>' : `<span class="cat-pill" style="color:var(--neg);">Eliminado del catálogo</span><button class="btn-secondary" style="width:auto;padding:6px 10px;font-size:12.5px;" ${on('click', 'restaurarEnCatalogo', p.id)}>Restaurar</button>`}
-        <select ${on('change', 'ajusteCatalogoFicha', p.id, 'entrega', '$value')} style="${campo}width:auto;">
+        <span class="cat-pill${ep === 'tienda' ? ' on' : ''}" style="${ESTADOS_PUB[ep][0] === 'no' ? 'color:var(--neg);' : ESTADOS_PUB[ep][0] === 'pend' ? 'color:#854F0B;border-color:#F2D399;background:#FFF6E5;' : ''}">${ESTADOS_PUB[ep][1]}</span>
+        ${ep === 'eliminado' || ep === 'sacar' && p.precioUSD ? `<button class="btn-secondary" style="width:auto;padding:6px 10px;font-size:12.5px;" ${on('click', 'restaurarEnCatalogo', p.id)}>Restaurar</button>` : ''}
+        ${PENDIENTES.includes(ep) ? `<button class="btn-add" style="width:auto;padding:6px 12px;font-size:12.5px;" ${on('click', 'publicarCatalogo')}>🌐 Publicar ahora</button>` : ''}
+        <select ${on('change', 'ajusteCatalogoFicha', p.id, 'entrega', '$value')} style="${campo}width:auto;margin-left:auto;">
           <option value="inmediato" ${p._entrega === 'inmediato' ? 'selected' : ''}>Entrega inmediata</option>
           <option value="pedido" ${p._entrega === 'pedido' ? 'selected' : ''}>A pedido</option>
         </select>
       </div>
-      ${p.precioUSD ? '' : '<div class="proveedor-alerta alerta-atencion" style="margin-top:8px;">Sin precio de venta: no se publica. El precio se carga en Stock o Inventario.</div>'}
+      <div class="${ep === 'tienda' ? 'proveedor-alerta' : 'proveedor-alerta alerta-atencion'}" style="margin-top:8px;">${TEXTO_PUB[ep]}</div>
     </div>
 
     <div class="cat-sec">
@@ -329,15 +374,20 @@ export function renderFichaCatalogo() {
     const c = contextoApp.FOTOS_CLAS[a] || {};
     return `
         <div class="cat-img${k === 0 ? ' principal' : ''}">
-          <img src="${esc(contextoApp.FOTOS_BASE + a)}" loading="lazy" alt="">
+          <img src="${esc(contextoApp.FOTOS_BASE + a)}" loading="lazy" alt="" ${on('error', 'fotoCatalogoCruda', '$this', a)}>
           ${k === 0 ? '<span class="tag">Principal</span>' : ''}
+          <button class="quitar" title="Sacar esta foto del producto" ${on('click', 'quitarFotoCatalogo', a)}>✕</button>
           <select ${on('change', 'vistaFoto', a, '$value')} title="Qué muestra (la de frente y dorso va primera)">
             <option value="">vista ?</option>
             ${Object.entries(contextoApp.VISTAS).map(([v, t]) => `<option value="${esc(v)}" ${v === c.vista ? 'selected' : ''}>${t}</option>`).join('')}
           </select>
         </div>`;
-  }).join('')}</div>
-        <div style="font-size:11.5px;color:var(--text3);margin-top:8px;">La principal es la de "frente y dorso"; después la de frente. Para sacar una foto o moverla a otro producto, pestaña Fotos.</div>` : `<div class="proveedor-alerta alerta-atencion">Sin foto. Buscala en Amazon desde la pestaña Fotos, o subí un archivo llamado <code>${esc(clave)}.jpg</code> a <code>fotos/</code>.</div>`}
+  }).join('')}</div>` : '<div class="proveedor-alerta alerta-atencion">Sin foto: en la tienda sale el recuadro con el modelo. Subí una desde tu PC o celular, o buscala en Amazon.</div>'}
+      <div class="cat-foto-acciones">
+        <button class="btn-secondary" id="btn-cat-subir" ${on('click', 'subirFotoCatalogo', p.id)}>📷 Subir foto</button>
+        <button class="btn-secondary" id="btn-cat-amazon-uno" ${on('click', 'fotoAmazonProducto', p.id)}>🛒 Buscar en Amazon</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:8px;">La principal es la de "frente y dorso"; después la de frente. Las fotos se guardan en el repositorio: en la tienda aparecen en unos minutos, cuando GitHub las publica. Archivo: <code>${esc(clave)}.jpg</code>.</div>
     </div>
 
     <div class="cat-sec">
@@ -471,8 +521,13 @@ export async function guardarFotos(archivos) {
 export async function fotoParaIA(archivo) {
   const r = await fetch(contextoApp.FOTOS_RAW + encodeURIComponent(archivo));
   if (!r.ok) throw new Error(`no pude leer ${archivo} (${r.status})`);
-  const bmp = await createImageBitmap(await r.blob());
-  const k = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
+  return imagenJpegBase64(await r.blob(), 1024);
+}
+
+/** Una imagen achicada a `max` px de lado y pasada a JPEG, en base64 sin el prefijo. */
+export async function imagenJpegBase64(blob, max) {
+  const bmp = await createImageBitmap(blob);
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * k);
   c.height = Math.round(bmp.height * k);
@@ -482,6 +537,9 @@ export async function fotoParaIA(archivo) {
   ctx.drawImage(bmp, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
+
+/** Todos los archivos de foto conocidos: los del mapa más los que tienen decisión. */
+const archivosConocidos = () => new Set([...Object.values(contextoApp.FOTOS).flat(), ...Object.keys(contextoApp.FOTOS_CLAS)]);
 
 /**
  * Le muestra a la IA las fotos que todavía no tienen producto y le pide que diga de cuál
@@ -899,6 +957,103 @@ export function inicializarCatalogo() {
     renderFotosCatalogo();
   };
 
+  // ── Fotos desde la ficha del producto ──────────────────────
+  //
+  // Las fotos viven en fotos/ del repositorio. Desde acá se suben (el Worker tienda las
+  // escribe con su token de GitHub), se buscan en Amazon para un solo producto, o se
+  // sacan de un producto. Recién publicada, una foto todavía no está en la tienda:
+  // mientras GitHub la publica, la ficha la lee de la copia cruda del repo.
+  window.fotoCatalogoCruda = (img, archivo) => {
+    img.removeAttribute('data-error');
+    img.src = contextoApp.FOTOS_RAW + encodeURIComponent(archivo);
+  };
+
+  /** Elegir una o varias imágenes de la PC o el celular y subirlas al producto. */
+  window.subirFotoCatalogo = function (id) {
+    if (!requiereDuenoDelLocal()) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.addEventListener('change', async () => {
+      const elegidas = [...input.files];
+      const p = catalogoCandidatos().find(x => x.id === id);
+      if (!elegidas.length || !p) return;
+      const btn = document.getElementById('btn-cat-subir');
+      if (btn) btn.disabled = true;
+      const clave = contextoApp.claveFotoDe(p);
+      const conocidos = archivosConocidos();
+      let n = (contextoApp.FOTOS[clave] || []).length;
+      let subidas = 0;
+      try {
+        for (const f of elegidas) {
+          if (btn) btn.textContent = `Subiendo ${subidas + 1} de ${elegidas.length}…`;
+          const datos = await imagenJpegBase64(f, 1600);
+          // El nombre es el del producto: iphone-15-black.jpg, y -2, -3 para las siguientes.
+          let archivo;
+          do { n++; archivo = `${clave}${n > 1 ? '-' + n : ''}.jpg`; } while (conocidos.has(archivo));
+          const r = await fetch(contextoApp.TIENDA_URL + '/fotos/subir', {
+            method: 'POST',
+            headers: await workerHeaders(),
+            body: JSON.stringify({ archivo, datos })
+          });
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(r.status === 404 ? 'el Worker tienda todavía no tiene la subida de fotos (falta el deploy)' : d.error || `el Worker respondió ${r.status}`);
+          conocidos.add(archivo);
+          contextoApp.FOTOS_CLAS = { ...contextoApp.FOTOS_CLAS, [archivo]: { clave, vista: n === 1 ? 'frente' : '', manual: true } };
+          subidas++;
+        }
+        await guardarFotos([...conocidos]);
+        showToast(`${subidas} foto${subidas === 1 ? '' : 's'} subida${subidas === 1 ? '' : 's'} ✓ — en la tienda aparece en unos minutos`);
+      } catch (e) {
+        if (subidas) await guardarFotos([...conocidos]).catch(() => {});
+        showToast('No pude subir: ' + e.message, true);
+        setSyncDot('error');
+      }
+      renderFichaCatalogo();
+    });
+    input.click();
+  };
+
+  /** Buscar en Amazon la foto de este producto solo. Una búsqueda paga por click. */
+  window.fotoAmazonProducto = async function (id) {
+    if (!requiereDuenoDelLocal()) return;
+    const p = catalogoCandidatos().find(x => x.id === id);
+    if (!p) return;
+    if (!confirm(`¿Buscar en Amazon una foto de "${p.nombre}${p.color ? ' ' + p.color : ''}"?\n\nEs una búsqueda (hay 250 gratis por mes). Lo que encuentre se sube a fotos/ y queda asignado a este producto.`)) return;
+    const btn = document.getElementById('btn-cat-amazon-uno');
+    if (btn) { btn.disabled = true; btn.textContent = 'Buscando en Amazon…'; }
+    try {
+      const r = await fetch(contextoApp.TIENDA_URL + '/fotos', {
+        method: 'POST',
+        headers: await workerHeaders(),
+        body: JSON.stringify({ nombre: p.nombre, gb: p.gb, color: p.color, tipo: p.tipo })
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `el Worker respondió ${r.status}`);
+      if (!d.subidos?.length) { showToast('Amazon no tiene nada parecido. Probá subiendo una foto.', true); return; }
+      const clave = contextoApp.claveFotoDe(p);
+      const conocidos = archivosConocidos();
+      for (const a of d.subidos) {
+        conocidos.add(a);
+        contextoApp.FOTOS_CLAS = { ...contextoApp.FOTOS_CLAS, [a]: { ...(contextoApp.FOTOS_CLAS[a] || {}), clave, manual: false } };
+      }
+      await guardarFotos([...conocidos]);
+      showToast(`${d.subidos.length} foto${d.subidos.length === 1 ? '' : 's'} de Amazon ✓ — revisá que sea el modelo y el color`);
+    } catch (e) {
+      showToast('No pude buscar: ' + e.message, true);
+      setSyncDot('error');
+    }
+    renderFichaCatalogo();
+  };
+
+  /** Sacar una foto de un producto. El archivo queda en la carpeta, sin asignar (pestaña Fotos). */
+  window.quitarFotoCatalogo = async function (archivo) {
+    if (!confirm('¿Sacar esta foto del producto?\n\nNo se borra el archivo: queda sin asignar en la pestaña Fotos, por si era de otro producto.')) return;
+    await window.asignarFoto(archivo, '');
+    renderFichaCatalogo();
+  };
+
   /** Corregir qué muestra una foto. Cambia el orden dentro del producto: "ambos" pasa a ser la principal. */
   window.vistaFoto = async function (archivo, vista) {
     if (!requiereDuenoDelLocal()) return;
@@ -1152,14 +1307,7 @@ Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
   };
   window.publicarCatalogo = async function () {
     if (!requiereDuenoDelLocal()) return;
-    const salen = catalogoCandidatos().filter(p => p._sale).map(p => {
-      const {
-        _sale,
-        _origen,
-        ...q
-      } = p;
-      return q;
-    });
+    const salen = catalogoCandidatos().filter(p => p._sale).map(productoPublicado);
     if (!salen.length && !confirm('No hay ningún equipo para publicar.\n\nLa página va a quedar vacía. ¿Seguro?')) return;
     const btn = document.getElementById('btn-cat-publicar');
     btn.disabled = true;
