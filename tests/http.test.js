@@ -55,6 +55,7 @@ test('las fotos se suben solo con el token del dueño y desde los orígenes perm
   const servida = await fetch(base + '/fotos/iphone-15.jpg');
   assert.equal(servida.status, 200);
   assert.equal(servida.headers.get('access-control-allow-origin'), '*');
+  assert.equal(servida.headers.get('cross-origin-resource-policy'), 'cross-origin', 'la tienda en GitHub Pages tiene que poder mostrarla');
   // Desde el sistema en GitHub Pages se puede; desde otro sitio, no; y el permiso es solo para las fotos.
   const preflight = await fetch(base + '/api/fotos/subir', { method: 'OPTIONS', headers: { Origin: 'https://marplacityy.github.io', 'Sec-Fetch-Site': 'cross-site' } });
   assert.equal(preflight.status, 204);

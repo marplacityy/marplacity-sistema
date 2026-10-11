@@ -113,7 +113,13 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
 
   // Las fotos subidas por el dueño van primero; las del repositorio siguen en dist/fotos.
   // Con CORS abierto: son públicas y el sistema en GitHub Pages las lee para clasificarlas.
-  const cabecerasFoto = res => { res.set('Access-Control-Allow-Origin', '*'); res.set('Cache-Control', 'public, max-age=86400'); };
+  // Sin Cross-Origin-Resource-Policy abierto (helmet pone same-origin) el navegador no deja
+  // que la tienda en GitHub Pages muestre las imágenes de acá.
+  const cabecerasFoto = res => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.set('Cache-Control', 'public, max-age=86400');
+  };
   app.use('/fotos', express.static(resolve(config.FOTOS_DIR), { dotfiles: 'deny', fallthrough: true, setHeaders: cabecerasFoto }));
   let vite;
   if (desarrollo) {
