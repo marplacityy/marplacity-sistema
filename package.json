@@ -34,6 +34,9 @@
     "qrious": "4.0.2",
     "zod": "4.6.2"
   },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.6"
+  },
   "devDependencies": {
     "@babel/parser": "8.0.5",
     "@babel/traverse": "8.0.5",
