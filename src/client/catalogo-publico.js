@@ -1,4 +1,5 @@
 import { esc, on } from '../shared/seguridad.js';
+import { RUBROS_CATALOGO, rubroDe } from '../shared/catalogo.js';
 import { activarEventos } from './core/eventos.js';
 activarEventos();
 import { cargarConfiguracion } from './core/config-publica.js';
@@ -16,9 +17,16 @@ let PRODUCTOS = [], LOCAL = {}, COBRO = {}, CATEGORIAS = [];
 // El Worker que cobra. La página no tiene credenciales de nada: le manda el pedido y él
 // arma el link de pago con el precio publicado, no con el que diga la página.
 const TIENDA_URL = configuracion.api.tienda;
-let FILTRO = 'todo';   // qué tipo se ve: todo, equipo, accesorio, pedido
 
-const TIPOS = { equipo: 'Equipos', accesorio: 'Accesorios', pedido: 'A pedido' };
+// Dónde está parado el que mira: un rubro (Celulares), una categoría adentro de un rubro
+// (iPhone usados), o la portada. Buscando, se ignora todo eso y se muestra lo que coincida.
+let RUBRO = null;      // el rubro abierto, o null en la portada
+let FILTRO = 'todo';   // la categoría abierta, o 'todo'
+let COND = '', ENTREGA = '', ORDEN = 'relevancia';   // los filtros de la página de rubro
+
+// La imagen de cada rubro cuando ningún producto suyo tiene foto.
+const ICONOS = { 'Celulares': '📱', 'Notebooks y tablets': '💻', 'Audio': '🎧', 'Smartwatch': '⌚', 'Accesorios': '🔌', 'Electrodomésticos': '🧊', 'Otros': '📦' };
+const ICONO_WA = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 1.8a8.2 8.2 0 0 1 0 16.4 8.1 8.1 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 0 1 12 3.8zm-3.3 4.4c-.2 0-.5 0-.7.3-.3.3-1 1-1 2.3s1 2.7 1.1 2.9c.2.2 2 3.1 4.9 4.3 2.4 1 2.9.8 3.4.7.5 0 1.7-.7 1.9-1.4.2-.7.2-1.2.2-1.4l-.5-.3-1.9-.9c-.3-.1-.4-.1-.6.1l-.9 1.1c-.2.2-.3.2-.6.1a7 7 0 0 1-3.4-3c-.3-.4.3-.4.8-1.5.1-.2 0-.4 0-.5l-.9-2c-.2-.6-.5-.5-.6-.5h-.6z"/></svg>';
 
 const usd = n => 'u$s ' + Math.round(n).toLocaleString('es-AR');
 
@@ -40,6 +48,31 @@ const inicial = nombre => {
   return m ? m[0].slice(0, 2) : String(nombre).trim().slice(0, 1).toUpperCase() || '·';
 };
 
+const fotosDe = p => Array.isArray(p.fotos) ? p.fotos : (p.foto ? [p.foto] : []);
+
+/** La galería de la tarjeta: las fotos apiladas con puntitos, o la inicial si no hay. */
+function galeria(p){
+  const fotos = fotosDe(p);
+  if (!fotos.length) return esc(inicial(p.nombre));
+  // Si el archivo no carga, se quita: nunca una imagen rota.
+  return `${fotos.map((f, k) => `<img src="${esc(f)}" alt="${esc(p.nombre)}" loading="lazy"
+      class="${k === 0 ? 'ver' : ''}" ${on('error', 'quitarImagen', '$this')}>`).join('')}
+    ${fotos.length > 1 ? `<div class="puntos">${fotos.map((_, k) =>
+      `<button class="punto${k === 0 ? ' on' : ''}" aria-label="Foto ${k+1}" ${on('click', 'verFoto', '$this', k)}></button>`).join('')}</div>` : ''}`;
+}
+
+const sello = p => p.tipo === 'pedido' ? '<span class="sello">A pedido</span>' : '';
+const notaPrecio = p => p.tipo === 'pedido' ? 'Se trae a pedido' : 'Disponible en el local';
+
+/** Los botones de abajo de la tarjeta: comprar y, si el local cargó número, WhatsApp. */
+function acciones(p, texto, handler){
+  const wa = linkWhatsApp(p);
+  return `<div class="prod-acciones">
+    <button class="btn-comprar" type="button" ${on('click', handler, p.id)}>${texto}</button>
+    ${wa ? `<a class="btn-wa" href="${wa}" target="_blank" rel="noopener" aria-label="Consultar por WhatsApp" data-stop>${ICONO_WA}</a>` : ''}
+  </div>`;
+}
+
 function tarjeta(p){
   const specs = [
     p.gb && `<span class="chip">${esc(p.gb)}</span>`,
@@ -48,32 +81,21 @@ function tarjeta(p){
     p.estado && `<span class="chip">${esc(p.estado)}</span>`,
   ].filter(Boolean).join('');
 
-  const wa = linkWhatsApp(p);
-
-  // `fotos` es un array: un producto puede tener varias vistas. Si no hay ninguna, o si
-  // el archivo no carga, queda el recuadro con el modelo en grande — nunca una imagen
-  // rota.
-  const fotos = Array.isArray(p.fotos) ? p.fotos : (p.foto ? [p.foto] : []);
-  const galeria = fotos.length ? `
-    ${fotos.map((f, k) => `<img src="${esc(f)}" alt="${esc(p.nombre)}" loading="lazy"
-        class="${k === 0 ? 'ver' : ''}" ${on('error', 'quitarImagen', '$this')}>`).join('')}
-    ${fotos.length > 1 ? `<div class="puntos">${fotos.map((_, k) =>
-        `<button class="punto${k === 0 ? ' on' : ''}" aria-label="Foto ${k+1}" ${on('click', 'verFoto', '$this', k)}></button>`).join('')}</div>` : ''}
-  ` : esc(inicial(p.nombre));
-
+  // Tocar la tarjeta abre la ficha; el botón va directo al pedido.
   return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
-    <div class="prod-foto${fotos.length ? ' con-foto' : ''}">${galeria}</div>
+    <div class="prod-foto">${sello(p)}${galeria(p)}</div>
     <div class="prod-nombre">${esc(p.titulo || p.nombre)}</div>
-    <div class="chips">${p.tipo === 'pedido' ? '<span class="chip pedido">A pedido</span>' : ''}${specs}</div>
+    <div class="chips">${specs}</div>
     <div class="precio">${usd(p.precioUSD)}</div>
-    ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener" data-stop>Consultar</a>` : ''}
+    <div class="precio-nota">${notaPrecio(p)}</div>
+    ${acciones(p, 'Comprar', 'abrirPedido')}
   </article>`;
 }
 
 /** El link a WhatsApp con el producto ya escrito, o null si el local no cargó número. */
 function linkWhatsApp(p){
   if (!LOCAL.whatsapp) return null;
-  const texto = encodeURIComponent(`Hola! Me interesa el ${p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} que vi en el catálogo` +
+  const texto = encodeURIComponent(`Hola! Me interesa el ${p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} que vi en la tienda` +
     (p.tipo === 'pedido' ? ' (a pedido)' : ''));
   return `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${texto}`;
 }
@@ -85,7 +107,7 @@ function linkWhatsApp(p){
 window.abrirFicha = id => {
   const p = PRODUCTOS.find(x => x.id === id);
   if (!p) return;
-  const fotos = Array.isArray(p.fotos) ? p.fotos : (p.foto ? [p.foto] : []);
+  const fotos = fotosDe(p);
   const wa = linkWhatsApp(p);
   const grupo = grupoDe(p);   // si es una variante de un modelo, la capacidad y el color van en selectores
   const specs = [
@@ -131,7 +153,7 @@ window.abrirFicha = id => {
 };
 
 // Los metadatos de la página siguen al producto abierto: sirven al compartir el link y a
-// los buscadores. Al cerrar vuelven los del catálogo.
+// los buscadores. Al cerrar vuelven los de la tienda.
 const META_BASE = { title: document.title, desc: document.querySelector('meta[name="description"]')?.content || '' };
 function metaDeProducto(p){
   const titulo = p ? `${p.titulo || p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} — ${usd(p.precioUSD)} · MarplaCity` : META_BASE.title;
@@ -145,13 +167,13 @@ function metaDeProducto(p){
 }
 
 window.cerrarFicha = () => document.getElementById('ficha').close();
-window.filtrarDesdeLink = (c, e) => { e.preventDefault(); window.filtrar(c); };
 window.quitarImagen = el => el.remove();
 window.fotoFallo = (el, texto) => { el.parentNode.textContent = texto; };
 window.cerrarFichaSiFondo = (e, el) => { if (e.target === el) window.cerrarFicha(); };
-// Al cerrar —por el botón, Escape o tocando afuera— el link vuelve a ser el del catálogo.
+// Al cerrar —por el botón, Escape o tocando afuera— el link vuelve a ser el de la vista
+// (la categoría o el rubro donde estaba parado, o la portada).
 document.getElementById('ficha').addEventListener('close', () => {
-  if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+  if (/^#p=/.test(location.hash)) history.replaceState(null, '', hashVista() || location.pathname + location.search);
   metaDeProducto(null);
 });
 
@@ -214,7 +236,7 @@ window.abrirPedido = id => {
   const p = PRODUCTOS.find(x => x.id === id);
   if (!p) return;
   PEDIDO_ID = id;
-  const foto = (Array.isArray(p.fotos) ? p.fotos : [])[0];
+  const foto = fotosDe(p)[0];
   const formas = formasDePago(p);
   const specs = [p.gb, p.color, p.estado, p.bateria != null && `Batería ${esc(p.bateria)}%`].filter(Boolean).join(' · ');
 
@@ -340,7 +362,7 @@ function pantallaPedido(d){
   };
   const [titulo, detalle] = MENSAJES[d.estado] || ['Pedido recibido', ''];
   const wa = LOCAL.whatsapp
-    ? `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(`Hola! Hice el pedido ${d.id.slice(0, 8)} (${d.producto}) desde el catálogo`)}`
+    ? `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(`Hola! Hice el pedido ${d.id.slice(0, 8)} (${d.producto}) desde la tienda`)}`
     : null;
   document.getElementById('ficha-contenido').innerHTML = `
     <button class="ficha-cerrar" ${on('click', 'cerrarFicha')} aria-label="Cerrar">×</button>
@@ -350,7 +372,7 @@ function pantallaPedido(d){
       <div class="ficha-nota">Pedido ${esc(d.id.slice(0, 8))} · ${esc(d.producto)}</div>
       <div class="ficha-acciones">
         ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener">Seguir por WhatsApp</a>` : ''}
-        <button class="btn-sec" type="button" ${on('click', 'cerrarFicha')}>Volver al catálogo</button>
+        <button class="btn-sec" type="button" ${on('click', 'cerrarFicha')}>Volver a la tienda</button>
       </div>
     </div>`;
   const dlg = document.getElementById('ficha');
@@ -378,38 +400,60 @@ async function pedidoDesdeUrl(){
   pantallaPedido(d);
 }
 
-/** Abre lo que pide la URL: #p=id es una ficha, #c=slug una categoría. */
-function fichaDesdeUrl(){
-  const p = /^#p=(.+)$/.exec(location.hash);
-  if (p) { window.abrirFicha(decodeURIComponent(p[1])); return; }
-  const c = /^#c=(.+)$/.exec(location.hash);
-  const cat = c && categoriaPorSlug(decodeURIComponent(c[1]));
-  if (cat && FILTRO !== cat) { FILTRO = cat; pintar(); }
-}
-
-/** Cambia la foto que se ve. Vive en window porque la llama el onclick del puntito. */
+/** Cambia la foto que se ve. Vive en window porque la llama el click del puntito. */
 window.verFoto = (boton, k) => {
   const caja = boton.closest('.prod-foto');
   caja.querySelectorAll('img').forEach((img, i) => img.classList.toggle('ver', i === k));
   caja.querySelectorAll('.punto').forEach((b, i) => b.classList.toggle('on', i === k));
 };
 
-function pintarFiltros(){ /* la portada va por secciones; los filtros ya no se dibujan */ }
+// ── Navegación ───────────────────────────────────────────────
+//
+// Cada vista tiene su link: la portada es la página pelada, un rubro es #r=celulares y
+// una categoría #c=iphone-usados. Los links son <a href> comunes y `hashchange` arma la
+// vista, así el botón "atrás" del celular funciona y los links se pueden pegar en
+// WhatsApp o Instagram.
 
-/** El slug de una categoría para el link: "Accesorios de carga" → accesorios-de-carga. */
-const slug = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+/** El slug de un nombre para el link: "Accesorios de carga" → accesorios-de-carga. */
+const slug = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const categoriaPorSlug = sl => categorias().find(c => slug(c) === sl) || null;
+const rubroPorSlug = sl => rubros().map(r => r.nombre).find(r => slug(r) === sl) || null;
 
-/**
- * Abrir una categoría (o volver a la portada con 'todo'). Queda en la URL como #c=slug,
- * así cada categoría tiene su link: catalogo.html#c=accesorios-de-carga.
- */
-window.filtrar = t => {
-  FILTRO = t;
-  history.replaceState(null, '', t === 'todo' ? location.pathname + location.search : '#c=' + slug(t));
+/** El hash de la vista actual, sin contar la ficha abierta. */
+const hashVista = () => FILTRO !== 'todo' ? '#c=' + slug(FILTRO) : RUBRO ? '#r=' + slug(RUBRO) : '';
+
+/** Abre una categoría (o vuelve a la portada con 'todo'). */
+window.filtrar = cat => { location.hash = cat === 'todo' ? '' : '#c=' + slug(cat); };
+
+/** Un filtro de la página de rubro: condición, entrega u orden. No va en la URL. */
+window.setFiltro = (clave, valor, ev) => {
+  if (ev) ev.preventDefault();
+  if (clave === 'cond') COND = valor;
+  else if (clave === 'entrega') ENTREGA = valor;
+  else if (clave === 'orden') ORDEN = valor;
   pintar();
-  window.scrollTo({ top: 0 });
 };
+
+window.toggleMenu = () => { const m = document.getElementById('menu'); m.hidden = !m.hidden; };
+const cerrarMenu = () => { document.getElementById('menu').hidden = true; };
+window.cerrarTeclado = () => document.getElementById('q').blur();
+
+/** Arma la vista que pide la URL: #p=id es una ficha; #c y #r, una categoría o un rubro. */
+function desdeUrl(){
+  const p = /^#p=(.+)$/.exec(location.hash);
+  if (p) { window.abrirFicha(decodeURIComponent(p[1])); return; }
+  const c = /^#c=(.+)$/.exec(location.hash);
+  const r = /^#r=(.+)$/.exec(location.hash);
+  const cat = c && categoriaPorSlug(decodeURIComponent(c[1]));
+  const rub = r && rubroPorSlug(decodeURIComponent(r[1]));
+  FILTRO = cat || 'todo';
+  RUBRO = cat ? rubroDe(cat) : rub || null;
+  if (!cat && !rub) document.getElementById('q').value = '';
+  cerrarMenu();
+  pintar();
+  document.getElementById('ficha').close();
+  window.scrollTo({ top: 0 });
+}
 
 const tipoDe = p => p.tipo || 'equipo';
 
@@ -437,16 +481,19 @@ const numGb = g => parseFloat(String(g).replace(/[^\d.]/g, '')) * (/tb/i.test(g)
 
 /** La tarjeta de un grupo: la foto de la primera variante que tenga, "desde" el precio más bajo. */
 function tarjetaGrupo(lista){
-  const p = lista.find(x => Array.isArray(x.fotos) && x.fotos.length) || lista[0];
+  const p = lista.find(x => fotosDe(x).length) || lista[0];
   const gbs = [...new Set(lista.map(x => x.gb).filter(Boolean))].sort((a, b) => numGb(a) - numGb(b));
   const colores = [...new Set(lista.map(x => x.color).filter(Boolean))];
   const desde = Math.min(...lista.map(x => Number(x.precioUSD) || Infinity));
-  const foto = (p.fotos || [])[0];
+  const foto = fotosDe(p)[0];
+  // Hay que elegir capacidad y color: el botón abre la ficha, no el pedido.
   return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
-    <div class="prod-foto${foto ? ' con-foto' : ''}">${foto ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" ${on('error', 'quitarImagen', '$this')}>` : esc(inicial(p.nombre))}</div>
+    <div class="prod-foto">${sello(p)}${foto ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" ${on('error', 'quitarImagen', '$this')}>` : esc(inicial(p.nombre))}</div>
     <div class="prod-nombre">${esc(p.nombre)}</div>
-    <div class="chips">${p.tipo === 'pedido' ? '<span class="chip pedido">A pedido</span>' : ''}${gbs.length ? `<span class="chip">${esc(gbs.join(' · '))}</span>` : ''}${colores.length > 1 ? `<span class="chip">${colores.length} colores</span>` : ''}</div>
+    <div class="chips">${gbs.length ? `<span class="chip">${esc(gbs.join(' · '))}</span>` : ''}${colores.length > 1 ? `<span class="chip">${colores.length} colores</span>` : ''}</div>
     <div class="precio"><span class="desde">desde</span>${usd(desde)}</div>
+    <div class="precio-nota">${notaPrecio(p)}</div>
+    ${acciones(p, 'Ver opciones', 'abrirFicha')}
   </article>`;
 }
 
@@ -482,51 +529,135 @@ function selectoresVariante(p, grupo){
       `<button class="opc${c === p.color ? ' on' : ''}" ${on('click', 'abrirFicha', conColor(c).id)}>${esc(c)}</button>`).join('')}</div></div>` : ''}
   </div>`;
 }
+
+// ── Rubros y categorías ──────────────────────────────────────
+
 const catDe = p => p.categoria || 'Otros';
+const rubroDeProd = p => rubroDe(catDe(p));
 /** Las categorías en el orden publicado, más las que aparezcan sin estar en la lista. */
 function categorias(){
   const vistas = [...new Set(PRODUCTOS.map(catDe))];
   return [...CATEGORIAS.filter(c => vistas.includes(c)), ...vistas.filter(c => !CATEGORIAS.includes(c))];
 }
+/** Los rubros con productos, en el orden del menú; adentro, sus categorías publicadas. */
+function rubros(){
+  const orden = Object.keys(RUBROS_CATALOGO);
+  const porRubro = new Map();
+  for (const c of categorias()) {
+    const r = rubroDe(c);
+    (porRubro.get(r) || porRubro.set(r, []).get(r)).push(c);
+  }
+  return [...porRubro].sort((a, b) => orden.indexOf(a[0]) - orden.indexOf(b[0])).map(([nombre, cats]) => ({ nombre, categorias: cats }));
+}
+const delRubro = r => PRODUCTOS.filter(p => rubroDeProd(p) === r);
+const deCategoria = c => PRODUCTOS.filter(p => catDe(p) === c);
+
+const pasaFiltros = p => (!COND || (p.condicion || 'nuevo') === COND) && (!ENTREGA || (tipoDe(p) === 'pedido' ? 'pedido' : 'inmediato') === ENTREGA);
+const ordenar = lista => ORDEN === 'menor' ? [...lista].sort((a, b) => a.precioUSD - b.precioUSD)
+  : ORDEN === 'mayor' ? [...lista].sort((a, b) => b.precioUSD - a.precioUSD) : lista;
+
+// ── Las pantallas ────────────────────────────────────────────
+
+/** El menú de rubros de la barra, el desplegable y las burbujas de la portada. */
+function pintarNavegacion(){
+  const rs = rubros();
+  document.getElementById('nav-rubros').innerHTML = rs.map(r =>
+    `<a href="#r=${slug(r.nombre)}" class="${RUBRO === r.nombre ? 'on' : ''}">${esc(r.nombre)}</a>`).join('');
+  document.getElementById('menu-contenido').innerHTML = `<div class="menu-cols">${rs.map(r => `<div class="menu-rubro">
+      <a class="t" href="#r=${slug(r.nombre)}">${esc(r.nombre)}</a>
+      ${r.categorias.map(c => `<a class="c" href="#c=${slug(c)}">${esc(c)}<span class="n">${cuenta(deCategoria(c))}</span></a>`).join('')}
+    </div>`).join('')}</div>`;
+  // La burbuja lleva la foto de algún producto del rubro; si ninguno tiene, un ícono.
+  document.getElementById('burbujas').innerHTML = rs.map(r => {
+    const icono = ICONOS[r.nombre] || '📦';
+    const conFoto = delRubro(r.nombre).find(p => fotosDe(p).length);
+    return `<a class="burbuja" href="#r=${slug(r.nombre)}"><div class="c">${conFoto
+      ? `<img src="${esc(fotosDe(conFoto)[0])}" alt="" loading="lazy" ${on('error', 'fotoFallo', '$this', icono)}>`
+      : icono}</div><span>${esc(r.nombre)}</span></a>`;
+  }).join('');
+}
+
+function pintarMiga(q){
+  const partes = ['<a href="#">Inicio</a>'];
+  if (q) partes.push('<span>Búsqueda</span>');
+  else {
+    if (RUBRO) partes.push(FILTRO !== 'todo' ? `<a href="#r=${slug(RUBRO)}">${esc(RUBRO)}</a>` : `<span>${esc(RUBRO)}</span>`);
+    if (FILTRO !== 'todo') partes.push(`<span>${esc(FILTRO)}</span>`);
+  }
+  document.getElementById('miga').innerHTML = partes.length > 1 ? partes.join('<span class="sep">›</span>') : '';
+}
+
+const textoConteo = n => `${n} producto${n === 1 ? '' : 's'}`;
+
+/** La página de un rubro o de una categoría: filtros a la izquierda y la grilla. */
+function pintarListado(){
+  const cat = FILTRO !== 'todo' ? FILTRO : null;
+  const todos = delRubro(RUBRO);
+  const base = cat ? todos.filter(p => catDe(p) === cat) : todos;
+  const lista = ordenar(base.filter(pasaFiltros));
+  const conds = new Set(base.map(p => p.condicion || 'nuevo'));
+  const entregas = new Set(base.map(p => tipoDe(p) === 'pedido' ? 'pedido' : 'inmediato'));
+  const opciones = (clave, actual, pares) => pares.map(([v, t]) =>
+    `<a class="f${actual === v ? ' on' : ''}" href="#" ${on('click', 'setFiltro', clave, v, '$event')}>${t}</a>`).join('');
+
+  const filtros = `<aside class="filtros">
+    <div class="grupo"><div class="t">Categorías</div>
+      <a class="f${!cat ? ' on' : ''}" href="#r=${slug(RUBRO)}">Todo ${esc(RUBRO)}<span class="n">${cuenta(todos)}</span></a>
+      ${rubros().find(r => r.nombre === RUBRO)?.categorias.map(c =>
+        `<a class="f${c === cat ? ' on' : ''}" href="#c=${slug(c)}">${esc(c)}<span class="n">${cuenta(deCategoria(c))}</span></a>`).join('') || ''}
+    </div>
+    ${conds.size > 1 ? `<div class="grupo"><div class="t">Condición</div>${opciones('cond', COND, [['', 'Todos'], ['nuevo', 'Nuevos'], ['usado', 'Usados']])}</div>` : ''}
+    ${entregas.size > 1 ? `<div class="grupo"><div class="t">Entrega</div>${opciones('entrega', ENTREGA, [['', 'Todos'], ['inmediato', 'En el local'], ['pedido', 'A pedido']])}</div>` : ''}
+    <div class="grupo"><div class="t">Ordenar</div>
+      <select aria-label="Ordenar" ${on('change', 'setFiltro', 'orden', '$value')}>${[['relevancia', 'Más relevantes'], ['menor', 'Menor precio'], ['mayor', 'Mayor precio']].map(([v, t]) =>
+        `<option value="${v}"${ORDEN === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
+    </div>
+  </aside>`;
+
+  document.getElementById('salida').innerHTML = `<h1 class="listado-titulo">${esc(cat || RUBRO)}</h1>
+    <div class="listado">${filtros}<div>
+      <div class="conteo">${textoConteo(cuenta(lista))}</div>
+      ${lista.length ? `<div class="grilla">${entradas(lista)}</div>` : '<div class="aviso">No hay productos con esos filtros.</div>'}
+    </div></div>`;
+}
 
 /**
- * La portada: una sección por categoría con tres productos y "ver más". Buscando, se
- * muestra todo lo que coincida en una sola grilla; abriendo una categoría, esa entera.
+ * Qué se ve: buscando, todo lo que coincida en una grilla; adentro de un rubro o una
+ * categoría, su página con filtros; si no, la portada con una sección por rubro.
  */
 function pintar(){
   const q = document.getElementById('q').value.trim().toLowerCase();
-  const coincide = p => !q || `${p.titulo || ''} ${p.nombre} ${p.gb} ${p.color} ${p.estado}`.toLowerCase().includes(q);
+  const coincide = p => `${p.titulo || ''} ${p.nombre} ${p.gb} ${p.color} ${p.estado} ${catDe(p)}`.toLowerCase().includes(q);
   const salida = document.getElementById('salida');
   const conteo = document.getElementById('conteo');
+  conteo.textContent = '';
+  pintarMiga(q);
+  document.getElementById('burbujas').hidden = !!(q || RUBRO);
+  document.querySelectorAll('#nav-rubros a').forEach(a => a.classList.toggle('on', !q && a.textContent === RUBRO));
 
   if (!PRODUCTOS.length) {
-    conteo.textContent = '';
     salida.innerHTML = '<div class="aviso">Por el momento no hay equipos publicados. Escribinos y te contamos qué hay.</div>';
     return;
   }
 
-  // Buscando, o dentro de una categoría: una grilla sola.
-  if (q || FILTRO !== 'todo') {
-    const lista = PRODUCTOS.filter(p => (q || catDe(p) === FILTRO) && coincide(p));
-    conteo.textContent = lista.length ? `${lista.length} producto${lista.length === 1 ? '' : 's'}${q ? ' encontrado' + (lista.length === 1 ? '' : 's') : ''}` : '';
-    salida.innerHTML = (q ? '' : `<button class="volver-cat" ${on('click', 'filtrar', 'todo')}>← Todas las categorías</button>
-        <div class="seccion-cab"><div class="seccion-titulo">${esc(FILTRO)}</div></div>`) +
-      (lista.length
-        ? `<div class="grilla">${entradas(lista)}</div>`
-        : '<div class="aviso">No encontré nada con esa búsqueda.</div>');
+  if (q) {
+    const lista = ordenar(PRODUCTOS.filter(p => coincide(p) && pasaFiltros(p)));
+    conteo.textContent = lista.length ? `${textoConteo(cuenta(lista))} para “${q}”` : '';
+    salida.innerHTML = lista.length ? `<div class="grilla">${entradas(lista)}</div>` : '<div class="aviso">No encontré nada con esa búsqueda.</div>';
     return;
   }
 
-  // La portada.
-  conteo.textContent = '';
-  salida.innerHTML = categorias().map(c => {
-    const lista = PRODUCTOS.filter(p => catDe(p) === c);
+  if (RUBRO) { pintarListado(); return; }
+
+  // La portada: una sección por rubro, con sus productos deslizando y "ver todos".
+  salida.innerHTML = rubros().map(r => {
+    const lista = delRubro(r.nombre);
     return `<section class="seccion">
       <div class="seccion-cab">
-        <div class="seccion-titulo">${esc(c)}</div>
-        <a class="vertodos" href="#c=${slug(c)}" ${on('click', 'filtrarDesdeLink', c, '$event')}>Ver todos (${cuenta(lista)}) ›</a>
+        <h2 class="seccion-titulo">${esc(r.nombre)}</h2>
+        <a class="vertodos" href="#r=${slug(r.nombre)}">Ver todos (${cuenta(lista)}) ›</a>
       </div>
-      <div class="fila">${entradas(lista)}</div>
+      <div class="fila">${entradas(lista.slice(0, 12))}</div>
     </section>`;
   }).join('');
 }
@@ -538,6 +669,29 @@ function hace(iso){
   if (h < 24) return `hace ${h} hora${h === 1 ? '' : 's'}`;
   const d = Math.floor(h / 24);
   return d === 1 ? 'ayer' : `hace ${d} días`;
+}
+
+/** El pie: los rubros, los datos del local y los legales. */
+function pie(actualizado){
+  const wa = LOCAL.whatsapp ? `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}` : null;
+  const nombre = esc(LOCAL.nombre || 'MarplaCity');
+  return `<div class="pie-cols">
+    <div><h4>Categorías</h4>${rubros().map(r => `<a href="#r=${slug(r.nombre)}">${esc(r.nombre)}</a>`).join('')}</div>
+    <div><h4>${nombre}</h4>
+      ${LOCAL.direccion ? `<p>📍 ${esc(LOCAL.direccion)}</p>` : ''}
+      ${LOCAL.horarios ? `<p>🕗 ${esc(LOCAL.horarios)}</p>` : ''}
+      ${wa ? `<a href="${wa}" target="_blank" rel="noopener">💬 Escribinos por WhatsApp</a>` : ''}
+    </div>
+    <div><h4>Información</h4>
+      <a href="privacidad.html">Política de privacidad</a>
+      <a href="condiciones.html">Términos y condiciones</a>
+      <a href="eliminacion-datos.html">Eliminación de datos</a>
+    </div>
+  </div>
+  <div class="pie-base">
+    <span>Precios en dólar billete. Sujetos a disponibilidad.${actualizado ? ' Actualizado ' + hace(actualizado) + '.' : ''}</span>
+    <span>© ${new Date().getFullYear()} ${nombre}</span>
+  </div>`;
 }
 
 (async () => {
@@ -553,31 +707,23 @@ function hace(iso){
     CATEGORIAS = Array.isArray(d.categorias) ? d.categorias : [];
 
     if(LOCAL.nombre) document.getElementById('marca').textContent = LOCAL.nombre;
-    document.getElementById('sub').textContent =
-      'Equipos y accesorios' + (d.actualizado ? ' · actualizado ' + hace(d.actualizado) : '');
+    const wa = document.getElementById('cab-wa');
+    if (LOCAL.whatsapp) { wa.href = `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}`; wa.hidden = false; }
+    document.getElementById('pie').innerHTML = pie(d.actualizado);
 
-    document.getElementById('pie').innerHTML = [
-      LOCAL.direccion ? `📍 ${esc(LOCAL.direccion)}` : '',
-      LOCAL.horarios ? `🕗 ${esc(LOCAL.horarios)}` : '',
-      LOCAL.whatsapp ? `<a href="https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}" target="_blank" rel="noopener">Escribinos por WhatsApp</a>` : '',
-      'Precios en dólar billete. Sujetos a disponibilidad.',
-    ].filter(Boolean).join('<br>');
-
-    pintarFiltros();
-    pintar();
-    fichaDesdeUrl();
+    pintarNavegacion();
+    desdeUrl();
     pedidoDesdeUrl();
   }catch(e){
     document.getElementById('salida').innerHTML =
-      '<div class="aviso">No pudimos cargar el catálogo en este momento. Probá de nuevo en un rato.</div>';
+      '<div class="aviso">No pudimos cargar la tienda en este momento. Probá de nuevo en un rato.</div>';
   }
 })();
 
 document.getElementById('q').addEventListener('input', pintar);
-window.addEventListener('hashchange', () => {
-  if (!location.hash) { document.getElementById('ficha').close(); if (FILTRO !== 'todo') { FILTRO = 'todo'; pintar(); } return; }
-  fichaDesdeUrl();
-});
+window.addEventListener('hashchange', desdeUrl);
+// El menú se cierra tocando afuera.
+document.addEventListener('click', e => { if (!e.target.closest('#cab')) cerrarMenu(); });
 
 // Compatibilidad de los controles HTML al pasar a módulos ES.
-Object.assign(window, { tarjeta, linkWhatsApp, metaDeProducto, formasDePago, textoPedido, pantallaPedido, pedidoDesdeUrl, fichaDesdeUrl, pintarFiltros, armarGrupos, tarjetaGrupo, entradas, selectoresVariante, categorias, pintar, hace });
+Object.assign(window, { tarjeta, linkWhatsApp, metaDeProducto, formasDePago, textoPedido, pantallaPedido, pedidoDesdeUrl, armarGrupos, tarjetaGrupo, entradas, selectoresVariante, categorias, rubros, pintar, hace });

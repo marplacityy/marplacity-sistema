@@ -3,36 +3,64 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Catálogo — MarplaCity</title>
-<meta name="description" content="Equipos disponibles en el local. Mar del Plata.">
-<meta name="theme-color" content="#1A1917">
+<title>Tienda — MarplaCity</title>
+<meta name="description" content="Celulares, notebooks, audio, accesorios y electrodomésticos. Mar del Plata.">
+<meta name="theme-color" content="#0E3A8A">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png" type="image/png">
 
 <!-- Se ve bien cuando lo pegan en WhatsApp o Instagram -->
-<meta property="og:title" content="Catálogo — MarplaCity">
-<meta property="og:description" content="Equipos disponibles en el local, con precio. Mar del Plata.">
+<meta property="og:title" content="Tienda — MarplaCity">
+<meta property="og:description" content="Celulares, notebooks, audio, accesorios y electrodomésticos, con precio. Mar del Plata.">
 <meta property="og:type" content="website">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/src/client/styles/catalogo-publico.css">
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="marca" id="marca">MarplaCity</div>
-    <div class="sub" id="sub">Equipos disponibles en el local</div>
-    <input type="search" class="buscador" id="q" placeholder="Buscar modelo, color, capacidad…" autocomplete="off">
-  </header>
+<!-- Cabecera: marca, buscador y WhatsApp arriba; el menú de rubros abajo. -->
+<header class="cab" id="cab">
+  <div class="cab-top">
+    <div class="wrap cab-fila">
+      <button class="cab-menu" type="button" data-click="toggleMenu" aria-label="Categorías">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <a class="marca" id="marca" href="#">MarplaCity</a>
+      <div class="busca">
+        <input type="search" id="q" placeholder="¿Qué estás buscando?" autocomplete="off" data-enter="cerrarTeclado">
+        <button type="button" aria-label="Buscar" data-click="cerrarTeclado">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        </button>
+      </div>
+      <a class="cab-wa" id="cab-wa" href="#" target="_blank" rel="noopener" hidden>
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 1.8a8.2 8.2 0 0 1 0 16.4 8.1 8.1 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 0 1 12 3.8zm-3.3 4.4c-.2 0-.5 0-.7.3-.3.3-1 1-1 2.3s1 2.7 1.1 2.9c.2.2 2 3.1 4.9 4.3 2.4 1 2.9.8 3.4.7.5 0 1.7-.7 1.9-1.4.2-.7.2-1.2.2-1.4l-.5-.3-1.9-.9c-.3-.1-.4-.1-.6.1l-.9 1.1c-.2.2-.3.2-.6.1a7 7 0 0 1-3.4-3c-.3-.4.3-.4.8-1.5.1-.2 0-.4 0-.5l-.9-2c-.2-.6-.5-.5-.6-.5h-.6z"/></svg>
+        <span>WhatsApp</span>
+      </a>
+    </div>
+  </div>
+  <nav class="cab-nav">
+    <div class="wrap cab-fila">
+      <button class="nav-cats" type="button" data-click="toggleMenu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        <span>Categorías</span>
+      </button>
+      <div class="nav-rubros" id="nav-rubros"></div>
+    </div>
+  </nav>
+  <!-- El menú desplegable: todos los rubros con sus categorías. -->
+  <div class="menu" id="menu" hidden><div class="wrap" id="menu-contenido"></div></div>
+</header>
 
-  <div class="filtros" id="filtros"></div>
+<main class="wrap">
+  <div class="burbujas" id="burbujas"></div>
+  <nav class="miga" id="miga" aria-label="Estás en"></nav>
   <div class="conteo" id="conteo"></div>
   <div id="salida"><div class="aviso">Cargando…</div></div>
+</main>
 
-  <footer id="pie"></footer>
-</div>
+<footer class="pie"><div class="wrap" id="pie"></div></footer>
 
 <dialog class="ficha" id="ficha" data-click="cerrarFichaSiFondo" data-args='["$event","$this"]'>
   <div id="ficha-contenido"></div>

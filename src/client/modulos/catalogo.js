@@ -1,4 +1,4 @@
-import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe } from '../../shared/catalogo.js';
+import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe } from '../../shared/catalogo.js';
 import { on } from '../../shared/seguridad.js';
 import { configuracion } from '../core/config-publica.js';
 /** modulos/catalogo: lógica preservada de la aplicación original. */
@@ -80,7 +80,7 @@ export function renderCategoriasCatalogo() {
     const n = items.filter(p => p.categoria === c).length;
     return `<div class="cat-fila-cat" style="${n ? '' : 'opacity:.55;'}">
       <span class="n">${i + 1}</span>
-      <span class="nombre">${esc(c)}</span>
+      <span class="nombre">${esc(c)} <span style="color:var(--text3);font-size:11px;font-weight:400;">· ${esc(rubroDe(c))}</span></span>
       <span class="cnt">${n ? n + ' producto' + (n === 1 ? '' : 's') : 'vacía, no se muestra'}</span>
       <button class="btn-secondary" ${i === 0 ? 'disabled' : ''} ${on('click', 'moverCategoria', c, -1)}>▲</button>
       <button class="btn-secondary" ${i === orden.length - 1 ? 'disabled' : ''} ${on('click', 'moverCategoria', c, 1)}>▼</button>

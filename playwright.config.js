@@ -9,7 +9,8 @@ export default defineConfig({
   // El navegador de prueba corre en la zona horaria del local. Sin esto, en el runner de
   // GitHub (UTC) las pruebas fallan entre las 21:00 y las 00:00 de Argentina: los datos
   // de prueba se fechan en Argentina y la app toma "hoy" del reloj del navegador.
-  use: { channel: process.platform === 'win32' ? 'chrome' : undefined, timezoneId: 'America/Argentina/Buenos_Aires', screenshot: 'only-on-failure', trace: 'retain-on-failure' },
+  // En Windows usa el Chrome instalado; NAVEGADOR=msedge sirve en una PC que no lo tiene.
+  use: { channel: process.platform === 'win32' ? process.env.NAVEGADOR || 'chrome' : undefined, timezoneId: 'America/Argentina/Buenos_Aires', screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   webServer: [
     { command: 'npm run build:pages && node scripts/servidor-pages-pruebas.mjs', url: 'http://127.0.0.1:3103/marplacity-sistema/', timeout: 60_000, reuseExistingServer: false },
     { command: 'node server/index.js', url: 'http://127.0.0.1:3101/api/salud', env: { PORT: '3101', LOG_LEVEL: 'silent' }, reuseExistingServer: false },

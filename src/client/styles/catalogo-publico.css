@@ -1,8 +1,12 @@
+/* La tienda pública. Azul de marca arriba, fondo claro, tarjetas blancas: la estética de
+   una tienda grande, sin banners de promociones. Se diseña primero para el celular. */
 :root{
-    --bg:#F5F4F0; --surface:#FFF; --border:#E0DDD8;
-    --text:#1A1917; --text2:#6B6864; --text3:#A8A5A1;
-    --acc:#1A1917; --acc-fg:#F5F4F0; --green:#237A4B;
-    --radius:14px;
+    --azul:#0E3A8A; --azul-osc:#0A2C6B; --azul-hover:#1649A8; --azul-suave:#E8EEF9;
+    --naranja:#F58427; --naranja-suave:#FFF1E6;
+    --bg:#F2F4F8; --surface:#FFF; --border:#E2E6EE;
+    --text:#14213D; --text2:#5A6478; --text3:#8B95A7;
+    --verde:#1E7F4F; --verde-suave:#E6F5EC; --wa:#25D366;
+    --radius:12px;
   }
   *{box-sizing:border-box;}
   body{
@@ -10,121 +14,192 @@
     font-family:'DM Sans',-apple-system,system-ui,sans-serif;
     -webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:1100px;margin:0 auto;padding:0 16px 64px;}
+  button{font-family:inherit;}
+  .wrap{max-width:1240px;margin:0 auto;padding:0 20px;}
+  main.wrap{min-height:60vh;padding-bottom:40px;}
 
-  header{
-    position:sticky;top:0;z-index:10;background:var(--bg);
-    padding:20px 0 12px;border-bottom:1px solid var(--border);margin-bottom:18px;
+  /* ── Cabecera ──────────────────────────────────────────── */
+  .cab{position:sticky;top:0;z-index:20;box-shadow:0 2px 10px rgba(10,44,107,.18);}
+  .cab-top{background:var(--azul);color:#fff;}
+  .cab-fila{display:flex;align-items:center;gap:18px;min-height:68px;}
+  .cab-menu{display:none;}
+  .marca{font-size:24px;font-weight:800;letter-spacing:-.03em;color:#fff;text-decoration:none;white-space:nowrap;}
+  .busca{
+    flex:1;display:flex;max-width:620px;margin:0 auto;height:44px;
+    background:#fff;border-radius:100px;overflow:hidden;
   }
-  .marca{font-size:22px;font-weight:700;letter-spacing:-.02em;}
-  .sub{font-size:13px;color:var(--text2);margin-top:2px;}
-  .buscador{
-    width:100%;margin-top:14px;padding:12px 14px;font-family:inherit;font-size:15px;
-    background:var(--surface);border:1px solid var(--border);border-radius:10px;
-    color:var(--text);outline:none;
+  .busca input{
+    flex:1;min-width:0;border:none;outline:none;padding:0 18px;
+    font:inherit;font-size:15px;color:var(--text);background:transparent;
   }
-  .buscador:focus{border-color:var(--acc);}
-
-  .conteo{font-size:12.5px;color:var(--text3);margin:0 0 12px 2px;}
-
-  /* Filtros por tipo: equipos del local, accesorios, a pedido. */
-  .filtros{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;}
-  .filtro{
-    font-family:inherit;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:100px;
-    background:var(--surface);border:1px solid var(--border);color:var(--text2);cursor:pointer;
+  .busca input::-webkit-search-cancel-button{-webkit-appearance:none;}
+  .busca button{
+    border:none;background:transparent;width:46px;cursor:pointer;color:var(--azul);
+    display:flex;align-items:center;justify-content:center;
   }
-  .filtro.on{background:var(--acc);border-color:var(--acc);color:var(--acc-fg);}
+  .busca svg,.cab-menu svg,.nav-cats svg{width:22px;height:22px;}
+  .cab-wa{
+    display:flex;align-items:center;gap:8px;color:#fff;text-decoration:none;
+    font-weight:600;font-size:14px;white-space:nowrap;
+  }
+  .cab-wa[hidden]{display:none;}
+  .cab-wa svg{width:24px;height:24px;}
+  .cab-nav{background:var(--azul-osc);color:#fff;}
+  .cab-nav .cab-fila{min-height:46px;gap:4px;overflow-x:auto;scrollbar-width:none;}
+  .cab-nav .cab-fila::-webkit-scrollbar{display:none;}
+  .nav-cats{
+    background:none;border:none;color:#fff;font-weight:700;font-size:14px;cursor:pointer;
+    display:flex;align-items:center;gap:8px;white-space:nowrap;
+    padding:10px 16px 10px 0;margin-right:10px;border-right:1px solid rgba(255,255,255,.2);
+  }
+  .nav-rubros{display:flex;gap:2px;}
+  .nav-rubros a{
+    color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:9px 12px;
+    border-radius:8px;white-space:nowrap;opacity:.92;
+  }
+  .nav-rubros a:hover,.nav-rubros a.on{background:rgba(255,255,255,.14);opacity:1;}
 
-  .grilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px;}
-  /* Una sección por categoría: título con "ver todos" al lado, y una fila que se desliza
-     de derecha a izquierda con frenado en cada tarjeta. Sin JS: scroll-snap nativo. */
-  .seccion{margin:0 0 22px;}
-  .seccion-cab{display:flex;align-items:baseline;gap:12px;margin:0 0 8px 2px;}
-  .seccion-titulo{font-size:17px;font-weight:700;letter-spacing:-.02em;}
-  .vertodos{font-size:12.5px;font-weight:600;color:var(--text2);text-decoration:none;white-space:nowrap;}
-  .vertodos:hover{color:var(--text);}
+  /* El menú desplegable: una columna por rubro con sus categorías. */
+  .menu{
+    position:absolute;left:0;right:0;top:100%;background:#fff;color:var(--text);
+    border-top:1px solid var(--border);box-shadow:0 18px 40px rgba(10,44,107,.22);
+    max-height:calc(100vh - 130px);overflow-y:auto;
+  }
+  .menu-cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:22px 28px;padding:22px 0 26px;}
+  .menu-rubro .t{display:block;font-weight:800;font-size:14px;color:var(--azul);text-decoration:none;margin:0 0 8px;}
+  .menu-rubro .c{display:block;font-size:13.5px;color:var(--text2);text-decoration:none;padding:4px 0;}
+  .menu-rubro .c:hover{color:var(--azul);}
+  .menu-rubro .n{color:var(--text3);font-size:12px;margin-left:4px;}
+
+  /* ── Burbujas de rubros en la portada ───────────────────── */
+  .burbujas{display:flex;gap:10px;overflow-x:auto;padding:22px 2px 6px;scrollbar-width:none;justify-content:center;}
+  .burbujas::-webkit-scrollbar{display:none;}
+  .burbujas[hidden]{display:none;}
+  .burbuja{
+    flex:0 0 110px;display:flex;flex-direction:column;align-items:center;gap:8px;
+    text-decoration:none;color:var(--text);font-size:13px;font-weight:600;text-align:center;line-height:1.2;
+  }
+  .burbuja .c{
+    width:92px;height:92px;border-radius:50%;background:#fff;border:3px solid var(--azul);
+    display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:36px;
+    box-shadow:0 4px 12px rgba(14,58,138,.15);transition:transform .15s;
+  }
+  .burbuja:hover .c{transform:translateY(-3px);}
+  .burbuja .c img{width:78%;height:78%;object-fit:contain;}
+
+  /* ── Miga y conteo ──────────────────────────────────────── */
+  .miga{font-size:13.5px;color:var(--text2);padding:16px 0 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .miga:empty{display:none;}
+  .miga a{color:var(--azul);text-decoration:none;font-weight:600;}
+  .miga a:hover{text-decoration:underline;}
+  .miga .sep{color:var(--text3);}
+  .conteo{font-size:13px;color:var(--text3);margin:0 0 10px;}
+  .conteo:empty{display:none;}
+
+  /* ── Portada: una sección por rubro ─────────────────────── */
+  .seccion{margin:14px 0 26px;}
+  .seccion-cab{display:flex;align-items:baseline;gap:14px;margin:0 0 12px;}
+  .seccion-titulo{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:0;}
+  .vertodos{font-size:14px;font-weight:700;color:var(--naranja);text-decoration:none;white-space:nowrap;}
+  .vertodos:hover{text-decoration:underline;}
+  /* La fila se desliza con frenado en cada tarjeta. Sin JS: scroll-snap nativo. */
   .fila{
-    display:flex;gap:12px;overflow-x:auto;padding:2px 2px 10px;
+    display:flex;gap:14px;overflow-x:auto;padding:4px 2px 14px;
     scroll-snap-type:x mandatory;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;
     scrollbar-width:none;overscroll-behavior-x:contain;
   }
   .fila::-webkit-scrollbar{display:none;}
-  .fila .prod{flex:0 0 230px;scroll-snap-align:start;}
-  .volver-cat{
-    background:none;border:none;font-family:inherit;font-size:13px;color:var(--text2);
-    cursor:pointer;padding:0;margin:0 0 12px 2px;display:block;
-  }
+  .fila .prod{flex:0 0 232px;scroll-snap-align:start;}
+  .grilla{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+
+  /* ── Tarjeta de producto ────────────────────────────────── */
   .prod{
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-    padding:16px;display:flex;flex-direction:column;gap:10px;cursor:pointer;
+    padding:14px;display:flex;flex-direction:column;gap:8px;cursor:pointer;position:relative;
+    transition:box-shadow .15s,border-color .15s;
   }
-  .prod:hover{border-color:var(--text3);}
+  .prod:hover{box-shadow:0 8px 24px rgba(14,58,138,.12);border-color:#C9D3E6;}
   .prod-foto{
-    aspect-ratio:1;border-radius:10px;background:var(--bg);
+    aspect-ratio:1;border-radius:8px;background:#fff;position:relative;overflow:hidden;
     display:flex;align-items:center;justify-content:center;
-    font-size:34px;font-weight:700;color:var(--text3);letter-spacing:-.03em;overflow:hidden;
+    font-size:40px;font-weight:800;color:#D5DBE6;letter-spacing:-.03em;
   }
-  /* Fondo blanco y la foto ENTERA, no recortada. Las de fabricante vienen sobre blanco
-     y con aire alrededor: recortarlas para llenar el cuadro le come los bordes al
-     equipo. `contain` respeta la proporcion y el blanco se funde con el recuadro. */
-  .prod-foto.con-foto{background:#FFF;position:relative;}
-  .prod-foto img{width:100%;height:100%;object-fit:contain;padding:6px;}
-  /* Varias fotos: se apilan y se muestra una. Los puntitos van abajo, y en el celular
-     tambien se pasa deslizando. */
-  .prod-foto img{position:absolute;inset:0;opacity:0;transition:opacity .18s;}
-  .prod-foto img.ver{opacity:1;}
-  .prod-foto img:only-of-type{opacity:1;}
-  .puntos{
-    position:absolute;bottom:6px;left:0;right:0;display:flex;justify-content:center;gap:5px;
+  /* La foto ENTERA, no recortada: las de fabricante vienen sobre blanco y con aire. Varias
+     fotos se apilan y se muestra una; los puntitos van abajo. */
+  .prod-foto img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:8px;opacity:0;transition:opacity .18s;}
+  .prod-foto img.ver,.prod-foto img:only-of-type{opacity:1;}
+  .puntos{position:absolute;bottom:6px;left:0;right:0;display:flex;justify-content:center;gap:5px;}
+  .punto{width:6px;height:6px;border-radius:50%;border:none;padding:0;cursor:pointer;background:#CBD3E1;}
+  .punto.on{background:var(--azul);}
+  .sello{
+    position:absolute;top:8px;left:8px;z-index:2;font-size:11px;font-weight:800;letter-spacing:.02em;
+    padding:4px 9px;border-radius:100px;background:var(--naranja);color:#fff;
   }
-  .punto{
-    width:6px;height:6px;border-radius:50%;border:none;padding:0;cursor:pointer;
-    background:#C9C6C1;
+  .prod-nombre{
+    font-size:15px;font-weight:600;line-height:1.3;min-height:2.6em;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
   }
-  .punto.on{background:var(--text);}
-  .prod-nombre{font-size:15px;font-weight:600;line-height:1.3;}
-  .desde{font-size:11px;color:var(--text3);font-family:'DM Sans',sans-serif;font-weight:500;margin-right:3px;}
-  /* Selectores de variante en la ficha: capacidad y color. */
-  .variantes{display:flex;flex-direction:column;gap:8px;}
-  .variantes .t{font-size:12px;color:var(--text2);}
-  .opciones{display:flex;flex-wrap:wrap;gap:6px;}
-  .opc{
-    font-family:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:9px;cursor:pointer;
-    background:var(--surface);border:1px solid var(--border);color:var(--text);
-  }
-  .opc.on{background:var(--acc);border-color:var(--acc);color:var(--acc-fg);}
   .chips{display:flex;flex-wrap:wrap;gap:5px;}
   .chip{
-    font-size:11px;padding:3px 9px;border-radius:100px;
-    background:var(--bg);border:1px solid var(--border);color:var(--text2);white-space:nowrap;
+    font-size:11px;padding:3px 8px;border-radius:100px;white-space:nowrap;
+    background:var(--bg);border:1px solid var(--border);color:var(--text2);
   }
-  .chip.bat{background:#EDF7F2;border-color:#A8DFC3;color:var(--green);font-weight:600;}
-  .chip.pedido{background:#FFF6E5;border-color:#F2D399;color:#8A5A00;font-weight:600;}
-  .precio{
-    font-family:'DM Mono',monospace;font-size:20px;font-weight:500;
-    margin-top:auto;padding-top:6px;
+  .chip.bat{background:var(--verde-suave);border-color:#B5E0C7;color:var(--verde);font-weight:600;}
+  .chip.pedido{background:var(--naranja-suave);border-color:#F8C9A2;color:#A85A12;font-weight:600;}
+  .precio{font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin-top:auto;padding-top:4px;}
+  .desde{font-size:11px;color:var(--text3);font-weight:500;margin-right:4px;letter-spacing:0;}
+  .precio-nota{font-size:11.5px;color:var(--text3);}
+  .prod-acciones{display:flex;gap:6px;margin-top:4px;}
+  .btn-comprar{
+    flex:1;border:none;border-radius:100px;background:var(--azul);color:#fff;
+    font-weight:700;font-size:13.5px;padding:10px 12px;cursor:pointer;
   }
-  .consultar{
-    display:block;text-align:center;text-decoration:none;
-    padding:11px;border-radius:10px;background:var(--acc);color:var(--acc-fg);
-    font-family:inherit;font-size:13.5px;font-weight:600;
+  .btn-comprar:hover{background:var(--azul-hover);}
+  .btn-wa{
+    width:40px;flex:none;border:1px solid var(--border);border-radius:100px;background:#fff;
+    display:flex;align-items:center;justify-content:center;color:var(--wa);text-decoration:none;
+  }
+  .btn-wa:hover{border-color:var(--wa);}
+  .btn-wa svg{width:20px;height:20px;}
+
+  /* ── Página de rubro o categoría: filtros a la izquierda, grilla a la derecha ── */
+  .listado-titulo{font-size:30px;font-weight:700;letter-spacing:-.02em;margin:4px 0 14px;}
+  .listado{display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:start;}
+  .filtros{
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px;position:sticky;top:130px;
+  }
+  .filtros .grupo{margin-bottom:18px;}
+  .filtros .grupo:last-child{margin-bottom:0;}
+  .filtros .t{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin:0 0 6px;}
+  .filtros .f{
+    display:flex;justify-content:space-between;align-items:center;gap:8px;
+    text-decoration:none;color:var(--text);font-size:14px;padding:6px 8px;border-radius:8px;
+  }
+  .filtros .f:hover{background:var(--bg);}
+  .filtros .f.on{background:var(--azul-suave);color:var(--azul);font-weight:700;}
+  .filtros .f .n{color:var(--text3);font-size:12px;font-weight:500;}
+  .filtros select{
+    width:100%;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--border);
+    border-radius:8px;background:#fff;color:var(--text);
   }
 
   .aviso{
     background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
     padding:28px 20px;text-align:center;color:var(--text2);font-size:14px;
   }
-  /* La ficha: se abre al tocar una tarjeta. En el celular ocupa toda la pantalla. */
+
+  /* ── La ficha: se abre al tocar una tarjeta ─────────────── */
   dialog.ficha{
-    border:none;border-radius:var(--radius);padding:0;max-width:820px;width:calc(100% - 32px);
-    background:var(--surface);color:var(--text);box-shadow:0 20px 60px rgba(0,0,0,.25);
+    border:none;border-radius:var(--radius);padding:0;max-width:860px;width:calc(100% - 32px);
+    background:var(--surface);color:var(--text);box-shadow:0 20px 60px rgba(0,0,0,.3);
   }
-  dialog.ficha::backdrop{background:rgba(26,25,23,.55);}
+  dialog.ficha::backdrop{background:rgba(10,30,70,.55);}
   .ficha-cuerpo{display:grid;grid-template-columns:1fr 1fr;gap:0;}
   .ficha-galeria{background:#FFF;padding:18px;display:flex;flex-direction:column;gap:10px;}
   .ficha-grande{
     aspect-ratio:1;display:flex;align-items:center;justify-content:center;
-    font-size:64px;font-weight:700;color:var(--text3);letter-spacing:-.03em;
+    font-size:64px;font-weight:800;color:#D5DBE6;letter-spacing:-.03em;
   }
   .ficha-grande img{width:100%;height:100%;object-fit:contain;}
   .ficha-mini{display:flex;gap:8px;overflow-x:auto;}
@@ -132,36 +207,55 @@
     width:56px;height:56px;object-fit:contain;background:#FFF;border:1px solid var(--border);
     border-radius:8px;cursor:pointer;padding:3px;flex:none;
   }
-  .ficha-mini img.on{border-color:var(--text);}
-  .ficha-datos{padding:22px 22px 20px;display:flex;flex-direction:column;gap:12px;}
-  .ficha-nombre{font-size:21px;font-weight:700;letter-spacing:-.02em;line-height:1.2;}
+  .ficha-mini img.on{border-color:var(--azul);}
+  .ficha-datos{padding:22px 22px 20px;display:flex;flex-direction:column;gap:12px;background:var(--bg);}
+  .ficha-nombre{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.2;padding-right:30px;}
   .ficha-desc{font-size:14px;line-height:1.55;color:var(--text2);white-space:pre-line;}
-  .ficha-precio{font-family:'DM Mono',monospace;font-size:28px;font-weight:500;margin-top:auto;padding-top:8px;}
+  .ficha-precio{font-size:32px;font-weight:800;letter-spacing:-.02em;margin-top:auto;padding-top:8px;}
   .ficha-nota{font-size:12px;color:var(--text3);line-height:1.5;}
   .ficha-acciones{display:flex;flex-direction:column;gap:8px;}
   .ficha-cerrar{
     position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:none;
-    background:var(--bg);color:var(--text);font-size:18px;cursor:pointer;line-height:1;
+    background:#fff;color:var(--text);font-size:18px;cursor:pointer;line-height:1;z-index:2;
+    box-shadow:0 1px 4px rgba(0,0,0,.15);
   }
+  /* Selectores de variante en la ficha: capacidad y color. */
+  .variantes{display:flex;flex-direction:column;gap:8px;}
+  .variantes .t{font-size:12px;color:var(--text2);}
+  .opciones{display:flex;flex-wrap:wrap;gap:6px;}
+  .opc{
+    font-family:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:9px;cursor:pointer;
+    background:#fff;border:1px solid var(--border);color:var(--text);
+  }
+  .opc.on{background:var(--azul);border-color:var(--azul);color:#fff;}
+  .consultar{
+    display:block;text-align:center;text-decoration:none;border:none;cursor:pointer;
+    padding:12px;border-radius:100px;background:var(--azul);color:#fff;
+    font-family:inherit;font-size:14px;font-weight:700;
+  }
+  .consultar:hover{background:var(--azul-hover);}
+  .consultar:disabled{opacity:.6;cursor:default;}
   .btn-sec{
-    display:block;text-align:center;text-decoration:none;padding:11px;border-radius:10px;
-    background:var(--surface);border:1px solid var(--border);color:var(--text);
+    display:block;text-align:center;text-decoration:none;padding:11px;border-radius:100px;
+    background:#fff;border:1px solid var(--border);color:var(--text);
     font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
   }
-  /* El pedido: mismo dialog que la ficha, otra pantalla. */
+  .btn-sec:hover{border-color:var(--azul);color:var(--azul);}
+
+  /* ── El pedido: mismo dialog que la ficha, otra pantalla ── */
   .pedido-form{padding:22px;display:flex;flex-direction:column;gap:14px;max-width:520px;margin:0 auto;}
   .pedido-titulo{font-size:20px;font-weight:700;letter-spacing:-.02em;}
   .pedido-prod{display:flex;gap:12px;align-items:center;padding:12px;background:var(--bg);border-radius:10px;}
   .pedido-prod img{width:64px;height:64px;object-fit:contain;background:#FFF;border-radius:8px;flex:none;}
   .pedido-prod .n{font-weight:600;font-size:14px;line-height:1.3;}
-  .pedido-prod .p{font-family:'DM Mono',monospace;font-size:15px;margin-top:2px;}
+  .pedido-prod .p{font-weight:800;font-size:16px;margin-top:2px;}
   .pedido-sec{font-size:13px;font-weight:700;margin-top:4px;}
   .opcion{
     display:flex;gap:10px;align-items:flex-start;padding:11px 12px;border:1px solid var(--border);
     border-radius:10px;cursor:pointer;background:var(--surface);
   }
-  .opcion:has(input:checked){border-color:var(--text);background:var(--bg);}
-  .opcion input{margin-top:3px;accent-color:var(--text);}
+  .opcion:has(input:checked){border-color:var(--azul);background:var(--azul-suave);}
+  .opcion input{margin-top:3px;accent-color:var(--azul);}
   .opcion .t{font-size:14px;font-weight:600;}
   .opcion .d{font-size:12.5px;color:var(--text2);margin-top:2px;line-height:1.4;}
   .campo{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--text2);}
@@ -169,53 +263,85 @@
     font-family:inherit;font-size:15px;padding:10px 12px;background:var(--surface);
     border:1px solid var(--border);border-radius:10px;color:var(--text);outline:none;width:100%;
   }
-  .campo input:focus,.campo textarea:focus{border-color:var(--acc);}
+  .campo input:focus,.campo textarea:focus{border-color:var(--azul);}
   .pedido-total{display:flex;justify-content:space-between;align-items:baseline;padding-top:6px;border-top:1px solid var(--border);}
-  .pedido-total .m{font-family:'DM Mono',monospace;font-size:24px;font-weight:500;}
+  .pedido-total .m{font-size:24px;font-weight:800;}
   .pedido-total .s{font-size:12px;color:var(--text3);}
   .volver{background:none;border:none;font-family:inherit;font-size:13px;color:var(--text2);cursor:pointer;padding:0;text-align:left;}
 
-  /* Celular: la ficha ocupa la pantalla y tiene que caber de un vistazo. La foto va a una
-     altura fija y chica (la tarjeta ya la mostró grande), el resto compacto, y la ventana
-     con scroll propio para que el pedido largo no quede cortado. */
+  /* ── Pie ────────────────────────────────────────────────── */
+  .pie{background:var(--azul-osc);color:#fff;margin-top:24px;padding:36px 0 26px;}
+  .pie-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:26px;}
+  .pie h4{margin:0 0 10px;font-size:15px;font-weight:800;}
+  .pie a,.pie p{display:block;color:rgba(255,255,255,.85);text-decoration:none;font-size:14px;line-height:1.7;margin:0;}
+  .pie a:hover{color:#fff;text-decoration:underline;}
+  .pie-base{
+    border-top:1px solid rgba(255,255,255,.15);margin-top:26px;padding-top:16px;
+    font-size:12.5px;color:rgba(255,255,255,.6);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  }
+
+  /* ── Pantallas angostas ─────────────────────────────────── */
+  @media(max-width:900px){
+    .listado{grid-template-columns:1fr;gap:14px;}
+    /* Los filtros pasan a una tira de chips que se desliza. */
+    .filtros{position:static;display:flex;gap:14px;overflow-x:auto;padding:10px 12px;scrollbar-width:none;}
+    .filtros::-webkit-scrollbar{display:none;}
+    .filtros .grupo{display:flex;gap:6px;align-items:center;margin:0;flex:none;}
+    .filtros .grupo + .grupo{padding-left:14px;border-left:1px solid var(--border);}
+    .filtros .t{display:none;}
+    .filtros .f{white-space:nowrap;border:1px solid var(--border);border-radius:100px;padding:6px 12px;font-size:13px;}
+    .filtros .f.on{border-color:var(--azul);}
+    .filtros .f .n{display:none;}
+    .filtros select{width:auto;border-radius:100px;padding:6px 10px;font-size:13px;}
+    .listado-titulo{font-size:24px;}
+    .burbujas{justify-content:flex-start;}
+  }
   @media(max-width:640px){
+    .wrap{padding:0 14px;}
+    .cab-fila{flex-wrap:wrap;gap:10px;min-height:0;padding:10px 0;}
+    .cab-menu{
+      display:flex;align-items:center;justify-content:center;width:40px;height:40px;
+      border:none;background:transparent;color:#fff;cursor:pointer;margin-left:-8px;
+    }
+    .marca{font-size:20px;flex:1;}
+    .busca{order:3;flex:1 1 100%;max-width:none;height:40px;}
+    .cab-wa span{display:none;}
+    .cab-nav .cab-fila{padding:0;flex-wrap:nowrap;}
+    .nav-cats{display:none;}
+    .nav-rubros a{font-size:13px;padding:10px 10px;}
+    .menu-cols{grid-template-columns:1fr 1fr;gap:18px;padding:16px 0 20px;}
+    .burbujas{padding-top:16px;}
+    .burbuja{flex-basis:84px;font-size:12px;}
+    .burbuja .c{width:70px;height:70px;font-size:28px;border-width:2px;}
+    .seccion{margin-bottom:20px;}
+    .seccion-titulo{font-size:20px;}
+    .vertodos{font-size:13px;}
+    .fila{gap:10px;}
+    .fila .prod{flex:0 0 calc((100% - 10px) / 2.15);}
+    .grilla{grid-template-columns:repeat(2,1fr);gap:10px;}
+    .prod{padding:10px;gap:6px;}
+    .prod-foto{font-size:26px;}
+    .prod-nombre{font-size:13px;}
+    .prod .chips{display:none;}
+    .precio{font-size:18px;}
+    .precio-nota{font-size:11px;}
+    .btn-comprar{font-size:12.5px;padding:9px 8px;}
+    .btn-wa{width:36px;}
+    .sello{font-size:10px;padding:3px 7px;}
+    /* La ficha ocupa la pantalla y tiene scroll propio para que el pedido largo no quede cortado. */
     dialog.ficha{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0;margin:0;overflow-y:auto;}
     .ficha-cuerpo{grid-template-columns:1fr;}
     .ficha-galeria{padding:12px 12px 8px;gap:8px;}
-    .ficha-grande{aspect-ratio:auto;height:180px;font-size:48px;}
+    .ficha-grande{aspect-ratio:auto;height:200px;font-size:48px;}
     .ficha-mini img{width:44px;height:44px;}
     .ficha-datos{padding:14px 16px 20px;gap:10px;}
-    .ficha-nombre{font-size:18px;padding-right:36px;}
+    .ficha-nombre{font-size:18px;}
     .ficha-desc{font-size:13.5px;}
-    .ficha-precio{font-size:24px;padding-top:4px;}
-    .ficha-cerrar{position:fixed;top:10px;right:10px;z-index:2;box-shadow:0 1px 4px rgba(0,0,0,.15);}
+    .ficha-precio{font-size:26px;padding-top:4px;}
+    .ficha-cerrar{position:fixed;}
     .pedido-form{padding:16px;gap:12px;}
     .pedido-titulo{font-size:18px;padding-right:36px;}
     .pedido-prod img{width:52px;height:52px;}
-  }
-
-  footer{
-    margin-top:34px;padding-top:18px;border-top:1px solid var(--border);
-    font-size:12.5px;color:var(--text3);line-height:1.7;
-  }
-  footer a{color:var(--text2);}
-
-  /* Celular: tres tarjetas por fila, como pidió Juni. Solo foto, nombre y precio; los
-     chips y el botón viven en la ficha, que se abre al tocar. */
-  @media(max-width:520px){
-    .grilla{grid-template-columns:repeat(3,1fr);gap:8px;}
-    .prod{padding:8px;gap:5px;border-radius:12px;}
-    .prod-foto{border-radius:8px;font-size:22px;}
-    .prod-foto img{padding:3px;}
-    .prod-nombre{font-size:11.5px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
-    .prod .chips,.prod .consultar{display:none;}
-    .precio{font-size:13px;padding-top:2px;}
-    .puntos{bottom:3px;gap:3px;}
-    .punto{width:4px;height:4px;}
-    .seccion{margin-bottom:18px;}
-    .seccion-titulo{font-size:15px;}
-    .vertodos{font-size:12px;}
-    .fila{gap:8px;padding-bottom:6px;}
-    .fila .prod{flex:0 0 calc((100% - 16px) / 3);}
-    .marca{font-size:19px;}
+    .pie{padding:26px 0 20px;}
+    .pie-cols{gap:18px;}
   }
