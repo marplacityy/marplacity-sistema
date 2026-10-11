@@ -134,9 +134,15 @@ export function catalogoCandidatos() {
     const entregaBase = p.tipo === 'pedido' ? 'pedido' : 'inmediato';
     const entrega = aj.entrega === 'pedido' || aj.entrega === 'inmediato' ? aj.entrega : entregaBase;
     const tipo = entrega === 'pedido' ? 'pedido' : p.tipo === 'pedido' ? 'equipo' : p.tipo;
+    // El precio propio de la tienda, si Juni lo cambió desde la ficha: pisa al de la
+    // fuente (Stock, Inventario o la lista) solo en la tienda, sin tocar la fuente.
+    const precioPropio = Number(aj.precioUSD) > 0 ? Number(aj.precioUSD) : 0;
     return {
       ...p,
       tipo,
+      precioUSD: precioPropio || p.precioUSD,
+      _precioOrigen: p.precioUSD,
+      _precioPropio: precioPropio,
       // Nuevo o usado. La página agrupa los nuevos de un mismo modelo en una tarjeta
       // con variantes (capacidad y color); los usados van uno por uno, cada unidad es única.
       condicion: esUsado(p) ? 'usado' : 'nuevo',
@@ -493,7 +499,16 @@ export function renderFichaCatalogo() {
     <div class="cat-sec">
       <div class="cat-sec-t">Datos del producto <span class="n">· vienen de ${esc(p._origen)}</span></div>
       <dl class="cat-kv">
-        <dt>Precio</dt><dd style="font-family:'DM Mono',monospace;font-weight:600;">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '— sin precio'}</dd>
+        <dt>Precio en la tienda</dt><dd>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:12px;color:var(--text3);">u$s</span>
+            <input type="number" min="0" step="1" value="${p.precioUSD || ''}" placeholder="${p._precioOrigen ? p._precioOrigen : 'sin precio'}" ${on('change', 'precioCatalogo', p.id, '$value')}
+                   style="width:110px;font-family:'DM Mono',monospace;font-weight:600;font-size:14px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);">
+            ${p._precioPropio
+    ? `<span class="cat-pill" style="color:#854F0B;border-color:#F2D399;background:#FFF6E5;font-size:11.5px;padding:3px 9px;">propio · en ${esc(p._origen)} dice ${p._precioOrigen ? contextoApp.fmtUSD(p._precioOrigen) : '—'}</span>
+               <button class="btn-secondary" style="width:auto;padding:5px 9px;font-size:12px;" ${on('click', 'precioCatalogo', p.id, '')}>Volver al de ${esc(p._origen)}</button>`
+    : `<span style="font-size:11.5px;color:var(--text3);">el de ${esc(p._origen)} · escribí otro para cambiarlo solo en la tienda</span>`}
+          </div></dd>
         ${p.gb ? `<dt>Capacidad</dt><dd>${esc(p.gb)}</dd>` : ''}
         ${p.color ? `<dt>Color</dt><dd>${esc(p.color)}</dd>` : ''}
         ${p.bateria != null ? `<dt>Batería</dt><dd>${p.bateria}%</dd>` : ''}
@@ -1046,6 +1061,16 @@ export function inicializarCatalogo() {
     else { window.goTo('inv'); window.abrirInv(m[2]); }
   };
   window.ajusteCatalogoFicha = (id, campo, valor) => { window.ajusteCatalogo(id, campo, valor); renderFichaCatalogo(); };
+  /** El precio propio de la tienda: un número lo fija, vacío vuelve al de la fuente. */
+  window.precioCatalogo = (id, valor) => {
+    const n = Number(String(valor ?? '').replace(',', '.'));
+    const p = catalogoCandidatos().find(x => x.id === id);
+    // Escribir el mismo precio que la fuente no es un precio propio.
+    const propio = Number.isFinite(n) && n > 0 && !(p && n === p._precioOrigen) ? Math.round(n) : '';
+    window.ajusteCatalogo(id, 'precioUSD', propio);
+    renderFichaCatalogo();
+    showToast(propio ? `Precio en la tienda: ${contextoApp.fmtUSD(propio)} ✓ — publicá para que se vea` : 'Vuelve el precio de la fuente');
+  };
   window.abrirTiendaPublica = () => window.open(contextoApp.LINK_CATALOGO, '_blank');
 
   /** La clave de foto de un producto (modelo + color), la misma que usa la página. */
