@@ -383,88 +383,114 @@ export function renderFichaCatalogo() {
   const tituloSeo = meta.titulo || [p.nombre, p.gb, p.color].filter(Boolean).join(' ');
   const descSeo = meta.seoDescripcion || p.descripcion || `${p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} a ${contextoApp.fmtUSD(p.precioUSD)} en MarplaCity, Mar del Plata.`;
   const urlProd = contextoApp.LINK_CATALOGO + '#p=' + encodeURIComponent(p.id);
-  const campo = 'width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:13.5px;color:var(--text);';
   const ep = estadoPublicacion(p);
+  const [clsPub, txtPub] = ESTADOS_PUB[ep];
+  document.getElementById('cat-panel-sub').textContent = [p._origen, p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : 'sin precio', subCatalogo(p)].filter(Boolean).join(' · ');
   const TEXTO_PUB = {
     tienda: '✅ Está en la tienda, al día.',
-    nuevo: '🔔 Todavía no está en la tienda: entra cuando toques Publicar.',
-    cambio: '🔔 Está en la tienda con datos viejos: tocá Publicar para actualizarla.',
-    sacar: '⚠️ Está en la tienda pero ya no califica: se saca cuando publiques.',
-    sinprecio: 'Sin precio de venta: no se puede publicar. El precio se carga en Stock, Inventario o la lista de precios.',
-    eliminado: 'No está en la tienda. Tocá «Mandar a la tienda» y aparece.',
+    nuevo: '🔔 Marcado para la tienda, pero todavía no publicado: tocá Publicar ahora.',
+    cambio: '🔔 Está en la tienda con datos viejos: tocá Publicar ahora para actualizarla.',
+    sacar: '⚠️ Está en la tienda pero ya no califica: se saca al publicar.',
+    sinprecio: 'Sin precio de venta, no se puede publicar. Cargalo donde está el producto.',
+    eliminado: 'No está en la tienda.',
   };
+  const estiloPill = clsPub === 'no' ? 'color:var(--neg);' : clsPub === 'pend' ? 'color:#854F0B;border-color:#F2D399;background:#FFF6E5;' : '';
+  // La foto en la ficha se lee del repositorio directo: recién subida ya se ve, aunque
+  // GitHub todavía no la haya publicado en la tienda.
+  const srcFoto = a => esc(contextoApp.FOTOS_RAW + encodeURIComponent(a));
+  const chips = [p.gb, p.color, p.bateria != null ? `Batería ${p.bateria}%` : '', p.estado].filter(Boolean);
+
   document.getElementById('cat-panel-cuerpo').innerHTML = `
     <div class="cat-sec">
-      <div class="cat-sec-t">En la tienda</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <span class="cat-pill${ep === 'tienda' ? ' on' : ''}" style="${ESTADOS_PUB[ep][0] === 'no' ? 'color:var(--neg);' : ESTADOS_PUB[ep][0] === 'pend' ? 'color:#854F0B;border-color:#F2D399;background:#FFF6E5;' : ''}">${ESTADOS_PUB[ep][1]}</span>
-        ${ep === 'eliminado' || ep === 'sacar' && p.precioUSD ? `<button class="btn-add" style="width:auto;padding:6px 12px;font-size:12.5px;" ${on('click', 'restaurarEnCatalogo', p.id)}>🌐 Mandar a la tienda</button>` : ''}
-        ${ep === 'nuevo' || ep === 'cambio' ? `<button class="btn-add" style="width:auto;padding:6px 12px;font-size:12.5px;" ${on('click', 'publicarCatalogo')}>🌐 Publicar ahora</button>` : ''}
-        <select ${on('change', 'ajusteCatalogoFicha', p.id, 'entrega', '$value')} style="${campo}width:auto;margin-left:auto;">
-          <option value="inmediato" ${p._entrega === 'inmediato' ? 'selected' : ''}>Entrega inmediata</option>
-          <option value="pedido" ${p._entrega === 'pedido' ? 'selected' : ''}>A pedido</option>
-        </select>
+      <div class="cat-sec-t">Así se ve en la tienda</div>
+      <div class="cat-prev">
+        <div class="cat-prev-card">
+          <div class="foto">${p._entrega === 'pedido' ? '<span class="sello">A pedido</span>' : ''}${archivos.length ? `<img src="${srcFoto(archivos[0])}" alt="" ${on('error', 'fotoCatalogoPublicada', '$this', archivos[0])}>` : esc(inicialCatalogo(p))}</div>
+          <div class="nombre">${esc(meta.titulo || p.nombre)}</div>
+          <div class="chips">${chips.map(c => `<span class="chip">${esc(c)}</span>`).join('')}</div>
+          <div class="precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</div>
+          <div class="nota">${p._entrega === 'pedido' ? 'Se trae a pedido' : 'Disponible en el local'}</div>
+          <div class="btn">Comprar</div>
+        </div>
+        <div class="cat-prev-datos">
+          <div><span class="cat-pill${ep === 'tienda' ? ' on' : ''}" style="${estiloPill}">${txtPub}</span></div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.45;">${TEXTO_PUB[ep]}</div>
+          <div class="acciones">
+            ${ep === 'eliminado' || ep === 'sacar' && p.precioUSD ? `<button class="btn-add" ${on('click', 'restaurarEnCatalogo', p.id)}>🌐 Mandar a la tienda</button>` : ''}
+            ${ep === 'nuevo' || ep === 'cambio' ? `<button class="btn-add" ${on('click', 'publicarCatalogo')}>🌐 Publicar ahora</button>` : ''}
+            ${p._sale ? `<button class="btn-danger" ${on('click', 'eliminarDelCatalogo', p.id)}>Sacar de la tienda</button>` : ''}
+            ${EN_TIENDA.includes(ep) ? `<a class="btn-secondary" style="text-decoration:none;text-align:center;" href="${esc(urlProd)}" target="_blank" rel="noopener">↗ Ver en la tienda</a>` : ''}
+            ${ep === 'sinprecio' && /^(stock|inv)_/.test(p.id) ? `<button class="btn-secondary" ${on('click', 'editarOrigenCatalogo', p.id)}>✏️ Cargar el precio</button>` : ''}
+          </div>
+        </div>
       </div>
-      <div class="${ep === 'tienda' ? 'proveedor-alerta' : 'proveedor-alerta alerta-atencion'}" style="margin-top:8px;">${TEXTO_PUB[ep]}</div>
     </div>
 
     <div class="cat-sec">
-      <div class="cat-sec-t">Título y descripción</div>
-      <div class="field"><label>Título en la tienda</label>
+      <div class="cat-sec-t">Fotos <span class="n">· ${archivos.length ? archivos.length + ' foto' + (archivos.length === 1 ? '' : 's') + ' · la primera es la principal' : 'sin foto: en la tienda sale el recuadro con el modelo'}</span></div>
+      ${archivos.length ? `<div class="cat-imgs">${archivos.map((a, k) => {
+    const c = contextoApp.FOTOS_CLAS[a] || {};
+    return `
+        <div class="cat-img${k === 0 ? ' principal' : ''}">
+          <img src="${srcFoto(a)}" loading="lazy" alt="" ${on('error', 'fotoCatalogoPublicada', '$this', a)}>
+          ${k === 0 ? '<span class="tag">Principal</span>' : `<button class="estrella" title="Que sea la primera foto" ${on('click', 'hacerPrincipalFoto', a, clave)}>★ Hacer principal</button>`}
+          <button class="quitar" title="Sacar esta foto del producto" ${on('click', 'quitarFotoCatalogo', a)}>✕</button>
+          <select ${on('change', 'vistaFoto', a, '$value')} title="Qué muestra la foto">
+            <option value="">¿qué muestra?</option>
+            ${Object.entries(contextoApp.VISTAS).map(([v, t]) => `<option value="${esc(v)}" ${v === c.vista ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
+        </div>`;
+  }).join('')}</div>` : ''}
+      <div class="cat-drop" id="cat-drop" ${on('click', 'subirFotoCatalogo', p.id)}>
+        <b>📷 Subir fotos</b>Tocá acá para elegirlas en tu PC o celular, o arrastralas hasta este recuadro. JPG, PNG o WebP; se achican solas.
+      </div>
+      <div class="cat-foto-acciones">
+        <button class="btn-secondary" id="btn-cat-amazon-uno" ${on('click', 'fotoAmazonProducto', p.id)}>🛒 Buscar una foto en Amazon</button>
+        <span style="font-size:11.5px;color:var(--text3);align-self:center;">En la tienda aparecen en unos minutos. Archivo: <code>${esc(clave)}.jpg</code></span>
+      </div>
+    </div>
+
+    <div class="cat-sec">
+      <div class="cat-sec-t">Textos <span class="n">· se guardan solos al salir del campo</span></div>
+      <div class="field"><label>Título en la tienda <span style="color:var(--text3);font-weight:400;">(vacío = el nombre del producto)</span></label>
         <input type="text" value="${esc(meta.titulo || '')}" placeholder="${esc(tituloSeo)}" ${on('change', 'metaCatalogo', p.id, 'titulo', '$value')}></div>
       <div class="field"><label>Descripción</label>
         <textarea rows="4" placeholder="Lo que quieras contar: estado, qué incluye, garantía…" ${on('change', 'notaCatalogo', p.id, '$value')}>${esc(p.descripcion)}</textarea></div>
     </div>
 
     <div class="cat-sec">
-      <div class="cat-sec-t">Imágenes <span style="font-weight:400;text-transform:none;letter-spacing:0;">· ${archivos.length ? archivos.length + ' foto' + (archivos.length === 1 ? '' : 's') : 'sin foto'}</span></div>
-      ${archivos.length ? `<div class="cat-imgs">${archivos.map((a, k) => {
-    const c = contextoApp.FOTOS_CLAS[a] || {};
-    return `
-        <div class="cat-img${k === 0 ? ' principal' : ''}">
-          <img src="${esc(contextoApp.FOTOS_BASE + a)}" loading="lazy" alt="" ${on('error', 'fotoCatalogoCruda', '$this', a)}>
-          ${k === 0 ? '<span class="tag">Principal</span>' : ''}
-          <button class="quitar" title="Sacar esta foto del producto" ${on('click', 'quitarFotoCatalogo', a)}>✕</button>
-          <select ${on('change', 'vistaFoto', a, '$value')} title="Qué muestra (la de frente y dorso va primera)">
-            <option value="">vista ?</option>
-            ${Object.entries(contextoApp.VISTAS).map(([v, t]) => `<option value="${esc(v)}" ${v === c.vista ? 'selected' : ''}>${t}</option>`).join('')}
-          </select>
-        </div>`;
-  }).join('')}</div>` : '<div class="proveedor-alerta alerta-atencion">Sin foto: en la tienda sale el recuadro con el modelo. Subí una desde tu PC o celular, o buscala en Amazon.</div>'}
-      <div class="cat-foto-acciones">
-        <button class="btn-secondary" id="btn-cat-subir" ${on('click', 'subirFotoCatalogo', p.id)}>📷 Subir foto</button>
-        <button class="btn-secondary" id="btn-cat-amazon-uno" ${on('click', 'fotoAmazonProducto', p.id)}>🛒 Buscar en Amazon</button>
-      </div>
-      <div style="font-size:11.5px;color:var(--text3);margin-top:8px;">La principal es la de "frente y dorso"; después la de frente. Las fotos se guardan en el repositorio: en la tienda aparecen en unos minutos, cuando GitHub las publica. Archivo: <code>${esc(clave)}.jpg</code>.</div>
-    </div>
-
-    <div class="cat-sec">
       <div class="cat-sec-t">Organización</div>
-      <div class="field"><label>Categoría</label>
-        <select ${on('change', 'ajusteCatalogoFicha', p.id, 'categoria', '$value')}>
-          ${ordenCategorias().map(c => `<option value="${esc(c)}" ${c === p.categoria ? 'selected' : ''}>${esc(c)}${c === p._catAuto ? ' (automática)' : ''}</option>`).join('')}
-        </select></div>
+      <div class="cat-dos">
+        <div class="field"><label>Categoría</label>
+          <select ${on('change', 'ajusteCatalogoFicha', p.id, 'categoria', '$value')}>
+            ${ordenCategorias().map(c => `<option value="${esc(c)}" ${c === p.categoria ? 'selected' : ''}>${esc(c)}${c === p._catAuto ? ' (automática)' : ''}</option>`).join('')}
+          </select></div>
+        <div class="field"><label>Entrega</label>
+          <select ${on('change', 'ajusteCatalogoFicha', p.id, 'entrega', '$value')}>
+            <option value="inmediato" ${p._entrega === 'inmediato' ? 'selected' : ''}>Inmediata · está en el local</option>
+            <option value="pedido" ${p._entrega === 'pedido' ? 'selected' : ''}>A pedido · se trae</option>
+          </select></div>
+      </div>
     </div>
 
     <div class="cat-sec">
-      <div class="cat-sec-t">Datos del producto</div>
+      <div class="cat-sec-t">Datos del producto <span class="n">· vienen de ${esc(p._origen)}</span></div>
       <dl class="cat-kv">
-        <dt>Precio</dt><dd style="font-family:'DM Mono',monospace;font-weight:600;">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</dd>
+        <dt>Precio</dt><dd style="font-family:'DM Mono',monospace;font-weight:600;">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '— sin precio'}</dd>
         ${p.gb ? `<dt>Capacidad</dt><dd>${esc(p.gb)}</dd>` : ''}
         ${p.color ? `<dt>Color</dt><dd>${esc(p.color)}</dd>` : ''}
         ${p.bateria != null ? `<dt>Batería</dt><dd>${p.bateria}%</dd>` : ''}
         ${p.estado ? `<dt>Estado</dt><dd>${esc(p.estado)}</dd>` : ''}
         <dt>Condición</dt><dd>${p.condicion === 'usado' ? 'Usado' : 'Nuevo'}</dd>
-        <dt>Origen</dt><dd>${esc(p._origen)}</dd>
-        <dt>Id</dt><dd style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text3);">${esc(p.id)}</dd>
       </dl>
-      <div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Precio, capacidad, color y batería se editan donde está cargado el producto (Stock, Inventario o la lista de precios).</div>
-      ${/^(stock|inv)_/.test(p.id) ? `<button class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;margin-top:8px;" ${on('click', 'editarOrigenCatalogo', p.id)}>✏️ ${p.precioUSD ? 'Editar' : 'Cargar el precio'} en ${p.id.startsWith('stock_') ? 'Stock equipos' : 'Inventario'}</button>` : ''}
+      ${/^(stock|inv)_/.test(p.id)
+    ? `<button class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;margin-top:10px;" ${on('click', 'editarOrigenCatalogo', p.id)}>✏️ ${p.precioUSD ? 'Editar' : 'Cargar el precio'} en ${p.id.startsWith('stock_') ? 'Stock equipos' : 'Inventario'}</button>`
+    : `<div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Precio y datos se editan en ${p.id.startsWith('consig_') ? 'Consignación' : 'la lista de precios (Base de conocimiento)'}.</div>`}
     </div>
 
-    <div class="cat-sec">
-      <div class="cat-sec-t">SEO y metadatos</div>
-      <div class="field"><label>Descripción para buscadores (meta description)</label>
+    <details class="cat-sec">
+      <summary><div class="cat-sec-t">SEO: cómo sale en Google</div></summary>
+      <div class="field"><label>Descripción para buscadores <span style="color:var(--text3);font-weight:400;">(hasta 160 letras)</span></label>
         <textarea rows="2" maxlength="160" placeholder="${esc(descSeo)}" ${on('change', 'metaCatalogo', p.id, 'seoDescripcion', '$value')}>${esc(meta.seoDescripcion || '')}</textarea></div>
       <div class="field"><label>Palabras clave <span style="color:var(--text3);font-weight:400;">(separadas por coma)</span></label>
         <input type="text" value="${esc(meta.keywords || '')}" placeholder="iphone 13, usado, mar del plata" ${on('change', 'metaCatalogo', p.id, 'keywords', '$value')}></div>
@@ -473,16 +499,22 @@ export function renderFichaCatalogo() {
         <div class="u">${esc(urlProd)}</div>
         <div class="d">${esc(descSeo.slice(0, 160))}</div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:10px;">
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
         <button class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;" ${on('click', 'copiarLink', urlProd)}>📋 Copiar link del producto</button>
-        <a class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;text-decoration:none;text-align:center;" href="${esc(urlProd)}" target="_blank" rel="noopener">↗ Ver en la tienda</a>
+        <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);align-self:center;">${esc(p.id)}</span>
       </div>
-    </div>
+    </details>`;
 
-    ${p._sale ? `<div class="cat-sec">
-      <button class="btn-danger" ${on('click', 'eliminarDelCatalogo', p.id)}>Sacar de la tienda</button>
-      <div style="font-size:11.5px;color:var(--text3);margin-top:6px;">Deja de verse en la tienda. Sigue en ${esc(p._origen)} y lo podés volver a mandar cuando quieras.</div>
-    </div>` : ''}`;
+  // Arrastrar fotos al recuadro. Son listeners del elemento, no atributos: la CSP los permite.
+  const zona = document.getElementById('cat-drop');
+  zona.addEventListener('dragover', e => { e.preventDefault(); zona.classList.add('sobre'); });
+  zona.addEventListener('dragleave', () => zona.classList.remove('sobre'));
+  zona.addEventListener('drop', e => {
+    e.preventDefault();
+    zona.classList.remove('sobre');
+    const archivos = [...(e.dataTransfer?.files || [])].filter(f => /^image\//.test(f.type));
+    if (archivos.length) window.subirFotosDe(p.id, archivos);
+  });
 }
 
 /**
@@ -573,9 +605,23 @@ export async function fotoParaIA(archivo) {
   return imagenJpegBase64(await r.blob(), 1024);
 }
 
+/** Una imagen decodificada, respetando la orientación de la cámara. Si el navegador no puede (HEIC), avisa claro. */
+async function decodificarImagen(blob) {
+  try {
+    return await createImageBitmap(blob, { imageOrientation: 'from-image' });
+  } catch {
+    // Algunos navegadores no aceptan la opción; otros no decodifican el formato.
+    try {
+      return await createImageBitmap(blob);
+    } catch {
+      throw new Error(`no pude leer la imagen${blob.name ? ' ' + blob.name : ''}. Si es HEIC (foto de iPhone), convertila a JPG o PNG`);
+    }
+  }
+}
+
 /** Una imagen achicada a `max` px de lado y pasada a JPEG, en base64 sin el prefijo. */
 export async function imagenJpegBase64(blob, max) {
-  const bmp = await createImageBitmap(blob);
+  const bmp = await decodificarImagen(blob);
   const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * k);
@@ -918,7 +964,7 @@ export function inicializarCatalogo() {
       catalogoNotas: notas
     }), {
       merge: true
-    }).catch(() => {});
+    }).then(() => showToast('Guardado ✓')).catch(e => showToast('No se guardó: ' + e.message, true));
   };
 
   // Qué pestaña del catálogo está abierta: productos (las fuentes), tienda, categorias, fotos.
@@ -994,7 +1040,7 @@ export function inicializarCatalogo() {
       catalogoMeta: meta
     }), {
       merge: true
-    }).catch(() => {});
+    }).then(() => showToast('Guardado ✓')).catch(e => showToast('No se guardó: ' + e.message, true));
     if (campo === 'titulo' || campo === 'seoDescripcion') renderFichaCatalogo(); // para la vista previa
   };
   contextoApp.VISTAS = {
@@ -1033,52 +1079,89 @@ export function inicializarCatalogo() {
     img.removeAttribute('data-error');
     img.src = contextoApp.FOTOS_RAW + encodeURIComponent(archivo);
   };
+  /** Al revés: la ficha lee del repositorio y, si falla, prueba con la copia publicada. */
+  window.fotoCatalogoPublicada = (img, archivo) => {
+    img.removeAttribute('data-error');
+    img.src = contextoApp.FOTOS_BASE + archivo;
+  };
 
-  /** Elegir una o varias imágenes de la PC o el celular y subirlas al producto. */
+  /**
+   * Elegir una o varias imágenes de la PC o el celular. El input va al documento antes
+   * del click: suelto, en Safari del iPhone no abre el selector.
+   */
   window.subirFotoCatalogo = function (id) {
     if (!requiereDuenoDelLocal()) return;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
     input.multiple = true;
-    input.addEventListener('change', async () => {
+    input.style.display = 'none';
+    input.addEventListener('change', () => {
       const elegidas = [...input.files];
-      const p = catalogoCandidatos().find(x => x.id === id);
-      if (!elegidas.length || !p) return;
-      const btn = document.getElementById('btn-cat-subir');
-      if (btn) btn.disabled = true;
-      const clave = contextoApp.claveFotoDe(p);
-      const conocidos = archivosConocidos();
-      let n = (contextoApp.FOTOS[clave] || []).length;
-      let subidas = 0;
-      try {
-        for (const f of elegidas) {
-          if (btn) btn.textContent = `Subiendo ${subidas + 1} de ${elegidas.length}…`;
-          const datos = await imagenJpegBase64(f, 1600);
-          // El nombre es el del producto: iphone-15-black.jpg, y -2, -3 para las siguientes.
-          let archivo;
-          do { n++; archivo = `${clave}${n > 1 ? '-' + n : ''}.jpg`; } while (conocidos.has(archivo));
-          const r = await fetch(contextoApp.TIENDA_URL + '/fotos/subir', {
-            method: 'POST',
-            headers: await workerHeaders(),
-            body: JSON.stringify({ archivo, datos })
-          });
-          const d = await r.json().catch(() => ({}));
-          if (!r.ok) throw new Error(r.status === 404 ? 'el Worker tienda todavía no tiene la subida de fotos (falta el deploy)' : d.error || `el Worker respondió ${r.status}`);
-          conocidos.add(archivo);
-          contextoApp.FOTOS_CLAS = { ...contextoApp.FOTOS_CLAS, [archivo]: { clave, vista: n === 1 ? 'frente' : '', manual: true } };
-          subidas++;
-        }
-        await guardarFotos([...conocidos]);
-        showToast(`${subidas} foto${subidas === 1 ? '' : 's'} subida${subidas === 1 ? '' : 's'} ✓ — en la tienda aparece en unos minutos`);
-      } catch (e) {
-        if (subidas) await guardarFotos([...conocidos]).catch(() => {});
-        showToast('No pude subir: ' + e.message, true);
-        setSyncDot('error');
-      }
-      renderFichaCatalogo();
+      input.remove();
+      if (elegidas.length) subirFotosDe(id, elegidas);
     });
+    document.body.appendChild(input);
     input.click();
+  };
+
+  /** Sube las imágenes al producto, una por una y con el progreso a la vista. */
+  window.subirFotosDe = async function (id, elegidas) {
+    if (!requiereDuenoDelLocal()) return;
+    const p = catalogoCandidatos().find(x => x.id === id);
+    if (!p) return;
+    const zona = document.getElementById('cat-drop');
+    if (zona?.classList.contains('ocupado')) return;   // ya hay una subida andando
+    const progreso = texto => { if (zona) { zona.classList.add('ocupado'); zona.innerHTML = `<b>${esc(texto)}</b>no cierres la ficha`; } };
+    const clave = contextoApp.claveFotoDe(p);
+    if (!clave) { showToast('Este producto no tiene un nombre con el que guardar la foto', true); return; }
+    const conocidos = archivosConocidos();
+    let n = (contextoApp.FOTOS[clave] || []).length;
+    let subidas = 0;
+    try {
+      for (const f of elegidas) {
+        progreso(`Subiendo ${subidas + 1} de ${elegidas.length}…`);
+        const datos = await imagenJpegBase64(f, 1600);
+        // El nombre es el del producto: iphone-15-black.jpg, y -2, -3 para las siguientes.
+        let archivo;
+        do { n++; archivo = `${clave}${n > 1 ? '-' + n : ''}.jpg`; } while (conocidos.has(archivo));
+        const r = await fetch(contextoApp.TIENDA_URL + '/fotos/subir', {
+          method: 'POST',
+          headers: await workerHeaders(),
+          body: JSON.stringify({ archivo, datos })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          console.error('subida de foto', archivo, r.status, d);
+          throw new Error(r.status === 404 ? 'el servicio tienda no tiene la subida de fotos (falta el deploy)' : r.status === 401 ? 'no autorizado: entrá con la cuenta del dueño del local' : r.status === 429 ? 'demasiadas subidas seguidas, esperá un minuto' : r.status === 413 ? 'la imagen es demasiado grande' : d.error || `el servicio respondió ${r.status}`);
+        }
+        conocidos.add(archivo);
+        contextoApp.FOTOS_CLAS = { ...contextoApp.FOTOS_CLAS, [archivo]: { clave, vista: n === 1 ? 'frente' : '', manual: true } };
+        subidas++;
+      }
+      await guardarFotos([...conocidos]);
+      showToast(`${subidas} foto${subidas === 1 ? '' : 's'} subida${subidas === 1 ? '' : 's'} ✓ — en la tienda aparece en unos minutos`);
+    } catch (e) {
+      if (subidas) await guardarFotos([...conocidos]).catch(() => {});
+      showToast('No pude subir: ' + e.message, true);
+      setSyncDot('error');
+    }
+    renderFichaCatalogo();
+  };
+
+  /** Que una foto pase a ser la primera: es la única "frente y dorso"; la que lo era pasa a "frente". */
+  window.hacerPrincipalFoto = async function (archivo, clave) {
+    if (!requiereDuenoDelLocal()) return;
+    const clas = { ...contextoApp.FOTOS_CLAS };
+    for (const a of contextoApp.FOTOS[clave] || []) {
+      const c = clas[a] || {};
+      if (a !== archivo && c.vista === 'ambos') clas[a] = { ...c, clave: 'clave' in c ? c.clave : clave, vista: 'frente', manual: true };
+    }
+    const c = clas[archivo] || {};
+    clas[archivo] = { ...c, clave: 'clave' in c ? c.clave : clave, vista: 'ambos', manual: true };
+    contextoApp.FOTOS_CLAS = clas;
+    await guardarFotos([...archivosConocidos()]);
+    renderFichaCatalogo();
   };
 
   /** Buscar en Amazon la foto de este producto solo. Una búsqueda paga por click. */

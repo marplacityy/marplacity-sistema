@@ -668,7 +668,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.10.11-H · Node.js</div></div>
+    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.10.11-I · Node.js</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>
@@ -844,8 +844,11 @@
     <div class="cat-panel-fondo" id="cat-panel-fondo" data-click="cerrarFichaCatalogo"></div>
     <div class="cat-panel" id="cat-panel">
       <div class="cat-panel-cab">
-        <h2 id="cat-panel-titulo">Producto</h2>
-        <button class="btn-secondary" style="width:auto;padding:6px 10px;" data-click="cerrarFichaCatalogo">✕</button>
+        <div style="flex:1;min-width:0;">
+          <h2 id="cat-panel-titulo">Producto</h2>
+          <div class="cat-panel-sub" id="cat-panel-sub"></div>
+        </div>
+        <button class="btn-secondary" style="width:auto;padding:6px 10px;" data-click="cerrarFichaCatalogo" aria-label="Cerrar">✕</button>
       </div>
       <div class="cat-panel-cuerpo" id="cat-panel-cuerpo"></div>
       <div class="cat-panel-pie">
