@@ -57,19 +57,21 @@ function seccionHTML(p) {
     </div>
     <div class="card">
       <div class="card-title">Pegar la lista</div>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Abrí la lista del proveedor, tocá dentro de la tabla y hacé <b>Ctrl+A</b> (o <b>Cmd+A</b>): copia todo lo visible. Volvé acá y pegá con <b>Ctrl+V</b>. No hace falta que borres nada ni que la ordenes.</p>
-      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">Los productos <b>sin stock</b> se descartan solos: no se puede ofrecer lo que el proveedor no tiene.</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Pegá la lista como te llegue y tocá <b>✨ Interpretar con IA</b>: la lee en cualquier formato, toma los precios como tu costo y les suma el margen. Si es la tabla de la app del proveedor (tocás dentro de la tabla, <b>Ctrl+A</b>, <b>Ctrl+V</b> acá), se lee sola al pegar, sin IA.</p>
+      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;">En la tabla del proveedor, los productos <b>sin stock</b> se descartan solos.</p>
       <div class="field"><textarea id="kb-${id}-texto" style="height:200px;font-family:'DM Mono',monospace;font-size:12.5px;" placeholder="Pegá acá con Ctrl+V…" ${on('input', 'procesarListaProv', p.id)}></textarea></div>
       <div class="field" style="max-width:220px;display:none;"><select id="kb-${id}-moneda"><option value="USD">USD u$s</option></select></div>
       <div id="kb-${id}-resumen"></div>
+      <button class="btn-save" id="btn-kb-${id}-interpretar" style="margin-top:10px;" ${on('click', 'interpretarListaKb', p.id)}>✨ Interpretar con IA</button>
     </div>
     <div id="kb-${id}-preview" style="display:none;">
       <div class="card">
         <div class="card-title">Vista previa — confirmá antes de guardar</div>
         <div id="kb-${id}-preview-items"></div>
-        <div style="display:flex;gap:8px;margin-top:1rem;">
+        <div style="display:flex;gap:8px;margin-top:1rem;flex-wrap:wrap;">
           <button class="btn-secondary" ${on('click', 'cancelarListaKb', p.id)}>Cancelar</button>
-          <button class="btn-save" id="btn-kb-${id}-guardar" style="width:auto;padding:11px 18px;" ${on('click', 'guardarListaKb', p.id, 'reemplazar')}>Reemplazar la lista de ${esc(p.nombre)}</button>
+          <button class="btn-save" id="btn-kb-${id}-guardar" style="width:auto;padding:11px 18px;" ${on('click', 'guardarListaKb', p.id, 'agregar')}>＋ Agregar a la lista</button>
+          <button class="btn-pagar-outline" id="btn-kb-${id}-reemplazar" ${on('click', 'guardarListaKb', p.id, 'reemplazar')}>Reemplazar toda la lista</button>
         </div>
       </div>
     </div>` : `
