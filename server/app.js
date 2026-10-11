@@ -64,7 +64,9 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
       if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) return res.sendStatus(403);
     }
     const origen = req.get('origin');
-    // Las fotos las sube también el sistema en GitHub Pages: solo esas rutas aceptan ese origen.
+    // Las fotos son públicas: la tienda en GitHub Pages y el bot las piden desde otro sitio.
+    if (req.method === 'GET' && req.path.startsWith('/fotos/')) return next();
+    // Y las sube también el sistema en GitHub Pages: solo esas rutas aceptan ese origen.
     if (req.path.startsWith('/api/fotos') && origen && origenesDeFotos.includes(origen.replace(/\/$/, ''))) return next();
     if (req.get('sec-fetch-site') === 'cross-site') return res.sendStatus(403);
     if (origen && origen !== `${req.protocol}://${req.get('host')}`) {

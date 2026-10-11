@@ -6,7 +6,8 @@ const esquema = z.object({
   PORT: z.coerce.number().int().min(0).max(65535).default(3000),
   API_LIMITE_POR_MINUTO: z.coerce.number().int().min(1).max(10000).default(120),
   LOG_LEVEL: z.enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug']).default('info'),
-  PUBLIC_BASE_URL: z.url().default('https://marplacityy.github.io/marplacity-sistema/'),
+  // La dirección pública del sistema y la tienda: los links que se comparten con clientes.
+  PUBLIC_BASE_URL: z.url().default('https://contify.tech/'),
   SERVICIO_TIENDA: z.enum(['remoto', 'local']).default('remoto'),
   SERVICIO_INSTAGRAM: z.enum(['remoto', 'local']).default('remoto'),
   SERVICIO_FACTURADOR: z.enum(['remoto', 'local']).default('remoto'),

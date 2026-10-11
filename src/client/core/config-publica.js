@@ -6,7 +6,9 @@ export async function cargarConfiguracion() {
   if (import.meta.env.MODE === 'pages') {
     // GitHub Pages sirve la interfaz compilada; las APIs siguen en sus Workers.
     configuracion = {
-      basePublica: new URL(import.meta.env.BASE_URL, location.origin).href,
+      // Los links públicos (tienda, documentos) van siempre al servidor del local, también
+      // desde esta copia: es la dirección que se comparte con los clientes.
+      basePublica: 'https://contify.tech/',
       // Las fotos viven en el servidor del local (Hostinger), también para esta copia.
       fotosBase: 'https://contify.tech/fotos/',
       api: {
