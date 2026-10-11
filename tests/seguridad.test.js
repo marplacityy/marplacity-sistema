@@ -56,7 +56,8 @@ test('las fotos bloquean SSRF, credenciales, puertos y redirecciones; limitan ta
   let solicitudes = 0;
   t.mock.method(globalThis, 'fetch', async (_url, opciones) => {
     solicitudes++;
-    assert.equal(opciones.redirect, 'error');
+    // Sin seguir redirecciones (Cloudflare solo acepta follow o manual; manual + status corta igual).
+    assert.equal(opciones.redirect, 'manual');
     return new Response(new Uint8Array(8 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } });
   });
   for (const mala of ['http://127.0.0.1/','https://169.254.169.254/','https://m.media-amazon.com.evil.invalid/a','https://m.media-amazon.com@localhost/a','https://m.media-amazon.com:8443/a','file:///etc/passwd']) {

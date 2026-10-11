@@ -110,8 +110,10 @@ export async function buscarEnAmazon(env, q) {
 /** Baja una imagen. Devuelve {bytes, ext} o null si no es una imagen. */
 export async function bajarImagen(url) {
   if (!urlImagenPermitida(url)) return null;
-  const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, redirect: 'error', signal: AbortSignal.timeout(15_000) });
-  if (!r.ok) return null;
+  // Sin seguir redirecciones: una imagen de Amazon no debería redirigir a otro host, y
+  // Cloudflare no acepta redirect "error" (solo "follow" o "manual"), así que se corta a mano.
+  const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, redirect: 'manual', signal: AbortSignal.timeout(15_000) });
+  if (!r.ok) return null;   // un 3xx también es "no ok"
   const tipo = r.headers.get('content-type') || '';
   const ext = tipo.includes('png') ? 'png' : tipo.includes('webp') ? 'webp' : tipo.includes('jpeg') || tipo.includes('jpg') ? 'jpg' : null;
   if (!ext) return null;
