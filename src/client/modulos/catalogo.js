@@ -1099,7 +1099,7 @@ export function inicializarCatalogo() {
     input.addEventListener('change', () => {
       const elegidas = [...input.files];
       input.remove();
-      if (elegidas.length) subirFotosDe(id, elegidas);
+      if (elegidas.length) window.subirFotosDe(id, elegidas);
     });
     document.body.appendChild(input);
     input.click();
