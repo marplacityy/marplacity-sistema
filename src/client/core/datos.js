@@ -427,6 +427,7 @@ export async function init() {
     }, snapErr);
     onSnapshot(contextoApp.catalogoDoc, snap => {
       contextoApp.catPublicado = snap.exists() ? snap.data() : null;
+      contextoApp.catPublicadoCargado = true;   // ya se sabe qué hay en la tienda (aunque sea nada)
       contextoApp.puedeAdministrarLocal = contextoApp.catPublicado?.userId === contextoApp.uid;
       if (contextoApp.puedeAdministrarLocal && !cancelarConfiguracionLocal.length) suscribirConfiguracionLocal();
       if (!contextoApp.puedeAdministrarLocal) {

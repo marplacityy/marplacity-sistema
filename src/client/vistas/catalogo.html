@@ -35,7 +35,7 @@
             <option value="pedido">A pedido</option>
             <option value="sinfoto">Sin foto</option>
             <option value="sinprecio">Sin precio</option>
-            <option value="fuera">Eliminados del catálogo</option>
+            <option value="fuera">No publicados</option>
           </select>
           <button class="cat-pill" id="cat-modo-btn" data-click="modoCatalogo" title="Ver como tarjetas o como lista">☰ Lista</button>
           <button class="cat-pill" id="cat-sel-todos-btn" data-click="seleccionarTodoCatalogo">Seleccionar todo</button>
@@ -44,10 +44,10 @@
         <div id="cat-bulk" class="cat-bulk" style="display:none;">
           <b id="cat-bulk-n" style="font-size:13px;"></b>
           <select id="cat-bulk-cat" data-change="moverSeleccionACategoria" data-args='["$this"]'><option value="">Mover a categoría…</option></select>
+          <button class="btn-add" style="width:auto;padding:6px 12px;font-size:12.5px;" data-click="accionCatalogo" data-args='["sale", true]'>🌐 Mandar a la tienda</button>
+          <button class="btn-danger" data-click="accionCatalogo" data-args='["sale", false]'>Sacar de la tienda</button>
           <button class="btn-secondary" data-click="accionCatalogo" data-args='["entrega", "inmediato"]'>Inmediato</button>
           <button class="btn-secondary" data-click="accionCatalogo" data-args='["entrega", "pedido"]'>A pedido</button>
-          <button class="btn-danger" data-click="accionCatalogo" data-args='["sale", false]'>Eliminar del catálogo</button>
-          <button class="btn-secondary" data-click="accionCatalogo" data-args='["sale", true]'>Restaurar</button>
           <button class="btn-secondary" style="margin-left:auto;" data-click="seleccionarCatalogo" data-args='[null, false]'>✕</button>
         </div>
         <div id="cat-grid" class="cat-grid"></div>

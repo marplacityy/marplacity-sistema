@@ -95,7 +95,10 @@ export function renderCategoriasCatalogo() {
  * vez, con el precio de la primera (Mar del Plata, CABA, proveedor, en ese orden).
  */
 export function catalogoCandidatos() {
-  const fuera = new Set(contextoApp.cfg.catalogoExcluidos || []);
+  // A la tienda va solo lo que Juni mandó (cfg.catalogoIncluidos): elegir en Fuentes y
+  // tocar "Mandar a la tienda". Antes era al revés, todo con precio salvo lo excluido;
+  // `asegurarIncluidos` convierte lo que estaba publicado al pasar a este esquema.
+  const incluidos = new Set(contextoApp.cfg.catalogoIncluidos || []);
   const notas = contextoApp.cfg.catalogoNotas || {};
   const items = [...contextoApp.stockItems.filter(p => p.status === 'en_stock').map(p => ({
     ...contextoApp.productoPublico(p, 'stock'),
@@ -152,8 +155,34 @@ export function catalogoCandidatos() {
       _entrega: entrega,
       _entregaBase: entregaBase,
       _catAuto: categoriaDe(p),
-      _sale: p.precioUSD > 0 && !fuera.has(p.id)
+      _sale: p.precioUSD > 0 && incluidos.has(p.id)
     };
+  });
+}
+
+/**
+ * La primera vez con el esquema nuevo: lo que estaba en la tienda queda como incluido,
+ * así nada desaparece. Espera a saber qué hay publicado y a que la cuenta sea la dueña.
+ */
+function asegurarIncluidos() {
+  if (Array.isArray(contextoApp.cfg.catalogoIncluidos) || !contextoApp.catPublicadoCargado || !contextoApp.puedeAdministrarLocal) return;
+  contextoApp.cfg.catalogoIncluidos = productosEnTienda().map(x => x.id);
+  setDoc(contextoApp.cfgDoc, contextoApp.withUser({
+    catalogoIncluidos: contextoApp.cfg.catalogoIncluidos
+  }), {
+    merge: true
+  }).catch(() => {});
+}
+
+/** Mandar a la tienda (o sacar) una lista de productos. Guarda la lista de incluidos; publicar es aparte. */
+function cambiarIncluidos(ids, incluir) {
+  const set = new Set(contextoApp.cfg.catalogoIncluidos || []);
+  ids.forEach(id => incluir ? set.add(id) : set.delete(id));
+  contextoApp.cfg.catalogoIncluidos = [...set];
+  return setDoc(contextoApp.cfgDoc, contextoApp.withUser({
+    catalogoIncluidos: contextoApp.cfg.catalogoIncluidos
+  }), {
+    merge: true
   });
 }
 
@@ -166,7 +195,7 @@ function catalogoFiltrados() {
   // En la pestaña "En la tienda" solo lo que la tienda muestra hoy; en "Fuentes", la fuente elegida.
   const fuente = contextoApp.catVista === 'tienda' ? '' : contextoApp.catFuente || '';
   const soloTienda = contextoApp.catVista === 'tienda';
-  return catalogoCandidatos().filter(p => (!fuente || p._origen === fuente) && (!soloTienda || EN_TIENDA.includes(estadoPublicacion(p))) && (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft && (p._sale || !p.precioUSD) || ft === 'tienda' && estadoPublicacion(p) === 'tienda' || ft === 'porpublicar' && PENDIENTES.includes(estadoPublicacion(p)) || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
+  return catalogoCandidatos().filter(p => (!fuente || p._origen === fuente) && (!soloTienda || EN_TIENDA.includes(estadoPublicacion(p))) && (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft || ft === 'tienda' && estadoPublicacion(p) === 'tienda' || ft === 'porpublicar' && PENDIENTES.includes(estadoPublicacion(p)) || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
 }
 
 /** JSON con las claves ordenadas: Firestore devuelve los mapas ordenados y acá no. */
@@ -203,7 +232,7 @@ const ESTADOS_PUB = {
   cambio: ['pend', 'Cambió · republicar'],
   sacar: ['no', 'Se saca al publicar'],
   sinprecio: ['no', 'Sin precio'],
-  eliminado: ['no', 'Eliminado'],
+  eliminado: ['', 'No publicado'],
 };
 const PENDIENTES = ['nuevo', 'cambio', 'sacar'];
 const EN_TIENDA = ['tienda', 'cambio', 'sacar'];   // lo que la tienda muestra en este momento
@@ -245,6 +274,7 @@ function filaCatalogo(p) {
 /** La descripción que escribe Juni para un producto. Vive en la config, por id. */
 export function renderCatalogo() {
   document.getElementById('cat-link').value = contextoApp.LINK_CATALOGO;
+  asegurarIncluidos();
   const items = catalogoCandidatos();
   const salen = items.filter(p => p._sale);
 
@@ -312,7 +342,7 @@ export function renderCatalogo() {
         <div class="m-sub">${lista.length ? `${enTienda(lista)} en la tienda${sinPrecio ? ` · ${sinPrecio} sin precio` : ''}` : esc(sub)}</div>
       </div>`;
     }).join('');
-    resumen.textContent = (contextoApp.catFuente ? `${visibles.length} de ${FUENTES.find(f => f[0] === contextoApp.catFuente)?.[1] || contextoApp.catFuente}` : `${visibles.length} producto${visibles.length === 1 ? '' : 's'} de todas las fuentes`) + (ft ? ' con este filtro' : '') + ' · tocá uno para editarlo';
+    resumen.textContent = (contextoApp.catFuente ? `${visibles.length} de ${FUENTES.find(f => f[0] === contextoApp.catFuente)?.[1] || contextoApp.catFuente}` : `${visibles.length} producto${visibles.length === 1 ? '' : 's'} de todas las fuentes`) + (ft ? ' con este filtro' : '') + ' · marcá los que quieras y tocá "Mandar a la tienda"';
   }
   document.getElementById('cat-sel-todos-btn').textContent = contextoApp.catSeleccion.size && contextoApp.catSeleccion.size >= visibles.length ? 'Deseleccionar' : 'Seleccionar todo';
   document.getElementById('cat-bulk').style.display = contextoApp.catSeleccion.size ? 'flex' : 'none';
@@ -360,16 +390,16 @@ export function renderFichaCatalogo() {
     nuevo: '🔔 Todavía no está en la tienda: entra cuando toques Publicar.',
     cambio: '🔔 Está en la tienda con datos viejos: tocá Publicar para actualizarla.',
     sacar: '⚠️ Está en la tienda pero ya no califica: se saca cuando publiques.',
-    sinprecio: 'Sin precio de venta: no se publica. El precio se carga en Stock o Inventario.',
-    eliminado: 'Eliminado del catálogo a mano: no se publica. Podés restaurarlo.',
+    sinprecio: 'Sin precio de venta: no se puede publicar. El precio se carga en Stock, Inventario o la lista de precios.',
+    eliminado: 'No está en la tienda. Tocá «Mandar a la tienda» y aparece.',
   };
   document.getElementById('cat-panel-cuerpo').innerHTML = `
     <div class="cat-sec">
       <div class="cat-sec-t">En la tienda</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <span class="cat-pill${ep === 'tienda' ? ' on' : ''}" style="${ESTADOS_PUB[ep][0] === 'no' ? 'color:var(--neg);' : ESTADOS_PUB[ep][0] === 'pend' ? 'color:#854F0B;border-color:#F2D399;background:#FFF6E5;' : ''}">${ESTADOS_PUB[ep][1]}</span>
-        ${ep === 'eliminado' || ep === 'sacar' && p.precioUSD ? `<button class="btn-secondary" style="width:auto;padding:6px 10px;font-size:12.5px;" ${on('click', 'restaurarEnCatalogo', p.id)}>Restaurar</button>` : ''}
-        ${PENDIENTES.includes(ep) ? `<button class="btn-add" style="width:auto;padding:6px 12px;font-size:12.5px;" ${on('click', 'publicarCatalogo')}>🌐 Publicar ahora</button>` : ''}
+        ${ep === 'eliminado' || ep === 'sacar' && p.precioUSD ? `<button class="btn-add" style="width:auto;padding:6px 12px;font-size:12.5px;" ${on('click', 'restaurarEnCatalogo', p.id)}>🌐 Mandar a la tienda</button>` : ''}
+        ${ep === 'nuevo' || ep === 'cambio' ? `<button class="btn-add" style="width:auto;padding:6px 12px;font-size:12.5px;" ${on('click', 'publicarCatalogo')}>🌐 Publicar ahora</button>` : ''}
         <select ${on('change', 'ajusteCatalogoFicha', p.id, 'entrega', '$value')} style="${campo}width:auto;margin-left:auto;">
           <option value="inmediato" ${p._entrega === 'inmediato' ? 'selected' : ''}>Entrega inmediata</option>
           <option value="pedido" ${p._entrega === 'pedido' ? 'selected' : ''}>A pedido</option>
@@ -429,6 +459,7 @@ export function renderFichaCatalogo() {
         <dt>Id</dt><dd style="font-family:'DM Mono',monospace;font-size:11.5px;color:var(--text3);">${esc(p.id)}</dd>
       </dl>
       <div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Precio, capacidad, color y batería se editan donde está cargado el producto (Stock, Inventario o la lista de precios).</div>
+      ${/^(stock|inv)_/.test(p.id) ? `<button class="btn-secondary" style="width:auto;padding:7px 10px;font-size:12.5px;margin-top:8px;" ${on('click', 'editarOrigenCatalogo', p.id)}>✏️ ${p.precioUSD ? 'Editar' : 'Cargar el precio'} en ${p.id.startsWith('stock_') ? 'Stock equipos' : 'Inventario'}</button>` : ''}
     </div>
 
     <div class="cat-sec">
@@ -449,8 +480,8 @@ export function renderFichaCatalogo() {
     </div>
 
     ${p._sale ? `<div class="cat-sec">
-      <button class="btn-danger" ${on('click', 'eliminarDelCatalogo', p.id)}>Eliminar del catálogo</button>
-      <div style="font-size:11.5px;color:var(--text3);margin-top:6px;">Deja de publicarse en la tienda. Sigue en ${esc(p._origen)} y se puede restaurar.</div>
+      <button class="btn-danger" ${on('click', 'eliminarDelCatalogo', p.id)}>Sacar de la tienda</button>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:6px;">Deja de verse en la tienda. Sigue en ${esc(p._origen)} y lo podés volver a mandar cuando quieras.</div>
     </div>` : ''}`;
 }
 
@@ -811,20 +842,26 @@ export function inicializarCatalogo() {
    * Una acción sobre todos los seleccionados: mover de categoría, cambiar la entrega,
    * sacar o incluir en el catálogo. Un solo guardado por acción.
    */
-  window.accionCatalogo = function (campo, valor) {
+  window.accionCatalogo = async function (campo, valor) {
     const ids = [...contextoApp.catSeleccion];
     if (!ids.length) return;
     if (campo === 'sale') {
-      if (!valor && !confirm(`¿Eliminar del catálogo ${ids.length === 1 ? 'el producto seleccionado' : 'los ' + ids.length + ' seleccionados'}?\n\nDejan de publicarse en la tienda. No se borra nada del sistema: siguen en Stock, Inventario o la lista, y podés restaurarlos desde el filtro "Eliminados del catálogo".`)) return;
-      const fuera = new Set(contextoApp.cfg.catalogoExcluidos || []);
-      ids.forEach(id => valor ? fuera.delete(id) : fuera.add(id));
-      contextoApp.cfg.catalogoExcluidos = [...fuera];
-      setDoc(contextoApp.cfgDoc, contextoApp.withUser({
-        catalogoExcluidos: contextoApp.cfg.catalogoExcluidos
-      }), {
-        merge: true
-      }).catch(() => {});
-      showToast(valor ? `${ids.length} restaurado${ids.length === 1 ? '' : 's'} en el catálogo` : `${ids.length} eliminado${ids.length === 1 ? '' : 's'} del catálogo`);
+      // Mandar a la tienda o sacar: se guarda la lista y se publica en el acto.
+      if (!requiereDuenoDelLocal()) return;
+      const items = catalogoCandidatos();
+      const sinPrecio = valor ? ids.filter(id => !items.find(p => p.id === id)?.precioUSD).length : 0;
+      if (!valor && !confirm(`¿Sacar de la tienda ${ids.length === 1 ? 'el producto seleccionado' : 'los ' + ids.length + ' seleccionados'}?\n\nDejan de verse en la tienda ya mismo. No se borra nada del sistema: siguen en Stock, Inventario o la lista, y los podés volver a mandar.`)) return;
+      try {
+        await cambiarIncluidos(ids, valor);
+      } catch (e) {
+        showToast('No se pudo guardar: ' + e.message, true);
+        return;
+      }
+      contextoApp.catSeleccion.clear();
+      renderCatalogo();
+      await window.publicarCatalogo();
+      if (sinPrecio) showToast(`${sinPrecio} de los elegidos no tiene${sinPrecio === 1 ? '' : 'n'} precio: quedan afuera hasta que lo cargues`, true);
+      return;
     } else {
       const ajustes = {
         ...(contextoApp.cfg.catalogoAjustes || {})
@@ -849,7 +886,7 @@ export function inicializarCatalogo() {
 
   /** Eliminar del catálogo desde la ficha: pasa al siguiente producto, o cierra si era el último. */
   window.eliminarDelCatalogo = function (id) {
-    if (!confirm('¿Eliminar este producto del catálogo?\n\nDeja de publicarse en la tienda. No se borra del sistema y se puede restaurar.')) return;
+    if (!confirm('¿Sacar este producto de la tienda?\n\nDeja de verse ya mismo. No se borra del sistema y lo podés volver a mandar.')) return;
     const lista = catalogoFiltrados();
     const i = lista.findIndex(p => p.id === id);
     const vecino = lista[i + 1] || lista[i - 1];
@@ -906,6 +943,14 @@ export function inicializarCatalogo() {
   window.LINK_CATALOGO_PUBLICO = () => contextoApp.LINK_CATALOGO;
   window.verCategoriaCatalogo = c => { window.catTab('productos'); document.getElementById('cat-f-cat').value = c; renderCatalogo(); };
   window.restaurarEnCatalogo = id => { window.toggleCatalogo(id, true); renderFichaCatalogo(); };
+  /** Ir a editar el producto donde está cargado: el precio de venta se pone ahí, no en el catálogo. */
+  window.editarOrigenCatalogo = id => {
+    const m = /^(stock|inv)_(.+)$/.exec(id);
+    if (!m) return;
+    window.cerrarFichaCatalogo();
+    if (m[1] === 'stock') { window.goTo('stock'); window.editarStock(m[2]); }
+    else { window.goTo('inv'); window.abrirInv(m[2]); }
+  };
   window.ajusteCatalogoFicha = (id, campo, valor) => { window.ajusteCatalogo(id, campo, valor); renderFichaCatalogo(); };
   window.abrirTiendaPublica = () => window.open(contextoApp.LINK_CATALOGO, '_blank');
 
@@ -1312,16 +1357,17 @@ Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
     btn.disabled = false;
     btn.textContent = '🔄 Sincronizar con la carpeta';
   };
-  window.toggleCatalogo = function (id, sale) {
-    const fuera = new Set(contextoApp.cfg.catalogoExcluidos || []);
-    sale ? fuera.delete(id) : fuera.add(id);
-    contextoApp.cfg.catalogoExcluidos = [...fuera];
-    setDoc(contextoApp.cfgDoc, contextoApp.withUser({
-      catalogoExcluidos: contextoApp.cfg.catalogoExcluidos
-    }), {
-      merge: true
-    }).catch(() => {});
+  /** Mandar a la tienda (o sacar) un producto desde su ficha, y publicar en el acto. */
+  window.toggleCatalogo = async function (id, sale) {
+    if (!requiereDuenoDelLocal()) return;
+    try {
+      await cambiarIncluidos([id], sale);
+    } catch (e) {
+      showToast('No se pudo guardar: ' + e.message, true);
+      return;
+    }
     renderCatalogo();
+    await window.publicarCatalogo();
   };
   window.copiarLinkCatalogo = function () {
     navigator.clipboard.writeText(contextoApp.LINK_CATALOGO).then(() => showToast('Link copiado ✓')).catch(() => showToast('No pude copiar — seleccionalo a mano', true));
