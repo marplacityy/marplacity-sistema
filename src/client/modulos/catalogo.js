@@ -174,6 +174,18 @@ function asegurarIncluidos() {
   }).catch(() => {});
 }
 
+/**
+ * El doc de fotos tiene que apuntar a donde viven las fotos ahora (el servidor del
+ * local). Si quedó con la base vieja (GitHub Pages), se vuelve a guardar una vez: las
+ * tiendas y el bot leen de ahí.
+ */
+let baseCorregida = false;
+function asegurarBaseFotos() {
+  if (baseCorregida || !contextoApp.fotosDocBase || contextoApp.fotosDocBase === contextoApp.FOTOS_BASE || !contextoApp.puedeAdministrarLocal) return;
+  baseCorregida = true;
+  guardarFotos([...archivosConocidos()]).catch(() => { baseCorregida = false; });
+}
+
 /** Mandar a la tienda (o sacar) una lista de productos. Guarda la lista de incluidos; publicar es aparte. */
 function cambiarIncluidos(ids, incluir) {
   const set = new Set(contextoApp.cfg.catalogoIncluidos || []);
@@ -275,6 +287,7 @@ function filaCatalogo(p) {
 export function renderCatalogo() {
   document.getElementById('cat-link').value = contextoApp.LINK_CATALOGO;
   asegurarIncluidos();
+  asegurarBaseFotos();
   const items = catalogoCandidatos();
   const salen = items.filter(p => p._sale);
 
@@ -1177,7 +1190,8 @@ export function inicializarCatalogo() {
     const btn = document.getElementById('btn-cat-amazon-uno');
     if (btn) { btn.disabled = true; btn.textContent = 'Buscando en Amazon…'; }
     try {
-      const r = await fetch(contextoApp.TIENDA_URL + '/fotos', {
+      // Siempre al Worker de Cloudflare: es el que tiene la clave de SerpApi.
+      const r = await fetch((configuracion.api.tiendaRemota || contextoApp.TIENDA_URL) + '/fotos', {
         method: 'POST',
         headers: await workerHeaders(),
         body: JSON.stringify({ nombre: p.nombre, gb: p.gb, color: p.color, tipo: p.tipo })

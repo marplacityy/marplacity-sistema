@@ -417,9 +417,10 @@ export async function init() {
       const d = snap.exists() ? snap.data() : null;
       contextoApp.FOTOS = d?.mapa || {};
       contextoApp.FOTOS_CLAS = d?.clasificacion || {};
-      // Se guarda la URL completa: el bot necesita una dirección absoluta para mandarla
-      // por Instagram, y la página del catálogo funciona igual con las dos.
-      contextoApp.FOTOS_BASE = d?.base || 'fotos/';
+      // La base guardada en el doc es para el bot y las tiendas (una URL absoluta). Esta
+      // pantalla usa la de la configuración (contextoApp.FOTOS_BASE): si el doc quedó con
+      // otra, el catálogo la corrige al guardar.
+      contextoApp.fotosDocBase = d?.base || '';
       if (contextoApp.currentPage === 'catalogo') {
         renderCatalogo();
         if (contextoApp.catFichaId) renderFichaCatalogo();   // la ficha abierta muestra las fotos nuevas

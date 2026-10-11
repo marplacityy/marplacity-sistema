@@ -50,6 +50,8 @@ export function configPublica(config) {
   return {
     basePublica: config.PUBLIC_BASE_URL.replace(/\/?$/, '/'),
     fotosBase: config.FOTOS_PUBLIC_URL,
-    api: { ia: '/api/ia', tienda: '/api/tienda', instagram: '/api/instagram', facturador: '/api/facturador', fotos: '/api/fotos' },
+    // tiendaRemota: el Worker de Cloudflare, que tiene la clave de SerpApi para buscar
+    // fotos en Amazon aunque la tienda corra local en este servidor.
+    api: { ia: '/api/ia', tienda: '/api/tienda', tiendaRemota: config.TIENDA_REMOTE_URL, instagram: '/api/instagram', facturador: '/api/facturador', fotos: '/api/fotos' },
   };
 }
