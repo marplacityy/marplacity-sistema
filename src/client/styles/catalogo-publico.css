@@ -298,7 +298,8 @@
   }
   @media(max-width:640px){
     .wrap{padding:0 14px;}
-    .cab-fila{flex-wrap:wrap;gap:10px;min-height:0;padding:10px 0;}
+    /* El mismo margen lateral que el resto de la página: el buscador no toca los bordes. */
+    .cab-fila{flex-wrap:wrap;gap:10px;min-height:0;padding:10px 14px;}
     .cab-menu{
       display:flex;align-items:center;justify-content:center;width:40px;height:40px;
       border:none;background:transparent;color:#fff;cursor:pointer;margin-left:-8px;
@@ -306,7 +307,7 @@
     .marca{font-size:20px;flex:1;}
     .busca{order:3;flex:1 1 100%;max-width:none;height:40px;}
     .cab-wa span{display:none;}
-    .cab-nav .cab-fila{padding:0;flex-wrap:nowrap;}
+    .cab-nav .cab-fila{padding:0 14px;flex-wrap:nowrap;}
     .nav-cats{display:none;}
     .nav-rubros a{font-size:13px;padding:10px 10px;}
     .menu-cols{grid-template-columns:1fr 1fr;gap:18px;padding:16px 0 20px;}
