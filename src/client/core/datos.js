@@ -408,10 +408,12 @@ export async function init() {
       cancelarConfiguracionLocal.push(onSnapshot(contextoApp.promptDoc, snap => {
         contextoApp.promptBot = snap.exists() ? snap.data() : {};
         if (contextoApp.currentPage === 'conocimiento') pintarPromptBot();
+        setSyncDot('ok');
       }, snapErr));
     };
     onSnapshot(contextoApp.conocDoc, snap => {
       contextoApp.conoc = snap.exists() ? snap.data() : {};
+      setSyncDot('ok');   // el guardado que disparó este snapshot terminó
       if (contextoApp.currentPage === 'conocimiento') pintarConocimiento();
       if (contextoApp.currentPage === 'listas') renderListas();   // los proveedores viven en este doc
       if (contextoApp.currentPage === 'catalogo') renderCatalogo();
@@ -424,6 +426,7 @@ export async function init() {
       // pantalla usa la de la configuración (contextoApp.FOTOS_BASE): si el doc quedó con
       // otra, el catálogo la corrige al guardar.
       contextoApp.fotosDocBase = d?.base || '';
+      setSyncDot('ok');
       if (contextoApp.currentPage === 'catalogo') {
         renderCatalogo();
         if (contextoApp.catFichaId) renderFichaCatalogo();   // la ficha abierta muestra las fotos nuevas
@@ -432,6 +435,7 @@ export async function init() {
     onSnapshot(contextoApp.catalogoDoc, snap => {
       contextoApp.catPublicado = snap.exists() ? snap.data() : null;
       contextoApp.catPublicadoCargado = true;   // ya se sabe qué hay en la tienda (aunque sea nada)
+      setSyncDot('ok');
       contextoApp.puedeAdministrarLocal = contextoApp.catPublicado?.userId === contextoApp.uid;
       if (contextoApp.puedeAdministrarLocal && !cancelarConfiguracionLocal.length) suscribirConfiguracionLocal();
       if (!contextoApp.puedeAdministrarLocal) {
@@ -459,6 +463,7 @@ export async function init() {
       setSyncDot('ok');
     }, snapErr);
     onSnapshot(contextoApp.cfgDoc, snap => {
+      setSyncDot('ok');   // cualquier guardado de la configuración terminó
       if (snap.exists()) {
         const d = snap.data();
         contextoApp.cfg = d;
