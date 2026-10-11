@@ -1258,9 +1258,9 @@ export function inicializarCatalogo() {
         headers: await workerHeaders(),
         body: JSON.stringify({
           model: 'claude-sonnet-5',
-          max_tokens: 400,
+          max_tokens: 200,
           output_config: { effort: 'low' },
-          system: 'Escribís las descripciones de productos de la tienda online de MarplaCity, un local de celulares de Mar del Plata. Hablás en castellano rioplatense (voseo), cercano y claro, como un vendedor que sabe. Devolvés SOLO el texto de la descripción, sin título, sin comillas, sin emojis, sin listas, sin precio. Entre 2 y 4 oraciones. Usás únicamente los datos que te dan: no inventás especificaciones, garantías, accesorios ni promociones. Si un dato no está, no lo mencionás.',
+          system: 'Escribís las descripciones de productos de la tienda online de MarplaCity, un local de celulares de Mar del Plata. Castellano rioplatense (voseo), directo y concreto: datos, no relleno. Nada de "ideal para", "perfecto para", "no te lo pierdas" ni adjetivos de venta. Devolvés SOLO el texto, sin título, sin comillas, sin emojis, sin listas, sin precio. Máximo 2 oraciones cortas (unas 30 palabras en total). Usás únicamente los datos que te dan: no inventás especificaciones, garantías, accesorios ni promociones. Si un dato no está, no lo mencionás.',
           messages: [{ role: 'user', content: `Datos del producto (JSON):\n${JSON.stringify(datos)}\n\nBorrador a mejorar:\n${borrador}` }]
         })
       });
