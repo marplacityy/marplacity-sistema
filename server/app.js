@@ -123,13 +123,21 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
     res.set('Cache-Control', 'public, max-age=86400');
   };
   app.use('/fotos', express.static(resolve(config.FOTOS_DIR), { dotfiles: 'deny', fallthrough: true, setHeaders: cabecerasFoto }));
+  // La tienda tiene dirección limpia: /tienda. La vieja (/catalogo.html) redirige, así los
+  // links que ya se compartieron siguen andando; la query (?pedido=…) se conserva.
+  app.get('/catalogo.html', (req, res) => {
+    const i = req.url.indexOf('?');
+    res.redirect(301, '/tienda' + (i >= 0 ? req.url.slice(i) : ''));
+  });
   let vite;
   if (desarrollo) {
     const { createServer } = await import('vite');
     vite = await createServer({ server: { middlewareMode: true }, appType: 'mpa' });
+    app.get('/tienda', (req, _res, next) => { req.url = '/catalogo.html'; next(); });
     app.use('/fotos', express.static(resolve(raiz, 'fotos'), { dotfiles: 'deny', setHeaders: cabecerasFoto }));
     app.use(vite.middlewares);
   } else {
+    app.get('/tienda', (_req, res) => res.sendFile(resolve(directorioEstatico, 'catalogo.html'), { headers: { 'Cache-Control': 'no-cache' } }, error => { if (error) res.status(404).type('text').send('No encontramos esta página.'); }));
     app.use(express.static(directorioEstatico, {
       dotfiles: 'deny', index: 'index.html',
       setHeaders(res, ruta) {

@@ -19,7 +19,7 @@ test('el paquete real inicia con Firebase y dependencias locales', async ({ page
 });
 
 test('las páginas públicas, el manifest y los documentos están disponibles', async ({ page, request }) => {
-  for (const ruta of ['/catalogo.html', '/ver.html', '/privacidad.html', '/condiciones.html', '/eliminacion-datos.html', '/manifest.json', '/icon-192.png']) {
+  for (const ruta of ['/tienda', '/catalogo.html', '/ver.html', '/privacidad.html', '/condiciones.html', '/eliminacion-datos.html', '/manifest.json', '/icon-192.png']) {
     expect((await request.get(ruta)).status(), ruta).toBe(200);
   }
   await page.goto('/ver.html?id=incorrecto');

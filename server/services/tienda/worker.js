@@ -293,7 +293,7 @@ const mpHeaders = env => ({ Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`, 'Con
 async function preferenciaMP(env, pedidoId, pedido, origin) {
   if (!env.MP_ACCESS_TOKEN) throw new Error('falta MP_ACCESS_TOKEN');
   if (env.RUNTIME_NODE && !env.TIENDA_WEBHOOK_URL) throw new Error('Configurá TIENDA_WEBHOOK_URL con la URL pública del webhook de Node.js.');
-  const vuelta = `${env.CATALOGO_URL || 'https://marplacityy.github.io/marplacity-sistema/catalogo.html'}?pedido=${pedidoId}`;
+  const vuelta = `${env.CATALOGO_URL || 'https://contify.tech/tienda'}?pedido=${pedidoId}`;
   const titulo = [pedido.producto.nombre, pedido.producto.gb, pedido.producto.color].filter(Boolean).join(' ');
   const r = await fetch(`${MP}/checkout/preferences`, {
     method: 'POST',
@@ -423,7 +423,7 @@ const formStripe = obj => {
  */
 async function sesionStripe(env, pedidoId, pedido) {
   if (!env.STRIPE_SECRET_KEY) throw new Error('falta STRIPE_SECRET_KEY');
-  const vuelta = `${env.CATALOGO_URL || 'https://marplacityy.github.io/marplacity-sistema/catalogo.html'}?pedido=${pedidoId}`;
+  const vuelta = `${env.CATALOGO_URL || 'https://contify.tech/tienda'}?pedido=${pedidoId}`;
   const titulo = [pedido.producto.nombre, pedido.producto.gb, pedido.producto.color].filter(Boolean).join(' ');
   const r = await fetch(`${STRIPE}/checkout/sessions`, {
     method: 'POST',

@@ -24,7 +24,7 @@
 import { construirSystem, MARCA_CANAL } from './prompt.js';
 
 // La tienda web publica. Es la misma direccion que usa el sistema (LINK_CATALOGO).
-const URL_CATALOGO = 'https://contify.tech/catalogo.html';
+const URL_CATALOGO = 'https://contify.tech/tienda';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',

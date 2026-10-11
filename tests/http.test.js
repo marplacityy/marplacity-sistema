@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { get } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { crearApp } from '../server/app.js';
@@ -25,6 +25,19 @@ test('la configuración pública nunca incluye credenciales', () => {
   assert.throws(() => cargarConfig({ PORT: 'abc' }), /PORT/);
   assert.throws(() => cargarConfig({ IA_REMOTE_URL: 'http://inseguro.example' }), /HTTPS/);
   assert.throws(() => cargarConfig({ IA_REMOTE_URL: 'https://nombre:clave@example.com' }), /credenciales/);
+});
+
+test('la tienda vive en /tienda y la dirección vieja redirige con su query', async t => {
+  const estatico = await mkdtemp(join(tmpdir(), 'dist-'));
+  t.after(() => rm(estatico, { recursive: true, force: true }));
+  await writeFile(join(estatico, 'catalogo.html'), '<!DOCTYPE html><title>Tienda</title>');
+  const base = await levantar(t, {}, { directorioEstatico: estatico });
+  const tienda = await fetch(base + '/tienda');
+  assert.equal(tienda.status, 200);
+  assert.match(await tienda.text(), /Tienda/);
+  const vieja = await fetch(base + '/catalogo.html?pedido=abc', { redirect: 'manual' });
+  assert.equal(vieja.status, 301);
+  assert.equal(vieja.headers.get('location'), '/tienda?pedido=abc');
 });
 
 test('las fotos se suben solo con el token del dueño y desde los orígenes permitidos', async t => {
