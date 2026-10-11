@@ -1,4 +1,4 @@
-import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe } from '../../shared/catalogo.js';
+import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion } from '../../shared/catalogo.js';
 import { on } from '../../shared/seguridad.js';
 import { configuracion } from '../core/config-publica.js';
 /** modulos/catalogo: lógica preservada de la aplicación original. */
@@ -468,7 +468,11 @@ export function renderFichaCatalogo() {
       <div class="field"><label>Título en la tienda <span style="color:var(--text3);font-weight:400;">(vacío = el nombre del producto)</span></label>
         <input type="text" value="${esc(meta.titulo || '')}" placeholder="${esc(tituloSeo)}" ${on('change', 'metaCatalogo', p.id, 'titulo', '$value')}></div>
       <div class="field"><label>Descripción</label>
-        <textarea rows="4" placeholder="Lo que quieras contar: estado, qué incluye, garantía…" ${on('change', 'notaCatalogo', p.id, '$value')}>${esc(p.descripcion)}</textarea></div>
+        <textarea rows="4" id="cat-desc" placeholder="Lo que quieras contar: estado, qué incluye, garantía…" ${on('change', 'notaCatalogo', p.id, '$value')}>${esc(p.descripcion)}</textarea></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <button class="btn-secondary" id="btn-cat-describir" style="width:auto;padding:7px 12px;font-size:12.5px;" ${on('click', 'generarDescripcionCatalogo', p.id)}>✨ ${p.descripcion ? 'Volver a escribir' : 'Escribir'} con los datos del producto</button>
+        <span style="font-size:11.5px;color:var(--text3);">Usa batería, ciclos, estado, capacidad y color; la IA la pule. Después la podés retocar.</span>
+      </div>
     </div>
 
     <div class="cat-sec">
@@ -644,6 +648,30 @@ export async function imagenJpegBase64(blob, max) {
   ctx.fillRect(0, 0, c.width, c.height); // los PNG con transparencia, sobre blanco
   ctx.drawImage(bmp, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
+// ── La descripción, escrita a partir de los datos ────────────
+//
+// Lo que el cliente lee en la ficha de la tienda. Sale de lo que está cargado (batería,
+// ciclos, estado, cosmética, capacidad, color, entrega) y la IA la pule; sin IA queda el
+// borrador, que ya es correcto. Nunca inventa datos ni mete el precio: el precio cambia.
+
+/** Los datos del producto para la descripción. De Stock se toman también estado y cosmética. */
+function datosParaDescripcion(p) {
+  const m = /^stock_(.+)$/.exec(p.id);
+  const s = m ? contextoApp.stockItems.find(x => x.id === m[1]) : null;
+  return {
+    producto: p.nombre,
+    capacidad: p.gb || '',
+    color: p.color || '',
+    condicion: p.condicion === 'usado' ? 'usado' : 'nuevo',
+    estado: s?.estadoProducto || p.estado || '',
+    cosmetica: s?.cosmetica || '',
+    bateria: p.bateria != null ? Number(p.bateria) : null,
+    ciclos: p.ciclos != null ? Number(p.ciclos) : s?.ciclos != null && s.ciclos !== '' ? Number(s.ciclos) : null,
+    entrega: p._entrega === 'pedido' ? 'se trae a pedido' : 'está en el local, se puede ver y llevar en el momento',
+    categoria: p.categoria || '',
+  };
 }
 
 /** Todos los archivos de foto conocidos: los del mapa más los que tienen decisión. */
@@ -981,7 +1009,10 @@ export function inicializarCatalogo() {
       catalogoNotas: notas
     }), {
       merge: true
-    }).then(() => showToast('Guardado ✓')).catch(e => showToast('No se guardó: ' + e.message, true));
+    }).then(() => {
+      const p = catalogoCandidatos().find(x => x.id === id);
+      showToast(p && estadoPublicacion(p) === 'tienda' ? 'Guardado ✓ — publicá para que se vea en la tienda' : 'Guardado ✓');
+    }).catch(e => showToast('No se guardó: ' + e.message, true));
   };
 
   // Qué pestaña del catálogo está abierta: productos (las fuentes), tienda, categorias, fotos.
@@ -1212,6 +1243,65 @@ export function inicializarCatalogo() {
       setSyncDot('error');
     }
     renderFichaCatalogo();
+  };
+
+  /**
+   * La descripción pulida por la IA. Devuelve el borrador si la IA no está o falla: el
+   * borrador ya dice la verdad, solo que más seco.
+   */
+  async function describirConIA(p) {
+    const datos = datosParaDescripcion(p);
+    const borrador = borradorDescripcion(datos);
+    try {
+      const resp = await fetch(contextoApp.WORKER_URL, {
+        method: 'POST',
+        headers: await workerHeaders(),
+        body: JSON.stringify({
+          model: 'claude-sonnet-5',
+          max_tokens: 400,
+          output_config: { effort: 'low' },
+          system: 'Escribís las descripciones de productos de la tienda online de MarplaCity, un local de celulares de Mar del Plata. Hablás en castellano rioplatense (voseo), cercano y claro, como un vendedor que sabe. Devolvés SOLO el texto de la descripción, sin título, sin comillas, sin emojis, sin listas, sin precio. Entre 2 y 4 oraciones. Usás únicamente los datos que te dan: no inventás especificaciones, garantías, accesorios ni promociones. Si un dato no está, no lo mencionás.',
+          messages: [{ role: 'user', content: `Datos del producto (JSON):\n${JSON.stringify(datos)}\n\nBorrador a mejorar:\n${borrador}` }]
+        })
+      });
+      const texto = textoDeIA(await resp.json()).replace(/^["“]|["”]$/g, '').trim();
+      return { texto: texto.length > 20 ? texto : borrador, conIA: texto.length > 20 };
+    } catch (e) {
+      console.warn('descripción sin IA:', e.message);
+      return { texto: borrador, conIA: false };
+    }
+  }
+
+  /** Escribir la descripción de un producto desde su ficha y guardarla. */
+  window.generarDescripcionCatalogo = async function (id) {
+    const p = catalogoCandidatos().find(x => x.id === id);
+    if (!p) return;
+    const btn = document.getElementById('btn-cat-describir');
+    if (btn) { btn.disabled = true; btn.textContent = 'Escribiendo…'; }
+    const { texto, conIA } = await describirConIA(p);
+    const area = document.getElementById('cat-desc');
+    if (area) area.value = texto;
+    window.notaCatalogo(id, texto);
+    if (!conIA) showToast('La escribí sin la IA (no respondió): revisala', true);
+    renderFichaCatalogo();
+  };
+
+  /** Lo mismo para todos los seleccionados que no tienen descripción, uno por uno. */
+  window.describirSeleccionados = async function () {
+    const ids = [...contextoApp.catSeleccion];
+    const lista = catalogoCandidatos().filter(p => ids.includes(p.id) && !p.descripcion);
+    if (!lista.length) { showToast('Los seleccionados ya tienen descripción'); return; }
+    if (!confirm(`¿Escribir la descripción de ${lista.length} producto${lista.length === 1 ? '' : 's'} con la IA?\n\nSolo los que no tienen; después las podés retocar una por una.`)) return;
+    let hechas = 0;
+    for (const p of lista) {
+      showToast(`Escribiendo ${hechas + 1} de ${lista.length}: ${p.nombre}…`);
+      const { texto } = await describirConIA(p);
+      window.notaCatalogo(p.id, texto);
+      hechas++;
+    }
+    contextoApp.catSeleccion.clear();
+    renderCatalogo();
+    showToast(`${hechas} descripción${hechas === 1 ? '' : 'es'} escrita${hechas === 1 ? '' : 's'} ✓ — publicá para que salgan en la tienda`);
   };
 
   /** Sacar una foto de un producto. El archivo queda en la carpeta, sin asignar (pestaña Fotos). */

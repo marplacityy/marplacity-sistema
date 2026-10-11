@@ -38,6 +38,21 @@ export function rubroDe(categoria) {
   return m ? m[1] : 'Otros';
 }
 export const esUsado = p => /usad|refurb|reacond|impecab|\d+\s*\/\s*10/i.test(p.estado || '') || p.bateria != null && !/nuev|sellad/i.test(p.estado || '');
+
+/**
+ * El borrador de la descripción de un producto para la tienda, a partir de sus datos:
+ * una oración por dato, en el orden en que el cliente pregunta. Es lo que la IA pule; sin
+ * IA queda así, que ya dice la verdad. Nunca lleva el precio: cambia.
+ */
+export function borradorDescripcion(d) {
+  const usado = d.condicion === 'usado';
+  const frases = [];
+  frases.push(`${d.producto}${d.capacidad ? ' de ' + d.capacidad : ''}${d.color ? ' color ' + d.color : ''}, ${usado ? 'usado' : 'nuevo'}${d.estado && usado ? ' (' + d.estado + ')' : d.estado && /sellad/i.test(d.estado) ? ', sellado' : ''}.`);
+  if (d.bateria != null) frases.push(`Batería al ${d.bateria}%${d.ciclos != null ? ` con ${d.ciclos} ciclos de carga` : ''}.`);
+  if (d.cosmetica) frases.push(`Estética: ${d.cosmetica}.`);
+  if (d.entrega) frases.push(d.entrega.charAt(0).toUpperCase() + d.entrega.slice(1) + '.');
+  return frases.join(' ');
+}
 /**
  * La categoría automática de un producto, por el nombre y el estado. Las reglas se
  * prueban de arriba a abajo y gana la primera: los accesorios van antes que los equipos

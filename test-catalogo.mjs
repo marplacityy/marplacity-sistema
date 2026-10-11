@@ -5,7 +5,7 @@
  *
  * Importa funciones puras, sin arrancar Firebase ni depender del formato del HTML.
  */
-import { armarMapaFotos, categoriaDe, slugFoto, rubroDe, CATEGORIAS_CATALOGO, RUBROS_CATALOGO } from './src/shared/catalogo.js';
+import { armarMapaFotos, categoriaDe, slugFoto, rubroDe, borradorDescripcion, CATEGORIAS_CATALOGO, RUBROS_CATALOGO } from './src/shared/catalogo.js';
 import assert from 'node:assert/strict';
 
 
@@ -84,5 +84,13 @@ assert.equal(slugFoto('iPhone 13 (Usado Grado A, 100% Ampsentrix)'), 'iphone-13'
 assert.equal(slugFoto('iPhone 14 Pro (Usado Grado A, 87-89%)'), 'iphone-14-pro');
 assert.equal(slugFoto('iPhone 15 128GB'), 'iphone-15');
 assert.equal(slugFoto('Apple Watch Ultra 2 49mm'), 'apple-watch-ultra-2-49mm');
+
+// ── borradorDescripcion: dice lo que hay y nada más ──
+{
+  const usado = borradorDescripcion({ producto: 'iPhone 13', capacidad: '128GB', color: 'Midnight', condicion: 'usado', estado: '9/10', cosmetica: 'rayón leve en el marco', bateria: 87, ciclos: 412, entrega: 'está en el local, se puede ver y llevar en el momento' });
+  assert.equal(usado, 'iPhone 13 de 128GB color Midnight, usado (9/10). Batería al 87% con 412 ciclos de carga. Estética: rayón leve en el marco. Está en el local, se puede ver y llevar en el momento.');
+  const nuevo = borradorDescripcion({ producto: 'iPhone 17 Pro', capacidad: '256GB', color: '', condicion: 'nuevo', estado: 'Sellado', cosmetica: '', bateria: null, ciclos: null, entrega: 'se trae a pedido' });
+  assert.equal(nuevo, 'iPhone 17 Pro de 256GB, nuevo, sellado. Se trae a pedido.');
+}
 
 console.log('Todo verde');
