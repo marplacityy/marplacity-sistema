@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { SITIO_PUBLICO } from '../../src/shared/sitio.js';
 
 test('la web compilada abre desde el subdirectorio de Pages sin servidor API', async ({ page, request }) => {
   const errores = [], fallosLocales = [], rutasApi = [];
@@ -9,7 +10,7 @@ test('la web compilada abre desde el subdirectorio de Pages sin servidor API', a
   await expect(page.locator('#login-screen')).toHaveClass(/show/);
   await expect(page.locator('.logo')).toContainText(/v\d{4}\.\d{2}\.\d{2}-[A-Z]/);
   const manifest = await page.locator('link[rel="manifest"]').getAttribute('href');
-  expect(manifest).toBe('/marplacity-sistema/manifest.json');
+  expect(manifest).toBe(new URL(SITIO_PUBLICO).pathname + 'manifest.json');
   expect((await request.get(manifest)).status()).toBe(200);
   await page.goto('ver.html?id=incorrecto');
   await expect(page.locator('#err-t')).toHaveText('Link inválido');

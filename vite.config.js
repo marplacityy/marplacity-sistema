@@ -1,15 +1,19 @@
 import { defineConfig } from 'vite';
-import { readFile, cp, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { huellaFuentes } from './scripts/huella.mjs';
+import { SITIO_PUBLICO } from './src/shared/sitio.js';
 
 const raiz = import.meta.dirname;
+// GitHub Pages sirve el sistema bajo la ruta de SITIO_PUBLICO (/marplacity-sistema/); con
+// un dominio propio esa ruta pasa a ser "/" sola, sin tocar nada acá.
+const basePages = new URL(SITIO_PUBLICO).pathname;
 export default defineConfig(({ mode }) => ({
   root: raiz,
-  base: mode === 'pages' ? '/marplacity-sistema/' : '/',
+  base: mode === 'pages' ? basePages : '/',
   publicDir: 'public',
   resolve: {
-    alias: mode === 'prueba' ? [{ find: /^firebase\/(app|auth|firestore)$/, replacement: resolve(raiz, 'tests/fixtures/firebase.js') }] : [],
+    alias: mode === 'prueba' ? [{ find: /^firebase\/(app|auth|firestore|storage)$/, replacement: resolve(raiz, 'tests/fixtures/firebase.js') }] : [],
   },
   plugins: [{
     name: 'vistas-marplacity',
@@ -26,10 +30,9 @@ export default defineConfig(({ mode }) => ({
       },
     },
     async closeBundle() {
-      // Las fotos conservan su carpeta original, compartida con la integración de GitHub.
+      // Las fotos ya no van en el build: viven en Firebase Storage (src/shared/sitio.js).
       if (mode !== 'prueba') {
         const salida = mode === 'pages' ? 'dist-pages' : 'dist';
-        await cp(resolve(raiz, 'fotos'), resolve(raiz, salida, 'fotos'), { recursive: true });
         await writeFile(resolve(raiz, salida, 'compilacion.json'), JSON.stringify({ huella: await huellaFuentes(raiz), fecha: new Date().toISOString() }));
       }
     },

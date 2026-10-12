@@ -83,7 +83,7 @@ Cada documento lleva `userId`. Toda escritura pasa por `withUser(obj)` y toda le
 
 Colecciones: `gastos`, `ingresos`, `stock`, `consig`, `pagos_consig`, `gastos_fijos`, `pagos_fijos`, `reparaciones`, `inventario`, `repuestos`, `precios_repuestos`, `clientes`, `cierres`, `encargues`, `amorts`, `cola_impresion`, `conversaciones` (DMs de Instagram: la escribe el Worker `ig-bot`, un doc por cliente), `pedidos` (compras del catálogo web: las crea el Worker `tienda`, el dueño solo las cierra), más el doc singular `config/{uid}`.
 
-Como la config de Firebase está en el HTML de un repo público, **las Security Rules son la única barrera real**. `firestore.rules` en la raíz es la fuente versionada; si agregás una colección hay que sumarla ahí también. Deploy: `firebase deploy --only firestore:rules`. `firebase-tools` está instalado y logueado; `firebase deploy --only firestore:rules --dry-run` compila el archivo y avisa los errores sin publicar nada.
+Como la config de Firebase está en el HTML de un repo público, **las Security Rules son la única barrera real**. `firestore.rules` en la raíz es la fuente versionada; si agregás una colección hay que sumarla ahí también. Deploy: `firebase deploy --only firestore:rules` (y `--only storage` para `storage.rules`, las fotos). `firebase-tools` está instalado y logueado; `firebase deploy --only firestore:rules --dry-run` compila el archivo y avisa los errores sin publicar nada.
 
 ### Ciclo de datos: snapshot → array → render debounced
 
@@ -145,7 +145,7 @@ Las consultas acotadas necesitan índices compuestos (`userId` + `fecha`), versi
 
 Página pública sin login que lee un solo doc, `catalogo/publico`, que el dueño publica desde la pantalla Catálogo (`publicarCatalogo`). `catalogoCandidatos()` es el único lugar que decide qué sale: equipos en stock (propios y consignación), artículos de inventario con cantidad y precio sugerido, y los ítems de la última lista de precios de cada origen (`kbUltimaLista`) como `tipo:'pedido'`. Las descripciones por producto viven en `cfg.catalogoNotas[id]`.
 
-Las fotos están en `fotos/` del repo y el mapa producto → archivos en `catalogo/fotos` (lo usa también el bot de Instagram para `[[FOTO:clave]]`). La clave es `slugFoto(nombre)` + `-slugFoto(color)`. `armarMapaFotos()` la saca del nombre del archivo, salvo que `clasificacion[archivo]` diga otra cosa: eso lo escribe la IA (`clasificarFotos`, vía el proxy de Anthropic) o el dueño a mano desde la grilla. `node test-catalogo.mjs` chequea esa función sin red.
+Las fotos están en Firebase Storage (`fotos/` del bucket, URL pública `FOTOS_BASE` de `src/shared/sitio.js`; reglas en `storage.rules`). El sistema las sube y lista directo (`core/fotos.js`) y el Worker tienda sube las que trae de un link o de Amazon con el token del dueño. El mapa producto → archivos está en `catalogo/fotos` (lo usa también el bot de Instagram para `[[FOTO:clave]]`). La clave es `slugFoto(nombre)` + `-slugFoto(color)`. `armarMapaFotos()` la saca del nombre del archivo, salvo que `clasificacion[archivo]` diga otra cosa: eso lo escribe la IA (`clasificarFotos`, vía el proxy de Anthropic) o el dueño a mano desde la grilla. `node test-catalogo.mjs` chequea esa función sin red.
 
 ### Tienda (`workers/tienda`)
 

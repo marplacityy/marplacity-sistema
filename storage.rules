@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// Reglas de Firebase Storage. Solo se usa `fotos/`: las fotos de los productos.
+//
+// Las lee cualquiera (la tienda, el bot, Instagram) y las escribe solo el dueño del local,
+// desde el sistema o a través del Worker tienda, que sube con el token del dueño. El dueño
+// es el mismo que en firestore.rules: el userId de catalogo/publico.
+//
+// Publicar: firebase deploy --only storage
+service firebase.storage {
+  match /b/{bucket}/o {
+    function esDuenoDelLocal() {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/catalogo/publico).data.userId == request.auth.uid;
+    }
+
+    match /fotos/{archivo=**} {
+      allow read: if true;
+      // Nombres como los arma el sistema (iphone-15-black-2.jpg), sin subcarpetas; solo
+      // imágenes y hasta 8 MB. No se borra desde el sistema: una foto que se saca de un
+      // producto queda en la carpeta, sin asignar.
+      allow create, update: if esDuenoDelLocal()
+        && archivo.matches('[a-z0-9][a-z0-9-]{0,118}[.](jpe?g|png|webp)')
+        && request.resource.contentType.matches('image/(jpeg|png|webp)')
+        && request.resource.size < 8 * 1024 * 1024;
+    }
+
+    match /{todo=**} {
+      allow read, write: if false;
+    }
+  }
+}

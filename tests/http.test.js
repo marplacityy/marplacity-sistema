@@ -8,6 +8,7 @@ import { crearApp } from '../server/app.js';
 import { cargarConfig, configPublica } from '../server/config.js';
 import { crearTareas } from '../server/http/servicios.js';
 import { firmaStripeValida } from '../server/services/tienda/worker.js';
+import { SITIO_PUBLICO, FOTOS_BASE } from '../src/shared/sitio.js';
 
 async function levantar(t, env = {}, opciones = {}) {
   const config = cargarConfig({ LOG_LEVEL: 'silent', NODE_ENV: 'test', ...env });
@@ -40,42 +41,15 @@ test('la tienda vive en /tienda y la dirección vieja redirige con su query', as
   assert.equal(vieja.headers.get('location'), '/tienda?pedido=abc');
 });
 
-test('las fotos se suben solo con el token del dueño y desde los orígenes permitidos', async t => {
-  const dir = await mkdtemp(join(tmpdir(), 'fotos-'));
-  const estatico = await mkdtemp(join(tmpdir(), 'dist-'));
-  t.after(() => Promise.all([rm(dir, { recursive: true, force: true }), rm(estatico, { recursive: true, force: true })]));
-  const base = await levantar(t, { OWNER_UID: 'dueno', FOTOS_DIR: dir }, {
-    directorioEstatico: estatico,
-    fetchImpl: async (url, opciones) => {
-      if (String(url).includes('identitytoolkit')) {
-        const { idToken } = JSON.parse(opciones.body);
-        return Response.json({ users: idToken === 'token-dueno' ? [{ localId: 'dueno' }] : idToken === 'token-otro' ? [{ localId: 'otro' }] : [] });
-      }
-      return Response.json({ ok: true });
-    },
-  });
-  const jpeg = Buffer.concat([Buffer.from([0xFF, 0xD8, 0xFF, 0xE0]), Buffer.alloc(2000, 1)]).toString('base64');
-  const subir = (token, body, headers = {}) => fetch(base + '/api/fotos/subir', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Firebase-Token': token } : {}), ...headers }, body: JSON.stringify(body),
-  });
-  assert.equal((await subir('', { archivo: 'iphone-15.jpg', datos: jpeg })).status, 401, 'sin token');
-  assert.equal((await subir('token-otro', { archivo: 'iphone-15.jpg', datos: jpeg })).status, 401, 'otra cuenta');
-  assert.equal((await subir('token-dueno', { archivo: '../index.html', datos: jpeg })).status, 400, 'nombre inválido');
-  const ok = await subir('token-dueno', { archivo: 'iphone-15.jpg', datos: jpeg });
-  assert.equal(ok.status, 200);
-  assert.equal((await ok.json()).url, 'https://contify.tech/fotos/iphone-15.jpg');
-  assert.deepEqual((await (await fetch(base + '/api/fotos/lista')).json()).archivos, ['iphone-15.jpg']);
-  const servida = await fetch(base + '/fotos/iphone-15.jpg');
-  assert.equal(servida.status, 200);
-  assert.equal(servida.headers.get('access-control-allow-origin'), '*');
-  assert.equal(servida.headers.get('cross-origin-resource-policy'), 'cross-origin', 'la tienda en GitHub Pages tiene que poder mostrarla');
-  const desdeOtroSitio = await fetch(base + '/fotos/iphone-15.jpg', { headers: { 'Sec-Fetch-Site': 'cross-site', 'Sec-Fetch-Mode': 'no-cors' } });
-  assert.equal(desdeOtroSitio.status, 200, 'una imagen se puede mostrar desde cualquier sitio');
-  // Desde el sistema en GitHub Pages se puede; desde otro sitio, no; y el permiso es solo para las fotos.
-  const preflight = await fetch(base + '/api/fotos/subir', { method: 'OPTIONS', headers: { Origin: 'https://marplacityy.github.io', 'Sec-Fetch-Site': 'cross-site' } });
-  assert.equal(preflight.status, 204);
-  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://marplacityy.github.io');
-  assert.equal((await subir('token-dueno', { archivo: 'x.jpg', datos: jpeg }, { Origin: 'https://sitio-ajeno.invalid', 'Sec-Fetch-Site': 'cross-site' })).status, 403);
+test('las fotos viven en Firebase Storage: Node no las recibe ni las sirve', async t => {
+  const base = await levantar(t, { OWNER_UID: 'dueno' });
+  const publica = await (await fetch(base + '/api/config')).json();
+  assert.equal(publica.fotosBase, FOTOS_BASE);
+  assert.equal(publica.basePublica, SITIO_PUBLICO);
+  assert.equal('fotos' in publica.api, false);
+  assert.equal((await fetch(base + '/api/fotos/subir', { method: 'POST', body: '{}' })).status, 404);
+  assert.equal((await fetch(base + '/fotos/iphone-15.jpg')).status, 404);
+  // Sin la excepción de las fotos, ningún otro sitio (tampoco GitHub Pages) llama a la API de Node.
   assert.equal((await fetch(base + '/api/config', { headers: { Origin: 'https://marplacityy.github.io', 'Sec-Fetch-Site': 'cross-site' } })).status, 403);
 });
 

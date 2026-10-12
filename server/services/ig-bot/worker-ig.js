@@ -22,9 +22,10 @@
  */
 
 import { construirSystem, MARCA_CANAL, PROVEEDORES_BASE } from './prompt.js';
+import { TIENDA_PUBLICA } from '../../../src/shared/sitio.js';
 
 // La tienda web publica. Es la misma direccion que usa el sistema (LINK_CATALOGO).
-const URL_CATALOGO = 'https://contify.tech/tienda';
+const URL_CATALOGO = TIENDA_PUBLICA;
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',

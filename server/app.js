@@ -9,7 +9,6 @@ import { timingSafeEqual } from 'node:crypto';
 import { rateLimit } from 'express-rate-limit';
 import { configPublica } from './config.js';
 import { adaptarServicio, crearTareas } from './http/servicios.js';
-import { crearRutasFotos, origenesFotos } from './http/fotos.js';
 import tienda from './services/tienda/worker.js';
 import instagram from './services/ig-bot/worker-ig.js';
 import facturador from './services/facturador/worker.js';
@@ -57,17 +56,12 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
     strictTransportSecurity: false,
     crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   }));
-  const origenesDeFotos = origenesFotos(config);
   app.use((req, res, next) => {
     if (['127.0.0.1', 'localhost', '::1'].includes(config.HOST)) {
       const host = req.hostname;
       if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) return res.sendStatus(403);
     }
     const origen = req.get('origin');
-    // Las fotos son públicas: la tienda en GitHub Pages y el bot las piden desde otro sitio.
-    if (req.method === 'GET' && req.path.startsWith('/fotos/')) return next();
-    // Y las sube también el sistema en GitHub Pages: solo esas rutas aceptan ese origen.
-    if (req.path.startsWith('/api/fotos') && origen && origenesDeFotos.includes(origen.replace(/\/$/, ''))) return next();
     if (req.get('sec-fetch-site') === 'cross-site') return res.sendStatus(403);
     if (origen && origen !== `${req.protocol}://${req.get('host')}`) {
       return res.status(403).json({ error: 'Origen no permitido.' });
@@ -102,7 +96,6 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
     return res.json({ ok: true });
   });
   app.use('/api', express.raw({ type: () => true, limit: '20mb' }));
-  app.use('/api/fotos', crearRutasFotos(config, { fetchImpl, directorioEstatico }));
   for (const [nombre, servicio] of Object.entries({ tienda, instagram, facturador, ia, ...servicios })) {
     const clave = nombre.toUpperCase();
     app.use(`/api/${nombre}`, adaptarServicio({
@@ -113,16 +106,6 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
   }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Ruta no encontrada.' }));
 
-  // Las fotos subidas por el dueño van primero; las del repositorio siguen en dist/fotos.
-  // Con CORS abierto: son públicas y el sistema en GitHub Pages las lee para clasificarlas.
-  // Sin Cross-Origin-Resource-Policy abierto (helmet pone same-origin) el navegador no deja
-  // que la tienda en GitHub Pages muestre las imágenes de acá.
-  const cabecerasFoto = res => {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
-    res.set('Cache-Control', 'public, max-age=86400');
-  };
-  app.use('/fotos', express.static(resolve(config.FOTOS_DIR), { dotfiles: 'deny', fallthrough: true, setHeaders: cabecerasFoto }));
   // La tienda tiene dirección limpia: /tienda. La vieja (/catalogo.html) redirige, así los
   // links que ya se compartieron siguen andando; la query (?pedido=…) se conserva.
   app.get('/catalogo.html', (req, res) => {
@@ -134,14 +117,12 @@ export async function crearApp(config, { desarrollo = false, fetchImpl = fetch, 
     const { createServer } = await import('vite');
     vite = await createServer({ server: { middlewareMode: true }, appType: 'mpa' });
     app.get('/tienda', (req, _res, next) => { req.url = '/catalogo.html'; next(); });
-    app.use('/fotos', express.static(resolve(raiz, 'fotos'), { dotfiles: 'deny', setHeaders: cabecerasFoto }));
     app.use(vite.middlewares);
   } else {
     app.get('/tienda', (_req, res) => res.sendFile(resolve(directorioEstatico, 'catalogo.html'), { headers: { 'Cache-Control': 'no-cache' } }, error => { if (error) res.status(404).type('text').send('No encontramos esta página.'); }));
     app.use(express.static(directorioEstatico, {
       dotfiles: 'deny', index: 'index.html',
       setHeaders(res, ruta) {
-        if (/[/\\]fotos[/\\]/.test(ruta)) return cabecerasFoto(res);
         res.set('Cache-Control', /[/\\]assets[/\\]/.test(ruta) ? 'public, max-age=31536000, immutable' : 'no-cache');
       },
     }));

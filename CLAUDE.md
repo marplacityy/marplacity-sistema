@@ -61,12 +61,12 @@ El workflow tarda unos minutos (instala Playwright y Java). Si el browser sigue 
 | `src/client/main.js` | Llama a cada `inicializarX()` en orden y al final `inicializarSesion()` |
 | `src/client/styles/` | CSS del sistema, del catálogo y del visor de documentos |
 | `src/client/catalogo-publico.js`, `documento-publico.js` | Lógica de `catalogo.html` y `ver.html` (páginas sin login) |
-| `src/shared/` | Funciones puras compartidas entre browser, server y Workers (`catalogo.js`, `seguridad.js`) |
+| `src/shared/` | Funciones puras compartidas entre browser, server y Workers (`catalogo.js`, `seguridad.js`) y `sitio.js`: la dirección pública, la tienda y la base de las fotos, en un solo lugar |
 | `server/app.js` | Express: helmet, rate limit, `/api/config`, `/api/salud`, adaptador `/api/<servicio>`, estáticos de `dist/` |
 | `server/services/` | Implementación real de `tienda`, `ig-bot`, `facturador`, `ia`, `asistente` |
 | `workers/*/` | Entradas de Cloudflare: reexportan `server/services/*` más su `wrangler.toml` y README |
-| `firestore.rules`, `firestore.indexes.json` | Fuente versionada de reglas e índices |
-| `fotos/` | Fotos del catálogo; se copian tal cual al build |
+| `firestore.rules`, `firestore.indexes.json`, `storage.rules` | Fuente versionada de reglas e índices (Firestore) y de las reglas de Storage (fotos) |
+| `fotos/` | Archivo histórico de las fotos de antes de Storage; ya no entra en el build |
 | `docs/` | `ARQUITECTURA.md`, `LANZAMIENTO.md`, `SEGURIDAD-OWASP.md` (pendientes de seguridad), `mapa-modulos.json` |
 
 Vite inserta las vistas en `index.html` en build y en dev (`transformIndexHtml` en `vite.config.js`). Las vistas tienen que estar bajo `src/client/vistas/` o el build falla. Las entradas compiladas son `index`, `catalogo`, `ver`, `privacidad`, `condiciones` y `eliminacion-datos`.
@@ -114,6 +114,7 @@ Colecciones: `gastos`, `ingresos`, `stock`, `consig`, `pagos_consig`, `gastos_fi
 firebase deploy --only firestore:rules --dry-run   # compila sin publicar
 firebase deploy --only firestore:rules             # publica (firebase-tools está logueado en esta PC)
 firebase deploy --only firestore:indexes
+firebase deploy --only storage                     # storage.rules: las fotos
 ```
 
 ### Ciclo de datos: snapshot → contextoApp → render debounced
@@ -166,8 +167,8 @@ onSnapshot(myQ(col))  →  applySnap('nombre', snap)  →  contextoApp.X  →  d
 
 ### Catálogo web, tienda y bot
 
-- La tienda pública es **https://contify.tech/tienda** (Node sirve `catalogo.html` ahí y redirige `/catalogo.html`); `LINK_CATALOGO`, `CATALOGO_URL` del Worker y el link del bot apuntan a esa dirección. `catalogo.html` lee solo `catalogo/publico` (y `catalogo/fotos`); el dueño lo publica desde la pantalla Catálogo (`publicarCatalogo`). A la tienda va solo lo que el dueño mandó (`cfg.catalogoIncluidos`, botón "Mandar a la tienda"); `catalogoCandidatos()` arma los candidatos. Las reglas de cobro viajan en `cobro` dentro del doc publicado: cambiar una constante no hace nada hasta republicar. Mapa de fotos en `catalogo/fotos`, clave `slugFoto(nombre)-slugFoto(color)`; `node test-catalogo.mjs` lo chequea.
-- **Fotos**: se suben desde la ficha del producto a `POST /api/fotos/subir` del Node del VPS (`server/http/fotos.js`), que las guarda en `FOTOS_DIR` y las sirve en `https://contify.tech/fotos/`; `catalogo/fotos.base` apunta ahí y las dos tiendas y el bot las leen de esa URL. Las viejas siguen en `fotos/` del repo (`dist/fotos`). El Worker tienda sube las de Amazon al mismo lugar (`FOTOS_SUBIR_URL`).
+- La tienda pública es **https://marplacityy.github.io/marplacity-sistema/catalogo.html** (`TIENDA_PUBLICA` en `src/shared/sitio.js`); `LINK_CATALOGO`, `CATALOGO_URL` del Worker y el link del bot apuntan a esa dirección. No hay VPS ni dominio propio; para volver a tener uno, ver "Dominio propio" en `docs/LANZAMIENTO.md`. `catalogo.html` lee solo `catalogo/publico` (y `catalogo/fotos`); el dueño lo publica desde la pantalla Catálogo (`publicarCatalogo`). A la tienda va solo lo que el dueño mandó (`cfg.catalogoIncluidos`, botón "Mandar a la tienda"); `catalogoCandidatos()` arma los candidatos. Las reglas de cobro viajan en `cobro` dentro del doc publicado: cambiar una constante no hace nada hasta republicar. Mapa de fotos en `catalogo/fotos`, clave `slugFoto(nombre)-slugFoto(color)`; `node test-catalogo.mjs` lo chequea.
+- **Fotos**: viven en Firebase Storage, `fotos/` del bucket `mis-gastos-21e7b.firebasestorage.app`, y se ven en `FOTOS_BASE + archivo` (`src/shared/sitio.js`, bucket con lectura pública por IAM). El sistema sube y lista directo con el SDK (`core/fotos.js`); el Worker tienda sube las que trae de un link o de Amazon por la API REST con el token del dueño (`subirAStorage`). Quién escribe lo deciden `storage.rules` (solo el dueño, solo imágenes). `catalogo/fotos.base` guarda la base y las dos tiendas y el bot la usan.
 - **Tienda** (`server/services/tienda`, deploy en `workers/tienda`): `POST /pedido` lee el precio del catálogo publicado, guarda en `pedidos` y devuelve Mercado Pago (ARS) o Stripe (USD). Webhooks de respaldo; `GET /pedido/:id` consulta la pasarela si sigue `creado`.
 - **Listas de precios** (`modulos/listas.js`, pantalla `listas`): un proveedor por pestaña, configurables en `conocimiento/{uid}.proveedores` (`{id, nombre, tipo: publico|costo, vence}`; sin eso, los tres de siempre `mdp`/`caba`/`prov`). Cada lista es un doc de `listas_precios` con `origen` = id del proveedor (más `proveedor` y `tipo`). La lógica de interpretar/editar/guardar sigue en `conocimiento.js`, parametrizada por `origen`, con ids `kb-<origen>-*`. Alimentan el catálogo (una fuente por proveedor) y al bot, que lee los proveedores del doc de conocimiento y pide la última lista de cada uno.
 - **Bot de Instagram** (`server/services/ig-bot`, deploy en `workers/ig-bot`): prompt en `prompt.js`, guarda en `conversaciones`, cron de seguimiento cada hora. Ventana de 24 h de Meta: no cambiar.

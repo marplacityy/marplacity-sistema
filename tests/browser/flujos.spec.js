@@ -51,6 +51,29 @@ test('una cuenta nueva no escucha configuraciones privadas ni publica sobre otro
   expect(errores).toEqual([]);
 });
 
+test('las fotos se suben a Storage y el mapa guarda la base pública de Storage', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await page.evaluate(() => window.__datosPrueba.cargar('catalogo/publico', { productos: [] }));
+  await ir(page, 'catalogo');
+  const subidos = await page.evaluate(async () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = 40;
+    c.getContext('2d').fillRect(0, 0, 40, 40);
+    const imagen = await new Promise(r => c.toBlob(r, 'image/png'));
+    await window.subirFotosDe('stock_equipo-1', [imagen]);
+    return window.__datosPrueba.archivos();
+  });
+  expect(subidos).toHaveLength(1);
+  expect(subidos[0]).toMatch(/^fotos\/iphone-15[a-z0-9-]*\.jpg$/);
+  const mapa = await page.evaluate(() => window.__datosPrueba.leer('catalogo/fotos'));
+  expect(mapa.base).toBe('https://storage.googleapis.com/mis-gastos-21e7b.firebasestorage.app/fotos/');
+  expect(Object.values(mapa.mapa).flat()).toContain(subidos[0].replace('fotos/', ''));
+  await page.evaluate(() => window.sincronizarFotos());
+  await expect(page.locator('#toast')).toContainText('1 imagen');
+  expect(errores).toEqual([]);
+});
+
 test('la etiqueta dibuja barras y QR e invoca impresión con la política de seguridad', async ({ page, context }) => {
   await preparar(page);
   await context.addInitScript(() => { window.print = () => { window.__impresionSolicitada = true; }; });

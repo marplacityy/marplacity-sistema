@@ -1,3 +1,5 @@
+import { SITIO_PUBLICO, FOTOS_BASE } from '../../shared/sitio.js';
+
 export let configuracion = null;
 
 /** Solo recibe URLs públicas: ninguna clave de servicio se envía al navegador. */
@@ -6,17 +8,15 @@ export async function cargarConfiguracion() {
   if (import.meta.env.MODE === 'pages') {
     // GitHub Pages sirve la interfaz compilada; las APIs siguen en sus Workers.
     configuracion = {
-      // Los links públicos (tienda, documentos) van siempre al servidor del local, también
-      // desde esta copia: es la dirección que se comparte con los clientes.
-      basePublica: 'https://contify.tech/',
-      // Las fotos viven en el servidor del local (Hostinger), también para esta copia.
-      fotosBase: 'https://contify.tech/fotos/',
+      // Los links públicos (tienda, documentos): la dirección que se comparte con clientes.
+      basePublica: SITIO_PUBLICO,
+      // Las fotos viven en Firebase Storage; el sistema las sube y las lista directo.
+      fotosBase: FOTOS_BASE,
       api: {
         ia: 'https://anthropic-proxy.fiwind702050.workers.dev',
         tienda: 'https://tienda.fiwind702050.workers.dev',
         instagram: 'https://ig-bot.fiwind702050.workers.dev',
         facturador: 'https://facturador.fiwind702050.workers.dev',
-        fotos: 'https://contify.tech/api/fotos',
       },
     };
     return configuracion;

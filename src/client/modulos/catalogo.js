@@ -5,6 +5,8 @@ import { configuracion } from '../core/config-publica.js';
 import { contextoApp } from '../core/estado.js';
 import { esc, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
+import { listarFotos, subirFoto } from '../core/fotos.js';
+import { FOTOS_BASE } from '../../shared/sitio.js';
 import { updateDoc, doc, setDoc } from 'firebase/firestore';
 import { kbUltimaLista, kbFecha } from './conocimiento.js';
 import { workerHeaders, textoDeIA } from './reportes.js';
@@ -181,8 +183,8 @@ function asegurarIncluidos() {
 }
 
 /**
- * El doc de fotos tiene que apuntar a donde viven las fotos ahora (el servidor del
- * local). Si quedó con la base vieja (GitHub Pages), se vuelve a guardar una vez: las
+ * El doc de fotos tiene que apuntar a donde viven las fotos ahora (Firebase Storage).
+ * Si quedó con una base vieja (GitHub Pages, el VPS), se vuelve a guardar una vez: las
  * tiendas y el bot leen de ahí.
  */
 let baseCorregida = false;
@@ -414,8 +416,6 @@ export function renderFichaCatalogo() {
     eliminado: 'No está en la tienda.',
   };
   const estiloPill = clsPub === 'no' ? 'color:var(--neg);' : clsPub === 'pend' ? 'color:#854F0B;border-color:#F2D399;background:#FFF6E5;' : '';
-  // La foto se lee del servidor del local; si no está ahí (una vieja que quedó solo en el
-  // repositorio), se prueba con la copia cruda de GitHub.
   const srcFoto = a => esc(contextoApp.FOTOS_BASE + encodeURIComponent(a));
   const chips = [p.gb, p.color, p.bateria != null ? `Batería ${p.bateria}%` : '', p.estado].filter(Boolean);
 
@@ -424,7 +424,7 @@ export function renderFichaCatalogo() {
       <div class="cat-sec-t">Así se ve en la tienda</div>
       <div class="cat-prev">
         <div class="cat-prev-card">
-          <div class="foto">${p._entrega === 'pedido' ? '<span class="sello">A pedido</span>' : ''}${archivos.length ? `<img src="${srcFoto(archivos[0])}" alt="" ${on('error', 'fotoCatalogoCruda', '$this', archivos[0])}>` : esc(inicialCatalogo(p))}</div>
+          <div class="foto">${p._entrega === 'pedido' ? '<span class="sello">A pedido</span>' : ''}${archivos.length ? `<img src="${srcFoto(archivos[0])}" alt="">` : esc(inicialCatalogo(p))}</div>
           <div class="nombre">${esc(meta.titulo || p.nombre)}</div>
           <div class="chips">${chips.map(c => `<span class="chip">${esc(c)}</span>`).join('')}</div>
           <div class="precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</div>
@@ -451,7 +451,7 @@ export function renderFichaCatalogo() {
     const c = contextoApp.FOTOS_CLAS[a] || {};
     return `
         <div class="cat-img${k === 0 ? ' principal' : ''}">
-          <img src="${srcFoto(a)}" loading="lazy" alt="" ${on('error', 'fotoCatalogoCruda', '$this', a)}>
+          <img src="${srcFoto(a)}" loading="lazy" alt="">
           ${k === 0 ? '<span class="tag">Principal</span>' : `<button class="estrella" title="Que sea la primera foto" ${on('click', 'hacerPrincipalFoto', a, clave)}>★ Hacer principal</button>`}
           <button class="quitar" title="Sacar esta foto del producto" ${on('click', 'quitarFotoCatalogo', a)}>✕</button>
           <select ${on('change', 'vistaFoto', a, '$value')} title="Qué muestra la foto">
@@ -627,11 +627,9 @@ export function renderFotosCatalogo() {
            ${contextoApp.selectClave(a, '')}
          </div>`).join('')}</div>` : ''}`;
 }
-/** Los archivos de imagen que hay de verdad en el servidor: los subidos y los del repositorio. */
+/** Los archivos de imagen que hay de verdad en `fotos/` de Firebase Storage. */
 export async function archivosDeFotos() {
-  const r = await fetch(contextoApp.FOTOS_API + '/lista');
-  if (!r.ok) throw new Error('el servidor de fotos contestó ' + r.status);
-  return (await r.json()).archivos || [];
+  return listarFotos();
 }
 
 /** Guarda el mapa y las decisiones. Solo se conservan decisiones de archivos que existen. */
@@ -676,8 +674,8 @@ async function decodificarImagen(blob) {
   }
 }
 
-/** Una imagen achicada a `max` px de lado y pasada a JPEG, en base64 sin el prefijo. */
-export async function imagenJpegBase64(blob, max) {
+/** Una imagen achicada a `max` px de lado, dibujada sobre blanco en un canvas. */
+async function imagenEnCanvas(blob, max) {
   const bmp = await decodificarImagen(blob);
   const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
@@ -687,7 +685,18 @@ export async function imagenJpegBase64(blob, max) {
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, c.width, c.height); // los PNG con transparencia, sobre blanco
   ctx.drawImage(bmp, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+  return c;
+}
+
+/** Una imagen achicada a `max` px de lado y pasada a JPEG, en base64 sin el prefijo. */
+export async function imagenJpegBase64(blob, max) {
+  return (await imagenEnCanvas(blob, max)).toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
+/** Una imagen achicada a `max` px de lado y pasada a JPEG, como archivo para subir. */
+async function imagenJpegBlob(blob, max) {
+  const c = await imagenEnCanvas(blob, max);
+  return new Promise((resolver, rechazar) => c.toBlob(b => b ? resolver(b) : rechazar(new Error('no pude convertir la imagen')), 'image/jpeg', 0.85));
 }
 
 // ── La descripción, escrita a partir de los datos ────────────
@@ -796,22 +805,18 @@ export function inicializarCatalogo() {
   // sirve para cualquiera. Importa porque hay dos iPhone 15 en stock, uno negro y uno
   // rosa: con una sola foto por modelo, al rosa le saldría la del negro.
   contextoApp.FOTOS = {}; // { 'iphone-15-black': ['iphone-15-black.jpg'], ... }
-  // Las fotos viven en el servidor del local (Hostinger): de ahí las leen la tienda, el bot
-  // y esta pantalla, y ahí se suben (`/api/fotos`). Las viejas del repositorio también se
-  // sirven desde ahí (dist/fotos).
-  contextoApp.FOTOS_BASE = configuracion.fotosBase || 'fotos/';
-  contextoApp.FOTOS_API = configuracion.api.fotos;
+  // Las fotos viven en Firebase Storage (core/fotos.js): de ahí las leen la tienda, el bot
+  // y esta pantalla, y ahí se suben.
+  contextoApp.FOTOS_BASE = configuracion.fotosBase || FOTOS_BASE;
   // Qué decidió la IA (o Juni a mano) de cada archivo: { 'IMG_0412.jpg': { clave, vista, confianza, manual } }.
   // `clave` en null es "mirada y no identificada". Manda sobre el nombre del archivo.
   contextoApp.FOTOS_CLAS = {};
   contextoApp.fotoAbierta = null; // la clave cuyo detalle está desplegado en la grilla
-  // Los archivos se leen de acá para clasificar: es la copia cruda del repo, disponible al
-  // instante después del push, sin esperar a que GitHub Pages termine de publicar.
-  contextoApp.FOTOS_RAW = 'https://raw.githubusercontent.com/marplacityy/marplacity-sistema/main/fotos/';
   contextoApp.fotosDoc = doc(contextoApp.db, 'catalogo', 'fotos');
   contextoApp.catalogoDoc = doc(contextoApp.db, 'catalogo', 'publico');
   contextoApp.catPublicado = null; // lo último que se publicó, para comparar
-  contextoApp.LINK_CATALOGO = configuracion.basePublica + 'tienda'; // Reglas de cobro de la tienda. Pagar con tarjeta en dólares (Stripe) lleva recargo, y
+  // La tienda pública: la misma dirección que TIENDA_PUBLICA (shared/sitio.js).
+  contextoApp.LINK_CATALOGO = configuracion.basePublica + 'catalogo.html'; // Reglas de cobro de la tienda. Pagar con tarjeta en dólares (Stripe) lleva recargo, y
   // Mercado Pago se ofrece solo para productos baratos: cobrar un teléfono por ahí dispara
   // impuestos que se comen el margen. Decidido por Juni el 06/09/2026.
   contextoApp.RECARGO_TARJETA_PCT = 5; // Mercado Pago cobra 8% con acreditación inmediata (visto en el primer pago real, 06/09/2026).
@@ -1169,14 +1174,9 @@ export function inicializarCatalogo() {
 
   // ── Fotos desde la ficha del producto ──────────────────────
   //
-  // Las fotos viven en fotos/ del repositorio. Desde acá se suben (el Worker tienda las
-  // escribe con su token de GitHub), se buscan en Amazon para un solo producto, o se
-  // sacan de un producto. Recién publicada, una foto todavía no está en la tienda:
-  // mientras GitHub la publica, la ficha la lee de la copia cruda del repo.
-  window.fotoCatalogoCruda = (img, archivo) => {
-    img.removeAttribute('data-error');
-    img.src = contextoApp.FOTOS_RAW + encodeURIComponent(archivo);
-  };
+  // Las fotos viven en Firebase Storage (core/fotos.js). Desde acá se suben, se traen de
+  // un link o de Amazon (el Worker tienda las baja y las sube con el token del dueño), o
+  // se sacan de un producto. Se ven al instante: no hay que esperar ningún deploy.
 
   /**
    * Elegir una o varias imágenes de la PC o el celular. El input va al documento antes
@@ -1214,24 +1214,15 @@ export function inicializarCatalogo() {
     try {
       for (const f of elegidas) {
         progreso(`Subiendo ${subidas + 1} de ${elegidas.length}…`);
-        const datos = await imagenJpegBase64(f, 1600);
+        const imagen = await imagenJpegBlob(f, 1600);
         // El nombre es el del producto: iphone-15-black.jpg, y -2, -3 para las siguientes.
         let archivo;
         do { n++; archivo = `${clave}${n > 1 ? '-' + n : ''}.jpg`; } while (conocidos.has(archivo));
-        let r;
         try {
-          r = await fetch(contextoApp.FOTOS_API + '/subir', {
-            method: 'POST',
-            headers: await workerHeaders(),
-            body: JSON.stringify({ archivo, datos })
-          });
-        } catch {
-          throw new Error('no se pudo conectar con el servidor de fotos (contify.tech). ¿Está caído?');
-        }
-        const d = await r.json().catch(() => ({}));
-        if (!r.ok) {
-          console.error('subida de foto', archivo, r.status, d);
-          throw new Error(r.status === 404 ? 'el servidor todavía no tiene la subida de fotos (falta actualizarlo)' : r.status === 401 ? 'no autorizado: entrá con la cuenta del dueño del local' : r.status === 429 ? 'demasiadas subidas seguidas, esperá un minuto' : r.status === 413 ? 'la imagen es demasiado grande' : d.error || `el servidor respondió ${r.status}`);
+          await subirFoto(archivo, imagen);
+        } catch (e) {
+          console.error('subida de foto', archivo, e.code, e.message);
+          throw new Error(e.code === 'storage/unauthorized' || e.code === 'storage/unauthenticated' ? 'no autorizado: entrá con la cuenta del dueño del local' : e.code === 'storage/retry-limit-exceeded' ? 'no hay conexión con Firebase Storage, probá de nuevo' : e.code === 'storage/quota-exceeded' ? 'se llenó el espacio de Storage' : e.message);
         }
         conocidos.add(archivo);
         contextoApp.FOTOS_CLAS = { ...contextoApp.FOTOS_CLAS, [archivo]: { clave, vista: n === 1 ? 'frente' : '', manual: true } };
@@ -1266,7 +1257,7 @@ export function inicializarCatalogo() {
   //
   // El Worker busca en Amazon y en Google Imágenes (dos búsquedas de SerpApi) y devuelve
   // candidatas con tamaño y fuente, sin bajar nada. Acá se muestran, Juni marca las que
-  // quiere y recién ahí el Worker las baja y las sube al servidor del local.
+  // quiere y recién ahí el Worker las baja y las sube a Firebase Storage.
   const urlTiendaRemota = () => configuracion.api.tiendaRemota || contextoApp.TIENDA_URL;
   contextoApp.catCandidatos = null;   // { id, consulta, lista: [{url, thumb, ancho, alto, fuente, color, elegida}] }
 
@@ -1324,7 +1315,7 @@ export function inicializarCatalogo() {
     await traerFotosDeUrls(id, [url]);
   };
 
-  /** Lo común: el Worker baja las URLs y las sube al servidor del local con el nombre del producto. */
+  /** Lo común: el Worker baja las URLs y las sube a Firebase Storage con el nombre del producto. */
   async function traerFotosDeUrls(id, urls) {
     if (!requiereDuenoDelLocal()) return;
     const p = catalogoCandidatos().find(x => x.id === id);
@@ -1634,11 +1625,8 @@ Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
   };
 
   /**
-   * Rearma el mapa leyendo qué archivos hay realmente en `fotos/`.
-   *
-   * El navegador no puede listar una carpeta, pero el repositorio es público y GitHub la
-   * lista por su API. Se pregunta ahí a propósito: eso es lo que GitHub Pages termina
-   * sirviendo, así que si un archivo aparece en la lista, la URL de la foto anda seguro.
+   * Rearma el mapa leyendo qué archivos hay realmente en `fotos/` de Firebase Storage:
+   * si un archivo aparece en la lista, la URL de la foto anda seguro.
    *
    * La clave sale del nombre del archivo sin extensión. Las fotos extra del mismo equipo
    * terminan en `-2`, `-3`: ese sufijo se saca SOLO si existe el archivo base sin él, para

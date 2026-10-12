@@ -4,19 +4,25 @@
  * Para un producto sin foto, busca en Amazon "nombre capacidad color", se queda con la
  * imagen principal de los primeros resultados que se parezcan (fondo blanco, de
  * fabricante o vendedor oficial, que es lo que se ve en los listados), la baja y la
- * sube a `fotos/` del repositorio con el nombre que el sistema espera. El sistema
+ * sube a `fotos/` de Firebase Storage con el nombre que el sistema espera. El sistema
  * después la asigna con "Clasificar fotos nuevas" (la IA confirma modelo y color) o
  * queda asignada por el nombre del archivo.
  *
- * Por qué acá y no en el browser: la clave de SerpApi y el token de GitHub no pueden
- * viajar en un HTML público. Y por qué SerpApi y no pegarle a Amazon: Amazon bloquea
- * scrapers con CAPTCHAs y cambia el HTML seguido; SerpApi ya resuelve eso.
+ * Por qué acá y no en el browser: la clave de SerpApi no puede viajar en un HTML
+ * público, y muchos sitios no dejan bajar sus imágenes desde otra página (CORS). Y por
+ * qué SerpApi y no pegarle a Amazon: Amazon bloquea scrapers con CAPTCHAs y cambia el
+ * HTML seguido; SerpApi ya resuelve eso.
+ *
+ * La subida a Storage va con el token de Firebase del dueño que vino en la solicitud:
+ * las reglas de Storage (storage.rules) son las que deciden, igual que si subiera él
+ * desde el sistema. El Worker no tiene credenciales propias para escribir fotos.
  *
  * Variables:
  *   SERPAPI_KEY    (Secret)  clave de serpapi.com (250 búsquedas gratis por mes)
- *   GITHUB_TOKEN   (Secret)  token con "Contents: read/write" SOLO sobre este repo
- *   GITHUB_REPO    (Text)    marplacityy/marplacity-sistema
+ *   FOTOS_BUCKET   (Text)    el bucket de Storage; si falta, el de src/shared/sitio.js
  */
+
+import { FOTOS_BUCKET, FOTOS_CARPETA } from '../../../src/shared/sitio.js';
 
 const SERP = 'https://serpapi.com/search.json';
 const MAX_IMAGEN = 8 * 1024 * 1024;
@@ -181,8 +187,7 @@ export async function traerFotos(env, { base, desde, urls }, token) {
     const img = await bajarImagen(url, { externa: true });
     if (!img) { fallidas.push(url); continue; }
     const archivo = `${base}${n > 1 ? '-' + n : ''}.${img.ext}`;
-    if (env.FOTOS_SUBIR_URL) await subirAlServidor(env, archivo, img.bytes, token);
-    else await subirAlRepo(env, archivo, img.bytes);
+    await subirAStorage(env, archivo, img, token);
     subidos.push(archivo);
     n++;
   }
@@ -229,73 +234,31 @@ export async function bajarImagen(url, { externa = false } = {}) {
   return { bytes, ext };
 }
 
-const b64 = bytes => {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-};
+const TIPOS = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 
-/** Sube (o pisa) un archivo en fotos/ del repo por la API de GitHub. Devuelve el nombre. */
-export async function subirAlRepo(env, nombre, bytes, motivo = 'desde Amazon') {
-  if (!env.GITHUB_TOKEN) throw new Error('falta GITHUB_TOKEN');
-  const repo = env.GITHUB_REPO || 'marplacityy/marplacity-sistema';
-  const url = `https://api.github.com/repos/${repo}/contents/fotos/${encodeURIComponent(nombre)}`;
-  const cab = { Authorization: `Bearer ${env.GITHUB_TOKEN}`, 'User-Agent': 'marplacity-tienda', Accept: 'application/vnd.github+json' };
-  // Si ya existe hay que mandar su sha para pisarlo.
-  const prev = await fetch(url, { headers: cab });
-  const sha = prev.ok ? (await prev.json()).sha : undefined;
-  const r = await fetch(url, {
-    method: 'PUT', headers: { ...cab, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: `fotos: ${nombre} (${motivo})`, content: b64(bytes), sha }),
-  });
-  if (!r.ok) throw new Error(`GitHub ${r.status}: ${(await r.text()).slice(0, 200)}`);
-  return nombre;
-}
-
-const MAX_SUBIDA = 2 * 1024 * 1024;
-
-/**
- * Una foto que el dueño sube desde el sistema: nombre de archivo como los que arma el
- * sistema (modelo-color-2.jpg) y la imagen en base64. Devuelve {archivo, bytes} o {error}.
- * Exportado para el test.
- */
-export function validarSubida(body) {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'subida inválida' };
-  const archivo = String(body.archivo || '').trim();
-  if (!/^[a-z0-9][a-z0-9-]{0,118}\.(jpe?g|png|webp)$/.test(archivo)) return { error: 'nombre de archivo inválido' };
-  const datos = String(body.datos || '').replace(/^data:image\/\w+;base64,/, '').replace(/\s/g, '');
-  if (!datos || !/^[A-Za-z0-9+/]+=*$/.test(datos)) return { error: 'imagen inválida' };
-  if (datos.length > MAX_SUBIDA * 1.4) return { error: 'la imagen pesa más de 2 MB' };
-  let bytes;
-  try { bytes = Uint8Array.from(atob(datos), c => c.charCodeAt(0)); } catch { return { error: 'imagen inválida' }; }
-  if (bytes.length < 1000) return { error: 'la imagen está vacía' };
-  if (bytes.length > MAX_SUBIDA) return { error: 'la imagen pesa más de 2 MB' };
-  // Que sea de verdad una imagen: la firma de JPEG, PNG o WebP.
-  const jpeg = bytes[0] === 0xFF && bytes[1] === 0xD8;
-  const png = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
-  const webp = bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
-  if (!jpeg && !png && !webp) return { error: 'el archivo no es una imagen' };
-  return { archivo, bytes };
+/** La URL de subida de la API REST de Storage para un archivo de `fotos/`. Exportado para el test. */
+export function urlSubidaStorage(bucket, archivo) {
+  return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(`${FOTOS_CARPETA}/${archivo}`)}`;
 }
 
 /**
- * Sube un archivo al servidor del local (FOTOS_SUBIR_URL, la ruta /api/fotos/subir de
- * Node) con el token del dueño que vino en la solicitud. Es el camino de ahora: las fotos
- * viven en el VPS y se ven al instante, sin token de GitHub que venza.
+ * Sube (o pisa) un archivo en `fotos/` de Firebase Storage con el token del dueño. Si el
+ * token no es del dueño o no es una imagen, las reglas de Storage lo rechazan (403).
  */
-export async function subirAlServidor(env, nombre, bytes, token) {
-  const r = await fetch(env.FOTOS_SUBIR_URL, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Firebase-Token': token || '' },
-    body: JSON.stringify({ archivo: nombre, datos: b64(bytes) }),
+export async function subirAStorage(env, nombre, { bytes, ext }, token) {
+  if (!token) throw new Error('falta el token del dueño');
+  const r = await fetch(urlSubidaStorage(env.FOTOS_BUCKET || FOTOS_BUCKET, nombre), {
+    method: 'POST',
+    headers: { Authorization: `Firebase ${token}`, 'Content-Type': TIPOS[ext] || 'image/jpeg' },
+    body: bytes,
   });
-  if (!r.ok) throw new Error(`el servidor de fotos respondió ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw new Error(`Storage respondió ${r.status}: ${(await r.text()).slice(0, 200)}`);
   return nombre;
 }
 
 /**
  * El trabajo completo para un producto: buscar, elegir, bajar y subir. Devuelve los
- * nombres de archivo subidos (vacío si no encontró nada usable). Sube al servidor del
- * local si está configurado; si no, al repositorio como antes.
+ * nombres de archivo subidos (vacío si no encontró nada usable).
  */
 export async function fotosParaProducto(env, { nombre, gb, color, esAccesorio }, token) {
   const q = [nombreParaAmazon(nombre), gb, nombreParaAmazon(color)].filter(Boolean).join(' ');
@@ -307,8 +270,7 @@ export async function fotosParaProducto(env, { nombre, gb, color, esAccesorio },
     const img = await bajarImagen(urls[i]);
     if (!img) continue;
     const archivo = `${base}${subidos.length ? '-' + (subidos.length + 1) : ''}.${img.ext}`;
-    if (env.FOTOS_SUBIR_URL) await subirAlServidor(env, archivo, img.bytes, token);
-    else await subirAlRepo(env, archivo, img.bytes);
+    await subirAStorage(env, archivo, img, token);
     subidos.push(archivo);
   }
   return { consulta: q, candidatos: resultados.length, subidos };

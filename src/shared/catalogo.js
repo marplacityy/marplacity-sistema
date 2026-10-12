@@ -139,5 +139,3 @@ function armarMapaFotos(archivos, clasificacion) {
   for (const k in mapa) mapa[k].sort((a, b) => peso(a) - peso(b) || a.length - b.length || a.localeCompare(b));
   return mapa;
 }
-
-/** Los archivos de imagen que hay de verdad en `fotos/`, según GitHub. */

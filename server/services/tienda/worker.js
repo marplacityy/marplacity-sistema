@@ -15,8 +15,9 @@
  *   GET  /pedido/:id     el estado del pedido, para la pantalla de vuelta del pago
  *   POST /mp/webhook     Mercado Pago avisa que un pago cambió
  *   POST /stripe/webhook Stripe avisa que un pago cambió
- *   POST /fotos          busca en Amazon y sube a fotos/ las imágenes de un producto (solo el dueño)
- *   POST /fotos/subir    sube a fotos/ una imagen que el dueño eligió desde el sistema (solo el dueño)
+ *   POST /fotos          busca en Amazon y sube a Storage las imágenes de un producto (solo el dueño)
+ *   POST /fotos/buscar   candidatos de foto para elegir a mano, sin bajar nada (solo el dueño)
+ *   POST /fotos/traer    baja las URLs elegidas o pegadas y las sube a Storage (solo el dueño)
  *
  * Variables (Settings → Variables del panel de Cloudflare, o `wrangler secret put`):
  *   FIREBASE_PROJECT   (Text)    mis-gastos-21e7b
@@ -28,15 +29,16 @@
  *   MP_WEBHOOK_SECRET  (Secret)  la "clave secreta" de Webhooks de la app de MP (opcional, pero conviene)
  *   STRIPE_SECRET_KEY  (Secret)  clave secreta de Stripe (sk_test_... primero, sk_live_... después)
  *   STRIPE_WEBHOOK_SECRET (Secret) el "signing secret" del endpoint de webhook en Stripe (whsec_...)
- *   SERPAPI_KEY, GITHUB_TOKEN, GITHUB_REPO  ver fotos.js
- *   CATALOGO_URL       (Text)    a dónde vuelve el cliente después de pagar
+ *   SERPAPI_KEY, FOTOS_BUCKET  ver fotos.js
+ *   CATALOGO_URL       (Text)    a dónde vuelve el cliente después de pagar (si falta, TIENDA_PUBLICA)
  *
  * Los precios NUNCA vienen de la página: se leen de `catalogo/publico`, que es lo que
  * publicó el dueño. Un cliente que edite el HTML no puede pagar menos.
  */
 
 import { leerDoc, escribirDoc } from '../facturador/firestore.js';
-import { fotosParaProducto, subirAlRepo, validarSubida, candidatosDeFotos, traerFotos, urlPublicaSegura } from './fotos.js';
+import { fotosParaProducto, candidatosDeFotos, traerFotos, urlPublicaSegura } from './fotos.js';
+import { TIENDA_PUBLICA } from '../../../src/shared/sitio.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -60,7 +62,7 @@ export default {
           TIENDA_EMAIL: !!env.TIENDA_EMAIL, TIENDA_PASSWORD: !!env.TIENDA_PASSWORD,
           MP_ACCESS_TOKEN: !!env.MP_ACCESS_TOKEN, MP_WEBHOOK_SECRET: !!env.MP_WEBHOOK_SECRET,
           STRIPE_SECRET_KEY: !!env.STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET: !!env.STRIPE_WEBHOOK_SECRET,
-          SERPAPI_KEY: !!env.SERPAPI_KEY, GITHUB_TOKEN: !!env.GITHUB_TOKEN,
+          SERPAPI_KEY: !!env.SERPAPI_KEY, FOTOS_BUCKET: !!env.FOTOS_BUCKET,
           CATALOGO_URL: !!env.CATALOGO_URL,
         },
       });
@@ -75,7 +77,6 @@ export default {
       if (request.method === 'POST' && url.pathname === '/mp/webhook') return await webhookMP(request, env, ctx, url);
       if (request.method === 'POST' && url.pathname === '/stripe/webhook') return await webhookStripe(request, env, ctx);
       if (request.method === 'POST' && url.pathname === '/fotos') return await buscarFotos(request, env);
-      if (request.method === 'POST' && url.pathname === '/fotos/subir') return await subirFoto(request, env);
       if (request.method === 'POST' && url.pathname === '/fotos/buscar') return await buscarCandidatos(request, env);
       if (request.method === 'POST' && url.pathname === '/fotos/traer') return await traerElegidas(request, env);
     } catch (e) {
@@ -291,27 +292,6 @@ async function traerElegidas(request, env) {
   }
 }
 
-/**
- * Una foto que el dueño eligió en su computadora o celular. El sistema ya la achicó; acá
- * solo se valida y se sube a fotos/ del repo, de donde la sirven la tienda y el bot.
- */
-async function subirFoto(request, env) {
-  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
-  if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
-  let body;
-  try { body = await request.json(); } catch { return json({ error: 'json inválido' }, 400); }
-  const v = validarSubida(body);
-  if (v.error) return json({ error: v.error }, 400);
-  try {
-    await subirAlRepo(env, v.archivo, v.bytes, 'subida desde el sistema');
-    console.log('foto subida', v.archivo, v.bytes.length, 'bytes');
-    return json({ ok: true, archivo: v.archivo });
-  } catch (e) {
-    console.log('foto subida error', v.archivo, e.message);
-    return json({ error: e.message }, 502);
-  }
-}
-
 /** El uid de un ID token de Firebase, validado contra Google. Null si no vale. */
 async function uidDelToken(idToken, env) {
   if (!idToken) return null;
@@ -337,7 +317,7 @@ const mpHeaders = env => ({ Authorization: `Bearer ${env.MP_ACCESS_TOKEN}`, 'Con
 async function preferenciaMP(env, pedidoId, pedido, origin) {
   if (!env.MP_ACCESS_TOKEN) throw new Error('falta MP_ACCESS_TOKEN');
   if (env.RUNTIME_NODE && !env.TIENDA_WEBHOOK_URL) throw new Error('Configurá TIENDA_WEBHOOK_URL con la URL pública del webhook de Node.js.');
-  const vuelta = `${env.CATALOGO_URL || 'https://contify.tech/tienda'}?pedido=${pedidoId}`;
+  const vuelta = `${env.CATALOGO_URL || TIENDA_PUBLICA}?pedido=${pedidoId}`;
   const titulo = [pedido.producto.nombre, pedido.producto.gb, pedido.producto.color].filter(Boolean).join(' ');
   const r = await fetch(`${MP}/checkout/preferences`, {
     method: 'POST',
@@ -467,7 +447,7 @@ const formStripe = obj => {
  */
 async function sesionStripe(env, pedidoId, pedido) {
   if (!env.STRIPE_SECRET_KEY) throw new Error('falta STRIPE_SECRET_KEY');
-  const vuelta = `${env.CATALOGO_URL || 'https://contify.tech/tienda'}?pedido=${pedidoId}`;
+  const vuelta = `${env.CATALOGO_URL || TIENDA_PUBLICA}?pedido=${pedidoId}`;
   const titulo = [pedido.producto.nombre, pedido.producto.gb, pedido.producto.color].filter(Boolean).join(' ');
   const r = await fetch(`${STRIPE}/checkout/sessions`, {
     method: 'POST',

@@ -13,11 +13,12 @@ conserva las cuentas existentes. La migración no copia ni transforma datos real
 | `src/client/vistas` | Una plantilla HTML por pantalla: 23 en total |
 | `src/client/styles` | Estilos del sistema, catálogo y visor de documentos |
 | `src/shared/catalogo.js` | Funciones puras de fotos y categorías, importables sin Firebase |
+| `src/shared/sitio.js` | La dirección pública (GitHub Pages), la tienda y la base de las fotos en Firebase Storage |
 | `server/app.js` | Servidor HTTP, rutas, límites, registro de solicitudes y archivos públicos |
 | `server/services` | Implementaciones de tienda, Instagram, facturador e IA |
 | `workers` | Entradas de compatibilidad para los despliegues existentes en Cloudflare |
 | `tests` | Pruebas HTTP, estructura y navegador con datos ficticios |
-| `public` y `fotos` | Recursos que se incluyen en la compilación |
+| `public` | Recursos que se incluyen en la compilación (las fotos viven en Firebase Storage) |
 | `dist` | Resultado compilado; es lo único que Express publica como archivos |
 | `.runtime` | Registros y control del servidor local; queda fuera de Git |
 

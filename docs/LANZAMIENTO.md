@@ -58,38 +58,64 @@ Al trasladarlos, desactivar primero el cron de Cloudflare y después usar
 `SEGUIMIENTOS_ACTIVOS=true` con Instagram en modo local. Debe existir una única
 instancia encargada de estos seguimientos.
 
-## VPS (Hostinger, Debian 13)
+## Fotos de los productos (Firebase Storage)
 
-Instalado el 12/09/2026 en `srv1976120.hstgr.cloud`; desde ese día responde también en
-`https://contify.tech` (dominio registrado en Hostinger, `www` redirige al apex). Node 24 en `/usr/local`, Caddy para
-HTTPS y proxy, ufw con 22, 80 y 443. La app vive en `/opt/marplacity/app` como usuario de
-sistema `marplacity`, con `.env` (`HOST=0.0.0.0`, `TRUST_PROXY=loopback`, servicios en
-`remoto`) y el servicio systemd `marplacity`.
+Desde el 12/10/2026 las fotos viven en Firebase Storage, en `fotos/` del bucket
+`mis-gastos-21e7b.firebasestorage.app`, y se ven en
+`https://storage.googleapis.com/mis-gastos-21e7b.firebasestorage.app/fotos/<archivo>`
+(`FOTOS_BASE` en `src/shared/sitio.js`). El mapa de `catalogo/fotos` guarda esa base, y
+las dos tiendas, el sistema y el bot arman las URLs con ella.
 
-Actualizar a lo último de `main`:
+- **Subir desde el sistema**: la ficha del producto sube directo con el SDK de Storage y la
+  sesión del dueño (`src/client/core/fotos.js`). No pasa por Node ni por ningún Worker.
+- **Traer de un link o de Amazon**: el Worker tienda baja la imagen y la sube por la API
+  REST de Storage con el token del dueño que vino en la solicitud (`subirAStorage` en
+  `server/services/tienda/fotos.js`).
+- **Quién escribe**: `storage.rules`. Lectura pública; escritura solo del dueño del local
+  (el `userId` de `catalogo/publico`, igual que en `firestore.rules`), solo imágenes y
+  hasta 8 MB. Publicar: `firebase deploy --only storage`. La primera vez que se publica,
+  Firebase pide permiso para que Storage lea Firestore (`firestore.get` en las reglas):
+  aceptarlo.
+- **Lectura pública por URL fija**: las URLs `storage.googleapis.com/...` no pasan por las
+  reglas de Firebase, sino por los permisos del bucket en Google Cloud. Una sola vez:
+  Google Cloud Console → Cloud Storage → bucket `mis-gastos-21e7b.firebasestorage.app` →
+  Permisos → Otorgar acceso → principal `allUsers`, rol **Visualizador de objetos de
+  Storage** (`roles/storage.objectViewer`).
 
-```sh
-cd /opt/marplacity/app
-sudo -u marplacity git pull
-sudo -u marplacity HOME=/opt/marplacity npm ci
-sudo -u marplacity HOME=/opt/marplacity npm run build
-systemctl restart marplacity
-```
+La carpeta `fotos/` del repositorio es el archivo histórico de antes de Storage: ya no
+entra en el build.
 
-Logs: `journalctl -u marplacity -f`. Para un dominio propio, cambiar el nombre en
-`/etc/caddy/Caddyfile` y `systemctl reload caddy`: el certificado se emite solo.
+## Dominio propio
 
-### Fotos de los productos
+Hoy no hay dominio: todo lo público está en `https://marplacityy.github.io/marplacity-sistema/`
+(el VPS de Hostinger y `contify.tech` dejaron de usarse en octubre de 2026). Para volver a
+tener uno, por ejemplo `tienda.ejemplo.com`:
 
-Desde el 11/10/2026 las fotos que sube el dueño viven en el VPS, en `/opt/marplacity/fotos`
-(`FOTOS_DIR` en `.env`, fuera del checkout para que un `git pull` no las toque). Node las
-sirve en `https://contify.tech/fotos/<archivo>` y las dos tiendas, el sistema y el bot las
-leen de ahí (`FOTOS_PUBLIC_URL`). Las viejas del repositorio siguen en `fotos/` y salen de
-`dist/fotos`. El sistema en GitHub Pages sube por `POST /api/fotos/subir` con el token del
-dueño; `FOTOS_ORIGENES` autoriza ese origen solo para esas rutas.
+1. **DNS**, en el registrador del dominio:
+   - Subdominio (`tienda.ejemplo.com`): un `CNAME` a `marplacityy.github.io`.
+   - Dominio raíz (`ejemplo.com`): cuatro registros `A` a `185.199.108.153`,
+     `185.199.109.153`, `185.199.110.153` y `185.199.111.153` (y si se quiere `www`, un
+     `CNAME` a `marplacityy.github.io`).
+2. **El sitio**: en `src/shared/sitio.js`, `SITIO_PUBLICO = 'https://tienda.ejemplo.com/'`.
+   Con eso solo ya cambian el `base` de Vite (pasa a `/`), los links de la tienda y los
+   documentos, la vuelta de los pagos en Node, el link del bot y las pruebas de Pages.
+3. **El archivo `CNAME`**: crear `public/CNAME` con una sola línea, `tienda.ejemplo.com`.
+   Vite lo copia a `dist-pages/` y GitHub Pages lo toma de ahí.
+4. **GitHub**: Settings → Pages → Custom domain → `tienda.ejemplo.com`, esperar a que valide
+   el DNS y tildar **Enforce HTTPS**.
+5. **Worker tienda**: en `workers/tienda/wrangler.toml`, `CATALOGO_URL` con la tienda nueva
+   (`https://tienda.ejemplo.com/catalogo.html`) y `npx wrangler deploy` desde
+   `workers/tienda/`. Tiene que ir en el archivo: con `keep_vars`, sacarla de ahí deja el
+   valor viejo del panel.
+6. **Worker ig-bot**: toma el link de la tienda de `sitio.js`, así que hay que volver a
+   desplegarlo (`npx wrangler deploy` desde `workers/ig-bot/`).
+7. **Firebase Auth**: Authentication → Configuración → Dominios autorizados → agregar el
+   dominio nuevo, o el login con Google no abre desde ahí.
+8. Subir el sello de versión, push, y desde el sistema **Publicar** el catálogo y
+   **Sincronizar fotos** una vez.
 
-Respaldo: `/etc/cron.daily/marplacity-fotos` guarda un `.tar.gz` diario de la carpeta en
-`/opt/marplacity/backups/` y conserva los últimos 14.
+Los links que ya se compartieron con la dirección de GitHub Pages siguen andando: GitHub
+redirige al dominio propio.
 
 ## Publicación desde main
 
@@ -99,8 +125,9 @@ GitHub Pages se configura con **GitHub Actions**. El workflow
 el sello `vAAAA.MM.DD-<letra>` de `index.html` y comprobar que la web lo muestra.
 
 La web pública mantiene Firebase y los Workers existentes. El servidor Node
-sigue ejecutándose en esta PC. Subir el código no despliega reglas de Firebase,
-secretos, certificados fiscales ni Workers: consultar el informe de seguridad.
+sigue ejecutándose en esta PC. Subir el código no despliega reglas de Firebase
+(Firestore ni Storage), secretos, certificados fiscales ni Workers: consultar el
+informe de seguridad.
 
 Para alojar también el servidor Node fuera de esta PC, sigue siendo necesario
 un hosting compatible, variables de entorno, HTTPS y webhooks públicos. El

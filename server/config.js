@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SITIO_PUBLICO, FOTOS_BASE } from '../src/shared/sitio.js';
 
 const esquema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
@@ -7,7 +8,7 @@ const esquema = z.object({
   API_LIMITE_POR_MINUTO: z.coerce.number().int().min(1).max(10000).default(120),
   LOG_LEVEL: z.enum(['silent', 'fatal', 'error', 'warn', 'info', 'debug']).default('info'),
   // La dirección pública del sistema y la tienda: los links que se comparten con clientes.
-  PUBLIC_BASE_URL: z.url().default('https://contify.tech/'),
+  PUBLIC_BASE_URL: z.url().default(SITIO_PUBLICO),
   SERVICIO_TIENDA: z.enum(['remoto', 'local']).default('remoto'),
   SERVICIO_INSTAGRAM: z.enum(['remoto', 'local']).default('remoto'),
   SERVICIO_FACTURADOR: z.enum(['remoto', 'local']).default('remoto'),
@@ -19,12 +20,7 @@ const esquema = z.object({
   FIREBASE_PROJECT: z.string().default('mis-gastos-21e7b'),
   FIREBASE_KEY: z.string().default('AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg'),
   SEGUIMIENTOS_ACTIVOS: z.enum(['true', 'false']).default('false'),
-  // Las fotos que sube el dueño: dónde se guardan, con qué URL las ven la tienda y el bot,
-  // y desde qué otros orígenes (el sistema en GitHub Pages) se pueden subir.
-  FOTOS_DIR: z.string().default('.runtime/fotos'),
-  FOTOS_PUBLIC_URL: z.url().default('https://contify.tech/fotos/'),
-  FOTOS_ORIGENES: z.string().default('https://marplacityy.github.io'),
-  // Detrás de un proxy inverso (Caddy en el VPS): 'loopback' toma IP y protocolo de X-Forwarded-*.
+  // Detrás de un proxy inverso: 'loopback' toma IP y protocolo de X-Forwarded-*.
   TRUST_PROXY: z.string().optional(),
 });
 
@@ -43,16 +39,16 @@ export function cargarConfig(entorno = process.env) {
     }
     config[campo] = config[campo].replace(/\/$/, '');
   }
-  config.FOTOS_PUBLIC_URL = config.FOTOS_PUBLIC_URL.replace(/\/?$/, '/');
   return Object.freeze(config);
 }
 
 export function configPublica(config) {
   return {
     basePublica: config.PUBLIC_BASE_URL.replace(/\/?$/, '/'),
-    fotosBase: config.FOTOS_PUBLIC_URL,
+    // Las fotos viven en Firebase Storage: el sistema las sube y las lista directo desde el navegador.
+    fotosBase: FOTOS_BASE,
     // tiendaRemota: el Worker de Cloudflare, que tiene la clave de SerpApi para buscar
     // fotos en Amazon aunque la tienda corra local en este servidor.
-    api: { ia: '/api/ia', tienda: '/api/tienda', tiendaRemota: config.TIENDA_REMOTE_URL, instagram: '/api/instagram', facturador: '/api/facturador', fotos: '/api/fotos' },
+    api: { ia: '/api/ia', tienda: '/api/tienda', tiendaRemota: config.TIENDA_REMOTE_URL, instagram: '/api/instagram', facturador: '/api/facturador' },
   };
 }

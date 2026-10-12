@@ -80,4 +80,10 @@ export async function signInWithEmailAndPassword() {
   return { user: autenticacion.currentUser };
 }
 export async function signOut() { autenticacion.currentUser = null; for (const callback of authListeners) await callback(null); }
-window.__datosPrueba = { suscripciones: () => [...suscripciones].map(s => s.ref.path), leer: path => copiar(docs.get(path)), listar: nombre => seleccion(collection(null, nombre)).map(d => ({ id: d.id, ...d.data() })), cargar: (path, datos) => setDoc({ path }, { userId: UID, ...datos }), fecha };
+// Storage en memoria: lo que sube la pantalla Catálogo queda acá, nunca en Firebase.
+const archivos = new Map();
+export const getStorage = app => ({ app });
+export const ref = (_storage, path) => ({ fullPath: path, name: path.split('/').at(-1) });
+export async function uploadBytes(destino, datos, metadatos = {}) { archivos.set(destino.fullPath, { datos, metadatos }); return { ref: destino, metadata: metadatos }; }
+export async function listAll(carpeta) { return { prefixes: [], items: [...archivos.keys()].filter(p => p.startsWith(carpeta.fullPath + '/')).map(p => ref(null, p)) }; }
+window.__datosPrueba = { suscripciones: () => [...suscripciones].map(s => s.ref.path), leer: path => copiar(docs.get(path)), listar: nombre => seleccion(collection(null, nombre)).map(d => ({ id: d.id, ...d.data() })), cargar: (path, datos) => setDoc({ path }, { userId: UID, ...datos }), archivos: () => [...archivos.keys()], fecha };
