@@ -17,6 +17,8 @@ test('la web compilada abre desde el subdirectorio de Pages sin servidor API', a
   await page.route('https://firestore.googleapis.com/**', route => route.fulfill({ json: { fields: { productos: { arrayValue: { values: [] } } } } }));
   await page.goto('catalogo.html');
   await expect(page.locator('#salida')).toContainText('no hay equipos publicados');
+  await page.goto('tienda');
+  await expect(page.locator('#salida')).toContainText('no hay equipos publicados');
   expect(rutasApi).toEqual([]);
   expect(fallosLocales).toEqual([]);
   expect(errores).toEqual([]);

@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
-import { readFile, writeFile } from 'node:fs/promises';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { huellaFuentes } from './scripts/huella.mjs';
 import { SITIO_PUBLICO } from './src/shared/sitio.js';
@@ -35,6 +35,9 @@ export default defineConfig(({ mode }) => ({
         const salida = mode === 'pages' ? 'dist-pages' : 'dist';
         await writeFile(resolve(raiz, salida, 'compilacion.json'), JSON.stringify({ huella: await huellaFuentes(raiz), fecha: new Date().toISOString() }));
       }
+      // Pages no reescribe rutas, pero sirve tienda.html en /tienda: la dirección corta de
+      // la tienda (TIENDA_PUBLICA). catalogo.html queda para los links viejos.
+      if (mode === 'pages') await copyFile(resolve(raiz, 'dist-pages', 'catalogo.html'), resolve(raiz, 'dist-pages', 'tienda.html'));
     },
   }],
   build: {

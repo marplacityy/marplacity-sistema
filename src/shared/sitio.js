@@ -10,8 +10,12 @@
 /** La dirección del sistema y la tienda en GitHub Pages. Termina en "/". */
 export const SITIO_PUBLICO = 'https://marplacityy.github.io/marplacity-sistema/';
 
-/** La tienda pública: los links que se comparten con clientes y la vuelta de los pagos. */
-export const TIENDA_PUBLICA = SITIO_PUBLICO + 'catalogo.html';
+/**
+ * La tienda pública: los links que se comparten con clientes y la vuelta de los pagos.
+ * En Pages es tienda.html (copia de catalogo.html que arma vite.config.js), servida sin
+ * la extensión; en Node, la ruta /tienda de server/app.js.
+ */
+export const TIENDA_PUBLICA = SITIO_PUBLICO + 'tienda';
 
 /** El bucket de Firebase Storage donde viven las fotos de los productos. */
 export const FOTOS_BUCKET = 'mis-gastos-21e7b.firebasestorage.app';

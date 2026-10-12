@@ -816,7 +816,7 @@ export function inicializarCatalogo() {
   contextoApp.catalogoDoc = doc(contextoApp.db, 'catalogo', 'publico');
   contextoApp.catPublicado = null; // lo último que se publicó, para comparar
   // La tienda pública: la misma dirección que TIENDA_PUBLICA (shared/sitio.js).
-  contextoApp.LINK_CATALOGO = configuracion.basePublica + 'catalogo.html'; // Reglas de cobro de la tienda. Pagar con tarjeta en dólares (Stripe) lleva recargo, y
+  contextoApp.LINK_CATALOGO = configuracion.basePublica + 'tienda'; // Reglas de cobro de la tienda. Pagar con tarjeta en dólares (Stripe) lleva recargo, y
   // Mercado Pago se ofrece solo para productos baratos: cobrar un teléfono por ahí dispara
   // impuestos que se comen el margen. Decidido por Juni el 06/09/2026.
   contextoApp.RECARGO_TARJETA_PCT = 5; // Mercado Pago cobra 8% con acreditación inmediata (visto en el primer pago real, 06/09/2026).

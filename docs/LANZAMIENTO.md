@@ -104,7 +104,7 @@ tener uno, por ejemplo `tienda.ejemplo.com`:
 4. **GitHub**: Settings → Pages → Custom domain → `tienda.ejemplo.com`, esperar a que valide
    el DNS y tildar **Enforce HTTPS**.
 5. **Worker tienda**: en `workers/tienda/wrangler.toml`, `CATALOGO_URL` con la tienda nueva
-   (`https://tienda.ejemplo.com/catalogo.html`) y `npx wrangler deploy` desde
+   (`https://tienda.ejemplo.com/tienda`) y `npx wrangler deploy` desde
    `workers/tienda/`. Tiene que ir en el archivo: con `keep_vars`, sacarla de ahí deja el
    valor viejo del panel.
 6. **Worker ig-bot**: toma el link de la tienda de `sitio.js`, así que hay que volver a
