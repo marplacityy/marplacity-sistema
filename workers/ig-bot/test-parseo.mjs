@@ -433,5 +433,26 @@ console.log('\n── campos del doc vs. firestore.rules ──');
   }
 }
 
+console.log('\n── la query del cron pasa las reglas ──');
+// Las reglas dejan al bot LISTAR conversaciones solo si son del local (datoDelLocal), y
+// para una query Firestore exige el filtro explicito `userId == dueño`: sin el no puede
+// probar que todos los resultados cumplen y rechaza la consulta entera con 403. Paso
+// desde que el cron existe: "la query fallo 403" en cada corrida y ningun seguimiento
+// salio nunca, en silencio (15/10/2026). El indice tiene que acompañar: con un filtro
+// de igualdad mas, la query no anda sin userId adelante.
+{
+  const src = readFileSync(new URL('../../server/services/ig-bot/worker-ig.js', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+  const i = src.indexOf('async function paraSeguir');
+  const paraSeguir = src.slice(i, src.indexOf('\n}\n', i));
+  ok(paraSeguir.length > 200, 'el test encontro paraSeguir()');
+  ok(/igual\('userId', \{ stringValue: env\.OWNER_UID \}\)/.test(paraSeguir), 'la query del cron filtra por userId del dueño');
+
+  const indices = JSON.parse(readFileSync(new URL('../../firestore.indexes.json', import.meta.url), 'utf8')).indexes
+    .filter(x => x.collectionGroup === 'conversaciones')
+    .map(x => x.fields.map(f => f.fieldPath).join(','));
+  ok(indices.includes('userId,estado,seguimientoEnviado,necesitaAtencion,ultimoMensajeCliente'),
+     'firestore.indexes.json tiene el indice de la query del cron, con userId', indices.join(' | '));
+}
+
 console.log(fallos ? `\n${fallos} FALLA(S)\n` : '\nTodo verde\n');
 process.exit(fallos ? 1 : 0);

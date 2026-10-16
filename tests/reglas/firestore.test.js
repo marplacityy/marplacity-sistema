@@ -72,6 +72,10 @@ test('usuarios de servicio solo acceden a los datos del local que atienden', asy
   await assertSucceeds(getDoc(doc(bot, 'stock/equipo')));
   await assertFails(getDoc(doc(bot, 'stock/ajeno')));
   await assertSucceeds(getDocs(query(collection(bot, 'stock'), where('userId', '==', 'dueno'))));
+  // La query del cron de seguimientos (paraSeguir en worker-ig.js): listar conversaciones
+  // solo pasa con el filtro por userId del local; sin el, 403 aunque todas sean del local.
+  await assertSucceeds(getDocs(query(collection(bot, 'conversaciones'), where('userId', '==', 'dueno'), where('estado', '==', 'indeciso'), where('seguimientoEnviado', '==', false))));
+  await assertFails(getDocs(query(collection(bot, 'conversaciones'), where('estado', '==', 'indeciso'), where('seguimientoEnviado', '==', false))));
   await assertFails(setDoc(doc(bot, 'conversaciones/ajena'), { userId: 'otra-cuenta' }));
   const tienda = db('vhF3llim3Ghy8OOzKFodUuGfLmD2');
   await assertSucceeds(getDoc(doc(tienda, 'pedidos/pedido')));

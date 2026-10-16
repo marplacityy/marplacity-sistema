@@ -1773,6 +1773,12 @@ async function paraSeguir(env, idToken, ahora) {
         compositeFilter: {
           op: 'AND',
           filters: [
+            // Las reglas solo dejan listar conversaciones del local (datoDelLocal), y para una
+            // query eso exige el filtro explicito por userId: sin el, Firestore no puede probar
+            // que todos los docs cumplen la regla y rechaza la consulta entera con 403. Paso
+            // desde que el cron existe: "la query fallo 403" en cada corrida y ningun
+            // seguimiento salio nunca (15/10/2026).
+            igual('userId', { stringValue: env.OWNER_UID }),
             igual('estado', { stringValue: 'indeciso' }),
             igual('seguimientoEnviado', { booleanValue: false }),
             igual('necesitaAtencion', { booleanValue: false }),
