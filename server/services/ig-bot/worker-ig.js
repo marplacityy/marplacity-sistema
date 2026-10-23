@@ -182,6 +182,14 @@ async function procesarMensaje(ev, env) {
   const adjuntos = (m.attachments || []).map(a => a.type);   // image, audio, video, share...
   const texto = m.text || '';
 
+  // Un evento de mensaje sin texto ni adjuntos —una reaccion, un mensaje borrado, un
+  // "visto"— no es algo que contestar ni que mostrar. Hasta el 23/10/2026 se guardaba
+  // igual y la bandeja mostraba una fila vacia con "no supe responder".
+  if (!texto && !adjuntos.length) {
+    console.log('descarto: mensaje sin texto ni adjuntos, claves:', Object.keys(m).join(','));
+    return;
+  }
+
   // El doc de la conversación se lee UNA vez y sirve para las dos cosas: darle contexto
   // al modelo y saber sobre qué historial hay que agregar las líneas nuevas.
   const idToken = await tokenDelBot(env);
@@ -217,10 +225,10 @@ async function procesarMensaje(ev, env) {
   } else if (pausado) {
     ia = { ...EN_MANO };
     console.log('bot PAUSADO en el chat de', senderId, '— no contesta, va a la bandeja');
-  } else if (claveIA(env) && (texto || adjuntos.length)) {
+  } else if (claveIA(env)) {
     ia = await pensarRespuesta(texto, adjuntos, env, historial);
   } else {
-    console.log(claveIA(env) ? 'mensaje sin texto ni adjuntos' : `sin clave de ${proveedorIA(env)}: no se llama a la IA`);
+    console.log(`sin clave de ${proveedorIA(env)}: no se llama a la IA, va a la bandeja`);
   }
 
   // El ida y vuelta se anota ANTES de mandar los DM, no después. Dos razones, las dos
@@ -1330,7 +1338,22 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     // diagnostica a ciegas.
     if (res.corte) console.log('IA corte:', res.corte);
 
-    const out = JSON.parse(limpiarJson(res.crudo));
+    let out;
+    try {
+      out = JSON.parse(limpiarJson(res.crudo));
+    } catch (e) {
+      // DeepSeek en JSON mode a veces devuelve el contenido vacio o cortado, con
+      // finish_reason "stop" y todo (23/10/2026: "Qué colores tenes?" volvio con 22
+      // tokens ilegibles). Se loguea lo que vino y se reintenta UNA vez: el prompt entero
+      // esta en cache, asi que el reintento cuesta centavos y le ahorra a Juni una fila en
+      // la bandeja por un hipo del modelo.
+      console.log('IA respuesta ilegible:', e.message, '| crudo:', JSON.stringify(res.crudo.slice(0, 300)));
+      if (proveedor !== 'deepseek') throw e;
+      const otra = await llamarDeepSeek(env, sistema, turnos);
+      if (!otra.ok) throw new Error(`reintento: ${otra.status}`);
+      console.log(`tokens (${proveedor}, reintento): ${otra.tokens}`);
+      out = JSON.parse(limpiarJson(otra.crudo));
+    }
     const r2 = normalizar(out, textoCanal, fotosDoc);
 
     console.log('IA ->', r2.necesitaAtencion ? `atencion: ${r2.motivo} (prioridad ${r2.prioridad})` : 'sin atencion', '|', r2.mensajes.length, 'mensaje(s)');
