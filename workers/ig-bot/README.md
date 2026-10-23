@@ -9,13 +9,12 @@ de MarplaCity.
 2. Verifica la firma HMAC del pedido, para asegurarse de que viene de Meta y no
    de cualquiera que conozca la URL.
 3. Consulta el stock y las listas de precios en Firestore.
-4. Le pide a la IA que clasifique el mensaje y redacte la respuesta. El modelo
-   devuelve **un solo JSON** con la categoría, los campos de NEED ATTENTION y un
-   array `mensajes`.
+4. Le pide a la IA que redacte la respuesta. El modelo devuelve **un solo JSON** con
+   los campos de NEED ATTENTION, el equipo consultado y un array `mensajes`.
 5. Manda cada elemento de `mensajes` como un DM aparte, en orden y con una pausa
    corta entre uno y otro.
-6. Guarda todo (mensaje, clasificación, respuesta y campos de NEED ATTENTION) en la
-   colección `conversaciones`.
+6. Guarda todo (mensaje, respuesta, equipo consultado y campos de NEED ATTENTION) en
+   la colección `conversaciones`.
 
 También escucha los **ecos**: cuando Juni le contesta a alguien a mano desde la app de
 Instagram, Meta manda ese mensaje al webhook con `is_echo: true`. Esas respuestas se
@@ -23,11 +22,10 @@ anotan en el historial de la charla, que es lo que le permite al bot retomar una
 conversación que estuvo pausada (ver más abajo).
 
 **Nada de lo que devuelve el modelo se toma por bueno.** Si el JSON no parsea, si un
-campo no es de los válidos, si el modelo dudó (`confianza: "baja"`) o si algún DM no
-llegó a salir, el mensaje **no se descarta**: la conversación se guarda igual y sube a
+campo no es de los válidos o si algún DM no llegó a salir, el mensaje **no se descarta**: la conversación se guarda igual y sube a
 la bandeja con `necesitaAtencion: true` para que la conteste Juni a mano.
 
-**Sin `IG_TOKEN` cargado el Worker no le escribe a nadie**: clasifica, guarda y llena la
+**Sin `IG_TOKEN` cargado el Worker no le escribe a nadie**: redacta, guarda y llena la
 bandeja, nada más. Es la forma de tenerlo corriendo en modo "lee y sugiere".
 
 Aparte del webhook corre un **cron cada hora** que sigue a los que quedaron en silencio
@@ -97,9 +95,7 @@ misma persona repetida en cinco filas.
 | `ultimoMensaje` | string | el texto del último DM que entró |
 | `ultimoMensajeCliente` | timestamp | cuándo entró. Es el campo que filtra el cron |
 | `fecha` | string ISO | el mismo instante, como lo venían guardando los docs |
-| `estado` | string | la categoría del prompt (`indeciso`, `cerrado`, `curioso`…) |
-| `confianza` | string | `alta` / `baja`. Las `baja` suben a la bandeja |
-| `resumen` | string | una línea de qué se habló, para la bandeja |
+| `aviso` | string | lo escribe el Worker, no el modelo: por qué falló la IA (sin crédito, rate limit…), para que la bandeja lo distinga de "el modelo dudó". `null` cuando anduvo |
 | `ultimoProducto` | string | el equipo que consultó, para el seguimiento |
 | `historial` | array | el ida y vuelta de la charla: `{de, texto, fecha}`, últimas 60 líneas. `de` es `cliente`, `bot` o `juni` |
 | `mensajes` | array | lo que el bot contestó, un elemento por DM |
@@ -165,7 +161,7 @@ más que se mueva: `momentoDeSeguir()` siempre devuelve un instante anterior o i
 año y de año bisiesto incluidos. Argentina es UTC-3 fijo desde 2009; si algún día volviera
 el horario de verano, `AR` en `worker-ig.js` es la única constante a tocar.
 
-La query pide `estado == 'indeciso'`, `seguimientoEnviado == false`,
+La query pide `userId == dueño`, `seguimientoEnviado == false`,
 `necesitaAtencion == false` y `ultimoMensajeCliente` de hace más de **11 h** —el
 adelanto más grande posible—, ordenadas de la más callada a la menos callada y hasta 50
 por corrida. O sea que trae candidatas, no cosas para mandar ya: a cuáles les toca de
@@ -175,6 +171,12 @@ más nuevas, que todavía tienen horas de margen antes de las 24 h. El filtro po
 bandeja el cliente está esperando algo puntual —una foto, por ejemplo— y un "seguís
 interesado?" automático encima queda pésimo; de paso evita que el cron le pise el motivo
 con `visto`/7 y le entierre un caso urgente al fondo de la cola.
+
+Las que no tienen `ultimoProducto` se marcan `seguimientoEnviado: true` y se saltean: sin
+un equipo consultado no hay seguimiento que escribir. Hasta el 23/10/2026 ese filtro lo
+hacía la categoría `indeciso` que ponía el modelo en cada mensaje (junto con una
+`confianza` y un `resumen` de la charla, y las pestañas "Van a pasar" e "Interesados" del
+sistema). Se sacó todo eso: no se usaba y cada mensaje pagaba esos tokens al pedo.
 
 Salga o no salga el mensaje, el doc queda con `seguimientoEnviado: true`: si el envío
 falla, la conversación sube a la bandeja, pero el bot no reintenta el mismo mensaje cada
@@ -187,7 +189,7 @@ cron y se marca `visto` de nuevo.
 ### El índice del cron
 
 La query de arriba no la resuelve Firestore sola: necesita un índice compuesto con los
-cuatro campos —`estado`, `seguimientoEnviado`, `necesitaAtencion` y `ultimoMensajeCliente`—
+cuatro campos —`userId`, `seguimientoEnviado`, `necesitaAtencion` y `ultimoMensajeCliente`—
 en ese orden. Está versionado en `firestore.indexes.json`, en la raíz del repo, para no
 depender de crearlo a mano desde la consola:
 
@@ -196,8 +198,7 @@ firebase deploy --only firestore:indexes
 ```
 
 El orden de los campos no es decorativo: primero los tres de igualdad, último el del
-rango. Si la query cambia —se le agrega un filtro, se ordena al revés, se filtra también
-por `userId`— el índice deja de servirle y hay que actualizarlo acá también. Cuando falta,
+rango. Si la query cambia —se le agrega un filtro, se ordena al revés— el índice deja de servirle y hay que actualizarlo acá también. Cuando falta,
 el error de Firestore trae un link para crear el que hace falta; copiá los campos de ahí
 al archivo en vez de crearlo desde la consola, o el repo queda desincronizado.
 
@@ -266,8 +267,8 @@ cliente quedaba sin contestar aunque el modelo supiera perfectamente qué decirl
 dos veces el 22/08/2026. `claude-sonnet-4-6`, el modelo anterior, no soporta structured
 outputs; ese fue el motivo del cambio (mismo precio de lista, y más nuevo).
 
-`normalizar()` sigue validando igual: el esquema garantiza la **forma**, no que la
-categoría o el motivo estén dentro de lo que el negocio espera.
+`normalizar()` sigue validando igual: el esquema garantiza la **forma**, no que el
+motivo esté dentro de lo que el negocio espera.
 
 Dos parámetros que conviene entender antes de tocarlos:
 
@@ -296,8 +297,8 @@ uno se entera cuando se le acabaron los créditos. Ahora el interruptor se lee *
 llamar a la IA, en el webhook y en `/reanudar`.
 
 Con el bot apagado, el mensaje entrante **igual se guarda** y sube a la bandeja con
-motivo `bot_apagado`: perder DM sería peor que gastar. Lo único que no pasa es la
-clasificación, porque nadie la hizo.
+motivo `bot_apagado`: perder DM sería peor que gastar. Lo único que no hay es respuesta
+sugerida, porque nadie la redactó.
 
 | dónde | qué mira | qué corta |
 |---|---|---|
@@ -308,10 +309,10 @@ clasificación, porque nadie la hizo.
 | `/reanudar` | `activo` | la llamada a Anthropic |
 
 **`modo: 'prueba'` tampoco llama a la IA** para las cuentas que no están en
-`cuentasPrueba`. Hasta el 31/08/2026 sí lo hacía: las clasificaba igual, para no perder
-de vista lo que entraba mientras se afinaba el bot. Pero la respuesta no iba a salir y la
-clasificación se pagaba, y en modo prueba los no autorizados son casi todos. Ahora el
-mensaje entra, se guarda y sube a la bandeja con motivo `modo_prueba`, sin clasificar.
+`cuentasPrueba`. Hasta el 31/08/2026 sí lo hacía: les redactaba respuesta igual, para no
+perder de vista lo que entraba mientras se afinaba el bot. Pero esa respuesta no iba a
+salir y la llamada se pagaba, y en modo prueba los no autorizados son casi todos. Ahora el
+mensaje entra, se guarda y sube a la bandeja con motivo `modo_prueba`, sin llamar a la IA.
 
 Los cuatro casos, medidos con el webhook simulado:
 
@@ -359,9 +360,6 @@ Pausado **no es apagado**:
   se paga) y **no manda ningún DM**;
 - el mensaje del cliente se guarda igual y sube a la bandeja con `motivo: 'en_mano'` y
   prioridad 2, para que no se te pase;
-- **la clasificación vieja no se pisa**. Sin la IA solo quedaría `clasificarBasico()`, y
-  una charla que venía como `cerrado` no se merece volver a `curioso` porque el último
-  mensaje fue "dale";
 - el cron de seguimiento lo saltea entero: ni le manda un "te sigue interesando?" ni lo
   marca `visto`. Un mensaje automático arriba de una charla que está atendiendo una
   persona es lo peor de los dos mundos.

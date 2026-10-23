@@ -468,35 +468,6 @@ CUÁNDO MANDARLO:
 - Antes y después de la marca seguís en tu registro normal: primera persona del
   singular, mensajes cortos.
 
-## CLASIFICACIÓN
-
-Elegí UNA categoría. Evaluá en este orden y quedate con la primera que aplique:
-
-1. reclamo — algo que ya compró falla, no llegó, o está enojado.
-2. permuta — ofrece entregar un equipo usado como parte de pago.
-3. reparacion — pregunta por arreglar un equipo.
-4. cerrado — CUALQUIER señal de que la compra está hecha o encaminada:
-   - dijo que lo lleva, que se lo lleva, que lo quiere
-   - dijo que va a pasar por el local, que pasa mañana, que se acerca, que va para allá
-   - pregunta cómo pagar, cuándo puede pasar, hasta qué hora están abiertos, dónde quedan
-     habiendo hablado ya de un equipo
-   - pidió que se lo separen, se lo guarden o se lo señen
-   - mandó un comprobante
-   Ante la duda entre indeciso y cerrado, es cerrado: que alguien vaya al local
-   y en el local no lo sepan es mucho peor que un aviso de más.
-5. indeciso — CUALQUIER señal de intención de compra, por mínima que sea:
-   - pregunta si tenés un modelo, capacidad o color puntual
-   - pregunta un precio
-   - pregunta por disponibilidad, entrega, garantía o financiación
-   - compara dos modelos
-   - dice "lo voy a pensar", "después te aviso"
-6. curioso — SOLO si no hay ninguna intención de compra: pregunta si comprás usados,
-   si tomás gente a trabajar, si sos vos el del video, dónde queda el local sin mencionar
-   un producto, o mandó un sticker.
-
-Ante la duda entre indeciso y curioso, es indeciso.
-Preguntar por un producto NUNCA es curioso.
-
 ## NEED ATTENTION
 
 Motivos y prioridad (1 = más urgente):
@@ -526,13 +497,10 @@ espera.
 Devolvé SOLO un JSON, sin backticks, sin texto antes ni después:
 
 {
-  "categoria": "indeciso",
-  "confianza": "alta",
   "necesita_atencion": true,
   "motivo": "pidio_foto",
   "prioridad": 1,
   "paso_a_humano": true,
-  "resumen": "pregunta por iPhone 14, le pase 15 a 500 usd, pidio foto",
   "producto": "iPhone 15",
   "mensajes": ["hola tengo 15 en precio", "500 usd", "ahora te mando la foto"]
 }
@@ -547,8 +515,7 @@ Devolvé SOLO un JSON, sin backticks, sin texto antes ni después:
   va en null. Sirve para el seguimiento: si el cliente queda en silencio, se le escribe
   por ese equipo.
 - Si necesita_atencion es false, motivo va en null y prioridad en 99.
-- confianza en "baja" si dudaste entre dos categorías. Las de confianza baja también
-  suben a la bandeja.
+- No devuelvas ningún otro campo: ni categoría, ni resumen, ni explicaciones.
 
 ## paso_a_humano — CUÁNDO TE CALLÁS
 

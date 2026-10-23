@@ -245,7 +245,9 @@ async function procesarMensaje(ev, env) {
     igUserId: senderId,
     mensajes: ia.mensajes,
     sugerencia: ia.mensajes.join('\n') || null,   // texto plano, para la bandeja
-    resumen: ia.resumen,
+    // Lo unico que el Worker escribe aca por su cuenta: por que fallo la IA, para que la
+    // bandeja no lea igual "sin credito" que "el modelo dudo". En null limpia el anterior.
+    aviso: ia.aviso || null,
     respondido: enviados > 0,
     ultimoMensaje: texto,
     adjuntos,
@@ -259,8 +261,6 @@ async function procesarMensaje(ev, env) {
     ultimoMensajeCliente: fechaMensaje,
     // El cliente escribió: si vuelve a quedar en silencio, merece un seguimiento nuevo.
     seguimientoEnviado: false,
-    estado: ia.categoria || clasificarBasico(texto, adjuntos),
-    confianza: ia.confianza,
     necesitaAtencion: ia.necesitaAtencion || quedoSinMandar,
     motivo: quedoSinMandar ? (ia.motivo || 'no_supe_responder') : ia.motivo,
     prioridad: quedoSinMandar ? Math.min(ia.prioridad, 8) : ia.prioridad,
@@ -283,18 +283,6 @@ async function procesarMensaje(ev, env) {
     // sabe si lo paro ella o el bot.
     doc.motivoPausa = 'el bot prometio algo y te lo dejo a vos';
     console.log('el bot prometio algo — pauso el chat de', senderId);
-  }
-
-  // Pausado, el doc guarda el mensaje y poco más: `mensajes` y `sugerencia` sí se
-  // limpian (la respuesta vieja ya salió, ofrecerla de nuevo en la bandeja sería
-  // mandarla dos veces), pero la clasificación no se toca. Sin la IA solo quedaría
-  // `clasificarBasico()`, y una charla que venía como `cerrado` no se merece volver a
-  // `curioso` porque el último mensaje fue "dale". Lo que no entra en el PATCH conserva
-  // su valor (ver `guardarEnFirestore`).
-  if (pausado) {
-    delete doc.estado;
-    delete doc.confianza;
-    delete doc.resumen;
   }
 
   // Igual que el producto: si no se pudo traer, el campo no entra en la máscara y el
@@ -835,12 +823,8 @@ async function reanudar(request, env) {
     historial: [...historial, ...ia.mensajes.slice(0, enviados).map(txt => linea('bot', txt, new Date()))].slice(-MAX_HISTORIAL),
   };
 
-  // Lo que el modelo no nombro no se pisa: la conversacion ya venia clasificada de antes
-  // y un campo en null la sacaria de su pestaña del tablero.
-  if (ia.categoria) doc.estado = ia.categoria;
-  if (ia.confianza) doc.confianza = ia.confianza;
-  if (ia.resumen)   doc.resumen = ia.resumen;
-  if (ia.producto)  doc.ultimoProducto = nombreLindo(ia.producto);
+  // Si el modelo no nombro un equipo, el campo no viaja y el doc conserva el anterior.
+  if (ia.producto) doc.ultimoProducto = nombreLindo(ia.producto);
 
   const name = `projects/${env.FIREBASE_PROJECT}/databases/(default)/documents/conversaciones/${encodeURIComponent(igUserId)}`;
   await patchDoc(env, idToken, name, doc);
@@ -1214,18 +1198,16 @@ async function ultimaLista(env, idToken, origen) {
  */
 export const fechaAR = ms => new Date(ms + AR).toISOString().split('T')[0];
 
-// ── La IA: clasifica y redacta una respuesta ──────────────────
+// ── La IA: redacta la respuesta y marca qué necesita atención ──
 
 // Lo que devolvemos cuando la IA no contestó o contestó algo que no se pudo parsear.
 // El mensaje del cliente NO se descarta: la conversación se guarda igual y sube a la
 // bandeja con prioridad 8 para que la conteste Juni a mano.
 const SIN_RESPUESTA = {
-  categoria: null,
-  confianza: 'baja',
   necesitaAtencion: true,
   motivo: 'no_supe_responder',
   prioridad: 8,
-  resumen: null,
+  aviso: null,
   producto: null,
   mensajes: [],
 };
@@ -1237,12 +1219,10 @@ const SIN_RESPUESTA = {
 // su propio motivo: el mensaje entra, se guarda y sube a la bandeja, pero nadie lo
 // clasifico porque no se llamo a la IA.
 const APAGADO = {
-  categoria: null,
-  confianza: null,
   necesitaAtencion: true,
   motivo: 'bot_apagado',
   prioridad: 2,
-  resumen: null,
+  aviso: null,
   producto: null,
   mensajes: [],
 };
@@ -1252,23 +1232,19 @@ const APAGADO = {
 // proposito, para no perder de vista lo que entraba mientras se afinaba el bot— pero
 // cada mensaje de un desconocido se pagaba, y en modo prueba son casi todos.
 const FUERA_DE_PRUEBA = {
-  categoria: null,
-  confianza: null,
   necesitaAtencion: true,
   motivo: 'modo_prueba',
   prioridad: 2,
-  resumen: null,
+  aviso: null,
   producto: null,
   mensajes: [],
 };
 
 const EN_MANO = {
-  categoria: null,
-  confianza: null,
   necesitaAtencion: true,
   motivo: 'en_mano',
   prioridad: 2,
-  resumen: null,
+  aviso: null,
   producto: null,
   mensajes: [],
 };
@@ -1354,11 +1330,11 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     if (!r.ok) {
       const cuerpo = await r.text();
       console.log('IA error', r.status, cuerpo.slice(0, 300));
-      // El resumen es lo unico de esto que se ve desde la bandeja. Sin el, un problema
+      // El aviso es lo unico de esto que se ve desde la bandeja. Sin el, un problema
       // de la API (sin credito, rate limit, servicio caido) se lee igual que "el modelo
       // dudo", y son cosas muy distintas: una se arregla contestando a mano, la otra
       // deja al bot mudo con TODOS hasta que alguien vaya a mirar los logs.
-      return { ...SIN_RESPUESTA, resumen: `⚠️ ${motivoDeLaFalla(r.status, cuerpo)} — el bot no pudo contestar` };
+      return { ...SIN_RESPUESTA, aviso: `⚠️ ${motivoDeLaFalla(r.status, cuerpo)} — el bot no pudo contestar` };
     }
 
     const d = await r.json();
@@ -1382,7 +1358,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     const out = JSON.parse(limpiarJson(crudo));
     const r2 = normalizar(out, textoCanal, fotosDoc);
 
-    console.log('IA ->', r2.categoria, '| prioridad', r2.prioridad, '|', r2.mensajes.length, 'mensaje(s)');
+    console.log('IA ->', r2.necesitaAtencion ? `atencion: ${r2.motivo} (prioridad ${r2.prioridad})` : 'sin atencion', '|', r2.mensajes.length, 'mensaje(s)');
     return r2;
   } catch (e) {
     // Puede ser un JSON cortado, un texto suelto o un campo que no vino. Da igual:
@@ -1429,25 +1405,26 @@ export function limpiarJson(crudo) {
  * cliente quedaba sin contestar aunque el modelo supiera perfectamente que decirle
  * ("las Air 13..." — tenia los precios y se perdio).
  *
- * `normalizar()` sigue validando igual: el esquema garantiza la FORMA, no que la
- * categoria o el motivo esten dentro de lo que el negocio espera.
+ * `normalizar()` sigue validando igual: el esquema garantiza la FORMA, no que el
+ * motivo este dentro de lo que el negocio espera.
+ *
+ * Hasta el 23/10/2026 el modelo devolvia ademas una categoria (indeciso, cerrado...),
+ * una confianza y un resumen de la charla. Se sacaron: el tablero que los mostraba no se
+ * usaba y cada mensaje pagaba esos tokens al pedo.
  */
 const ESQUEMA_RESPUESTA = {
   type: 'object',
   properties: {
-    categoria:         { type: 'string' },
-    confianza:         { type: 'string' },
     necesita_atencion: { type: 'boolean' },
     motivo:            { type: ['string', 'null'] },
     prioridad:         { type: 'integer' },
     // El bot le prometio al cliente algo para despues ("ya te confirmo"). Cuando viene
     // en true, el chat se pausa y lo sigue Juni: ver `PROMESAS` mas abajo.
     paso_a_humano:     { type: 'boolean' },
-    resumen:           { type: 'string' },
     producto:          { type: ['string', 'null'] },
     mensajes:          { type: 'array', items: { type: 'string' } },
   },
-  required: ['categoria', 'confianza', 'necesita_atencion', 'motivo', 'prioridad', 'paso_a_humano', 'resumen', 'producto', 'mensajes'],
+  required: ['necesita_atencion', 'motivo', 'prioridad', 'paso_a_humano', 'producto', 'mensajes'],
   additionalProperties: false,
 };
 
@@ -1488,7 +1465,6 @@ const PROMESAS = new RegExp([
 
 export const prometeSeguimiento = mensajes =>
   (Array.isArray(mensajes) ? mensajes : []).some(m => PROMESAS.test(String(m || '')));
-const CATEGORIAS = ['reclamo', 'permuta', 'reparacion', 'cerrado', 'indeciso', 'curioso'];
 const MAX_MENSAJES = 4;
 
 /**
@@ -1499,20 +1475,15 @@ const MAX_MENSAJES = 4;
 export function normalizar(out, textoCanal, fotos) {
   const mensajes = expandirCanal(out.mensajes, textoCanal, fotos).slice(0, MAX_MENSAJES);
 
-  const categoria = CATEGORIAS.includes(out.categoria) ? out.categoria : null;
-  const confianza = out.confianza === 'baja' ? 'baja' : 'alta';
-
-  // Sube a la bandeja si el modelo lo pide, si dudó de la categoría, o si la categoría
-  // no es una de las válidas.
+  // Sube a la bandeja si el modelo lo pide. Si el campo no vino —con el esquema puesto no
+  // deberia pasar— se toma como que si: ante la duda, que lo mire una persona.
   //
   // Un array de mensajes VACÍO ya no cuenta como problema: puede ser una decisión, y es
   // la única forma que tiene el bot de terminar una conversación. El cliente cierra con
   // "dale" y no hay nada más que decir; contestarle otro "dale" es peor que callarse.
   // Las fallas de verdad —JSON que no parsea, la API que no responde— no pasan por acá:
   // esas devuelven SIN_RESPUESTA, que trae necesitaAtencion en true por su cuenta.
-  let necesitaAtencion = out.necesita_atencion === true
-    || confianza === 'baja'
-    || !categoria;
+  let necesitaAtencion = out.necesita_atencion !== false;
 
   let motivo = MOTIVOS.includes(out.motivo) ? out.motivo : null;
   if (necesitaAtencion && !motivo) motivo = 'no_supe_responder';
@@ -1528,13 +1499,12 @@ export function normalizar(out, textoCanal, fotos) {
   const pasoAHumano = out.paso_a_humano === true || prometeSeguimiento(mensajes);
 
   return {
-    categoria,
-    confianza,
     necesitaAtencion: necesitaAtencion || pasoAHumano,
     motivo,
     prioridad,
     pasoAHumano,
-    resumen: typeof out.resumen === 'string' ? out.resumen.trim() || null : null,
+    // Solo lo escribe el Worker cuando la IA falla (ver pensarRespuesta): aca siempre null.
+    aviso: null,
     // El equipo del que se habló. Lo usa el cron: el seguimiento se escribe por ese
     // modelo. Se corta por las dudas, que va a parar a un doc y a la bandeja.
     producto: typeof out.producto === 'string' ? out.producto.trim().slice(0, 60) || null : null,
@@ -1574,20 +1544,6 @@ export function expandirCanal(mensajes, textoCanal, fotos) {
       return [textoCanal];
     })
     .filter(Boolean);
-}
-
-// ── Clasificación de respaldo (si la IA no contesta) (después la reemplaza la IA) ─────
-function clasificarBasico(texto, adjuntos) {
-  const t = (texto || '').toLowerCase();
-
-  if (/permut|cambio mi|entrego mi|parte de pago/.test(t)) return 'permuta';
-  if (/garant|reclam|anda mal|no funciona|problema con/.test(t)) return 'reclamo';
-  if (/lo llevo|me lo quedo|lo compro|cuando paso|reservam/.test(t)) return 'cerrado';
-  if (/precio|cuanto|cuánto|vale|sale|tenes|tenés|hay stock/.test(t)) return 'indeciso';
-  if (adjuntos.includes('image')) return 'no_se';   // foto de pantalla rota, etc.
-  if (adjuntos.includes('audio')) return 'no_se';
-
-  return 'curioso';
 }
 
 // ── Login del bot en Firebase Auth ────────────────────────────
@@ -1708,6 +1664,15 @@ async function correrSeguimientos(env) {
       continue;
     }
 
+    // Sin un equipo consultado no hay seguimiento que escribir: "te sigue interesando el
+    // producto?" no le dice nada a nadie. Hasta el 23/10/2026 esto lo filtraba la categoria
+    // `indeciso` que ponia el modelo; sin clasificacion, el producto es la señal de que hubo
+    // una consulta de compra. Se marca como seguido para no volver a mirarlo cada hora.
+    if (!doc.ultimoProducto) {
+      await patchDoc(env, idToken, name, { seguimientoEnviado: true });
+      continue;
+    }
+
     // Pausado a mano: ese chat lo lleva Juni. Ni seguimiento ni `visto` — se deja como
     // esta y se retoma cuando lo vuelva a prender. Un "te sigue interesando?" automatico
     // arriba de una charla que esta atendiendo una persona es lo peor de los dos mundos.
@@ -1746,8 +1711,9 @@ async function correrSeguimientos(env) {
 }
 
 /**
- * Las conversaciones candidatas: indecisas, sin seguimiento mandado, calladas hace más
- * de 11 h y que no estén ya esperando a Juni.
+ * Las conversaciones candidatas: del local, sin seguimiento mandado, calladas hace más
+ * de 11 h y que no estén ya esperando a Juni. Que haya un equipo consultado
+ * (`ultimoProducto`) lo mira el loop, no la query: Firestore no filtra por "existe".
  *
  * Son candidatas, no un "para mandar ya": el horario exacto de cada una lo decide
  * `momentoDeSeguir()`, que puede adelantarlo hasta 9 h para esquivar la madrugada. Por
@@ -1779,7 +1745,6 @@ async function paraSeguir(env, idToken, ahora) {
             // desde que el cron existe: "la query fallo 403" en cada corrida y ningun
             // seguimiento salio nunca (15/10/2026).
             igual('userId', { stringValue: env.OWNER_UID }),
-            igual('estado', { stringValue: 'indeciso' }),
             igual('seguimientoEnviado', { booleanValue: false }),
             igual('necesitaAtencion', { booleanValue: false }),
             {
@@ -1909,9 +1874,7 @@ async function guardarEnFirestore(doc, env) {
   });
 
   if (!r.ok) console.log('firestore error', r.status, await r.text());
-  // `estado` no viaja cuando el chat está pausado: ahí la clasificación vieja se
-  // conserva a propósito, y el log tiene que decir eso y no "null".
-  else console.log('guardado OK:', doc.estado || '(clasificacion sin cambios)', '-', String(doc.ultimoMensaje || '').slice(0, 40));
+  else console.log('guardado OK:', doc.necesitaAtencion ? `atencion: ${doc.motivo}` : 'sin atencion', '-', String(doc.ultimoMensaje || '').slice(0, 40));
 }
 
 // ── Verificar firma HMAC de Meta ──────────────────────────────

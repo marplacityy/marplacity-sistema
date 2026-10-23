@@ -27,60 +27,57 @@ ok(JSON.stringify(expandirCanal(['a', '', null, 'b'], CANAL)) === JSON.stringify
 
 console.log('\n── normalizar: caso feliz ──');
 const feliz = normalizar({
-  categoria: 'indeciso', confianza: 'alta', necesita_atencion: true,
-  motivo: 'pidio_foto', prioridad: 1, resumen: 'pregunta por iphone 14',
+  necesita_atencion: true,
+  motivo: 'pidio_foto', prioridad: 1,
   mensajes: ['hola tengo 15 en precio', '500 usd', 'ahora te mando la foto'],
 }, CANAL);
-ok(feliz.categoria === 'indeciso', 'categoria');
+ok(!('categoria' in feliz) && !('confianza' in feliz) && !('resumen' in feliz), 'ni categoria, ni confianza, ni resumen: ya no se clasifica');
 ok(feliz.necesitaAtencion === true && feliz.motivo === 'pidio_foto' && feliz.prioridad === 1, 'need attention');
 ok(feliz.mensajes.length === 3, 'mensajes');
 
 console.log('\n── normalizar: no necesita atencion ──');
 const limpio = normalizar({
-  categoria: 'curioso', confianza: 'alta', necesita_atencion: false,
-  motivo: null, prioridad: 99, resumen: 'saludo', mensajes: ['hola'],
+  necesita_atencion: false,
+  motivo: null, prioridad: 99, mensajes: ['hola'],
 }, CANAL);
 ok(limpio.motivo === null && limpio.prioridad === 99, 'motivo null y prioridad 99');
 
 console.log('\n── normalizar: basura y bordes ──');
 // Callarse es una decision valida: es la unica forma que tiene el bot de cerrar una
 // conversacion. Antes esto subia a la bandeja y llenaba de ruido cada "dale" final.
-const calladoAProposito = normalizar({ categoria: 'indeciso', confianza: 'alta', necesita_atencion: false, mensajes: [] }, CANAL);
+const calladoAProposito = normalizar({ necesita_atencion: false, mensajes: [] }, CANAL);
 ok(calladoAProposito.necesitaAtencion === false, 'callarse a proposito NO sube a la bandeja');
 ok(calladoAProposito.mensajes.length === 0, 'y no inventa un mensaje');
 
 // Pero callarse CON algo raro sigue subiendo
-ok(normalizar({ categoria: 'inventada', necesita_atencion: false, mensajes: [] }, CANAL).necesitaAtencion === true, 'callado + categoria invalida si sube');
-ok(normalizar({ categoria: 'indeciso', confianza: 'baja', necesita_atencion: false, mensajes: [] }, CANAL).necesitaAtencion === true, 'callado + confianza baja si sube');
 ok(normalizar({}, CANAL).necesitaAtencion === true, 'una respuesta vacia entera sigue subiendo');
 
-const catMala = normalizar({ categoria: 'inventada', necesita_atencion: false, mensajes: ['x'] }, CANAL);
-ok(catMala.categoria === null && catMala.necesitaAtencion === true, 'categoria invalida sube a la bandeja');
+// Lo que el modelo diga de mas se ignora: ni categoria, ni confianza ni resumen llegan al doc.
+const deMas = normalizar({ confianza: 'baja', resumen: 'bla', necesita_atencion: false, mensajes: ['x'] }, CANAL);
+ok(deMas.necesitaAtencion === false && !('categoria' in deMas) && !('resumen' in deMas), 'categoria, confianza y resumen se ignoran');
+ok(deMas.aviso === null, 'el aviso solo lo escribe el Worker cuando la IA falla: normalizar lo deja en null');
 
-const dudo = normalizar({ categoria: 'indeciso', confianza: 'baja', necesita_atencion: false, mensajes: ['x'] }, CANAL);
-ok(dudo.necesitaAtencion === true && dudo.prioridad === 8, 'confianza baja sube a la bandeja');
-
-const prioMala = normalizar({ categoria: 'indeciso', necesita_atencion: true, motivo: 'permuta', prioridad: 47, mensajes: ['x'] }, CANAL);
+const prioMala = normalizar({ necesita_atencion: true, motivo: 'permuta', prioridad: 47, mensajes: ['x'] }, CANAL);
 ok(prioMala.prioridad === 8, 'prioridad fuera de rango -> 8', String(prioMala.prioridad));
 
-const motivoMalo = normalizar({ categoria: 'indeciso', necesita_atencion: true, motivo: 'cualquiera', prioridad: 2, mensajes: ['x'] }, CANAL);
+const motivoMalo = normalizar({ necesita_atencion: true, motivo: 'cualquiera', prioridad: 2, mensajes: ['x'] }, CANAL);
 ok(motivoMalo.motivo === 'no_supe_responder', 'motivo invalido -> no_supe_responder', motivoMalo.motivo);
 
-const muchos = normalizar({ categoria: 'indeciso', necesita_atencion: false, mensajes: ['1', '2', '3', '4', '5', '6'] }, CANAL);
+const muchos = normalizar({ necesita_atencion: false, mensajes: ['1', '2', '3', '4', '5', '6'] }, CANAL);
 ok(muchos.mensajes.length === 4, 'corta en 4 mensajes', String(muchos.mensajes.length));
 
 const vacio = normalizar({}, CANAL);
 ok(vacio.necesitaAtencion === true && vacio.motivo === 'no_supe_responder' && vacio.prioridad === 8, 'objeto vacio -> fallback');
 
-const prioStr = normalizar({ categoria: 'cerrado', necesita_atencion: true, motivo: 'cerrado', prioridad: '2', mensajes: ['x'] }, CANAL);
+const prioStr = normalizar({ necesita_atencion: true, motivo: 'cerrado', prioridad: '2', mensajes: ['x'] }, CANAL);
 ok(prioStr.prioridad === 2, 'prioridad como string se convierte', String(prioStr.prioridad));
 
 console.log('\n── normalizar: producto ──');
-const conProd = normalizar({ categoria: 'indeciso', necesita_atencion: false, producto: '  iPhone 15  ', mensajes: ['x'] }, CANAL);
+const conProd = normalizar({ necesita_atencion: false, producto: '  iPhone 15  ', mensajes: ['x'] }, CANAL);
 ok(conProd.producto === 'iPhone 15', 'lo recorta de los costados', conProd.producto);
-ok(normalizar({ categoria: 'curioso', necesita_atencion: false, mensajes: ['x'] }, CANAL).producto === null, 'sin producto queda null');
-ok(normalizar({ categoria: 'curioso', necesita_atencion: false, producto: 47, mensajes: ['x'] }, CANAL).producto === null, 'un no-string queda null');
-ok(normalizar({ categoria: 'curioso', necesita_atencion: false, producto: 'a'.repeat(200), mensajes: ['x'] }, CANAL).producto.length === 60, 'corta a 60');
+ok(normalizar({ necesita_atencion: false, mensajes: ['x'] }, CANAL).producto === null, 'sin producto queda null');
+ok(normalizar({ necesita_atencion: false, producto: 47, mensajes: ['x'] }, CANAL).producto === null, 'un no-string queda null');
+ok(normalizar({ necesita_atencion: false, producto: 'a'.repeat(200), mensajes: ['x'] }, CANAL).producto.length === 60, 'corta a 60');
 
 console.log('\n── aFields ──');
 const f = aFields({
@@ -450,7 +447,9 @@ console.log('\n── la query del cron pasa las reglas ──');
   const indices = JSON.parse(readFileSync(new URL('../../firestore.indexes.json', import.meta.url), 'utf8')).indexes
     .filter(x => x.collectionGroup === 'conversaciones')
     .map(x => x.fields.map(f => f.fieldPath).join(','));
-  ok(indices.includes('userId,estado,seguimientoEnviado,necesitaAtencion,ultimoMensajeCliente'),
+  ok(!/igual\('estado'/.test(paraSeguir), 'la query del cron ya no filtra por la categoria del modelo (se saco el 23/10/2026)');
+  ok(/if \(!doc\.ultimoProducto\)/.test(src.slice(src.indexOf('async function correrSeguimientos'))), 'sin equipo consultado, el cron no manda seguimiento');
+  ok(indices.includes('userId,seguimientoEnviado,necesitaAtencion,ultimoMensajeCliente'),
      'firestore.indexes.json tiene el indice de la query del cron, con userId', indices.join(' | '));
 }
 
