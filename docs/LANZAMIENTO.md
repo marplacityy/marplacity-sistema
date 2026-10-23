@@ -37,7 +37,7 @@ trasladar una integración, hay que cargar sus credenciales y cambiar solo su mo
 | Servicio | Modo | Credenciales y configuración |
 | --- | --- | --- |
 | Tienda | `SERVICIO_TIENDA=local` | `OWNER_UID`, `TIENDA_EMAIL`, `TIENDA_PASSWORD`; claves de Mercado Pago/Stripe según los medios usados |
-| Instagram | `SERVICIO_INSTAGRAM=local` | `OWNER_UID`, `BOT_EMAIL`, `BOT_PASSWORD`, `IG_APP_SECRET`, `IG_VERIFY_TOKEN`, `IG_ACCOUNT_ID`, `IG_TOKEN`, `ANTHROPIC_KEY` |
+| Instagram | `SERVICIO_INSTAGRAM=local` | `OWNER_UID`, `BOT_EMAIL`, `BOT_PASSWORD`, `IG_APP_SECRET`, `IG_VERIFY_TOKEN`, `IG_ACCOUNT_ID`, `IG_TOKEN`, y `ANTHROPIC_KEY` o `DEEPSEEK_KEY` según `IA_PROVEEDOR` |
 | Facturador | `SERVICIO_FACTURADOR=local` | `OWNER_UID`, `FAC_EMAIL`, `FAC_PASSWORD`, `ARCA_CUIT`, `CERT_MASTER_KEY`, entorno fiscal |
 | IA | `SERVICIO_IA=local` | `OWNER_UID`, `ANTHROPIC_KEY` |
 

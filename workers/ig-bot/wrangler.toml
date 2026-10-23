@@ -22,6 +22,13 @@ main = "worker-ig.js"
 compatibility_date = "2026-08-21"
 keep_vars = true
 
+# Qué IA redacta las respuestas: "anthropic" (usa ANTHROPIC_KEY) o "deepseek" (usa
+# DEEPSEEK_KEY, que se carga como Secret en el panel). Desde el 23/10/2026 corre DeepSeek,
+# porque se acabó el crédito de Anthropic. Para volver, cambiar el valor y redesplegar.
+# Va acá y no solo en el panel para que el cambio quede en el historial del repo.
+[vars]
+IA_PROVEEDOR = "deepseek"
+
 # Seguimiento de los que quedaron en silencio: corre cada hora en punto (UTC) y adentro
 # decide a quien le escribe, segun las ventanas de 20 h y 24 h de worker-ig.js.
 [triggers]

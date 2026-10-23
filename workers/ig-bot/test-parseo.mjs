@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento, sinLasQueNoSalieron } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento, sinLasQueNoSalieron, proveedorIA, claveIA } from './worker-ig.js';
 import { construirSystem as _construirSystem } from './prompt.js';
 // construirSystem devuelve bloques (por el cache del prompt); los tests miran el texto.
 const construirSystem = o => _construirSystem(o).map(b => b.text).join('\n\n');
@@ -250,6 +250,24 @@ console.log('\n── motivoDeLaFalla ──');
   ok(/esperar/.test(motivoDeLaFalla(429, '{}')), '429 es rate limit');
   ok(/529/.test(motivoDeLaFalla(529, '{}')), '5xx trae el codigo');
   ok(motivoDeLaFalla(418, '') === 'La API de Anthropic devolvió 418', 'lo desconocido no se inventa');
+
+  // DeepSeek (23/10/2026): sin saldo contesta 402 "Insufficient Balance", y los avisos tienen
+  // que nombrar a DeepSeek y su clave, no a Anthropic, o se va a cargar saldo donde no es.
+  const sinSaldoDS = JSON.stringify({error:{message:'Insufficient Balance', type:'unknown_error'}});
+  ok(/SIN CRÉDITO.*DeepSeek.*platform\.deepseek\.com/.test(motivoDeLaFalla(402, sinSaldoDS, 'deepseek')), 'deepseek sin saldo: nombra a DeepSeek y donde cargar');
+  ok(/DEEPSEEK_KEY/.test(motivoDeLaFalla(401, '{}', 'deepseek')), 'deepseek 401 apunta a DEEPSEEK_KEY');
+  ok(!/Anthropic/.test(motivoDeLaFalla(500, '{}', 'deepseek')), 'con deepseek no se menciona a Anthropic');
+  ok(/Anthropic/.test(motivoDeLaFalla(500, '{}')), 'sin proveedor sigue siendo Anthropic');
+}
+
+console.log('\n── proveedorIA / claveIA ──');
+{
+  ok(proveedorIA({}) === 'anthropic', 'sin IA_PROVEEDOR es anthropic');
+  ok(proveedorIA({ IA_PROVEEDOR: 'DeepSeek' }) === 'deepseek', 'deepseek, sin importar mayusculas');
+  ok(proveedorIA({ IA_PROVEEDOR: 'otra' }) === 'anthropic', 'un valor desconocido cae en anthropic');
+  ok(claveIA({ IA_PROVEEDOR: 'deepseek', DEEPSEEK_KEY: 'd', ANTHROPIC_KEY: 'a' }) === 'd', 'con deepseek usa DEEPSEEK_KEY');
+  ok(claveIA({ DEEPSEEK_KEY: 'd', ANTHROPIC_KEY: 'a' }) === 'a', 'con anthropic usa ANTHROPIC_KEY');
+  ok(!claveIA({ IA_PROVEEDOR: 'deepseek', ANTHROPIC_KEY: 'a' }), 'deepseek sin su clave: no hay clave, no se llama a nadie');
 }
 
 console.log('\n── fechaAR: la lista de hoy tiene que seguir siendo de hoy ──');

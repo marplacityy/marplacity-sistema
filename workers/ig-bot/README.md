@@ -499,12 +499,31 @@ queda a la vista de cualquiera con acceso al panel.
 | `BOT_EMAIL`        | Text   | Usuario de servicio con el que el Worker se loguea a Firebase |
 | `BOT_PASSWORD`     | Secret | Contraseña de ese usuario de servicio |
 | `ANTHROPIC_KEY`    | Secret | API key de Anthropic — el Worker llama directo a `api.anthropic.com` |
+| `DEEPSEEK_KEY`     | Secret | API key de DeepSeek (platform.deepseek.com), si `IA_PROVEEDOR` es `deepseek` |
+| `IA_PROVEEDOR`     | Text   | Quién redacta: `anthropic` (default) o `deepseek`. **Va en `wrangler.toml`**, no en el panel — ver abajo |
 
 `FIREBASE_KEY` va como Text porque la API key web de Firebase no es un secreto:
 ya viaja pública dentro de `index.html`. Lo que protege los datos son las
 Security Rules (ver `firestore.rules` en la raíz). El comentario de cabecera de
 `worker-ig.js` la lista como Secret — cargarla así también funciona, es solo más
 incómodo de revisar después.
+
+### Cambiar de IA (`IA_PROVEEDOR`)
+
+El Worker puede contestar con **Anthropic** (`claude-sonnet-5`, structured outputs) o con
+**DeepSeek** (`deepseek-chat`, API compatible con OpenAI y JSON mode). Se elige con
+`IA_PROVEEDOR` en `wrangler.toml` y un `npx wrangler deploy`; la clave del que esté activo
+tiene que estar cargada como Secret (`ANTHROPIC_KEY` o `DEEPSEEK_KEY`), si no el bot recibe
+los DM pero no llama a nadie y todo va a la bandeja. La raíz del Worker lo muestra:
+`"ia": { "proveedor": "deepseek", "conClave": true }`.
+
+Desde el 23/10/2026 corre DeepSeek, porque se acabó el crédito de Anthropic. Lo que cambia
+entre uno y otro está encapsulado en `llamarAnthropic()` y `llamarDeepSeek()`: el system
+prompt va igual (DeepSeek lo recibe como texto plano y lo cachea solo, por prefijo), el
+JSON lo valida `normalizar()` en los dos casos, y los logs de tokens y de corte salen con
+el mismo formato. DeepSeek no tiene esquema: la forma del JSON la pide el prompt (FORMATO
+DE SALIDA), y si algún campo viene mal o el contenido llega vacío, el mensaje sube a la
+bandeja igual que cualquier otra respuesta rota.
 
 ### ⚠️ Nunca pongas los valores reales en el repo
 

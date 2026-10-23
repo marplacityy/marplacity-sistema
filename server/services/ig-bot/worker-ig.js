@@ -19,6 +19,9 @@
  *   BOT_EMAIL         (Text)    -> bot@marplacity.com (usuario creado en Firebase Auth)
  *   BOT_PASSWORD      (Secret)  -> la contraseña de ese usuario
  *   ANTHROPIC_KEY     (Secret)  -> API key de Anthropic (se llama la API directo)
+ *   DEEPSEEK_KEY      (Secret)  -> API key de DeepSeek, si IA_PROVEEDOR es "deepseek"
+ *   IA_PROVEEDOR      (Text)    -> "anthropic" (default) o "deepseek": quien redacta las
+ *                                  respuestas. Va en wrangler.toml, para que quede en el repo.
  */
 
 import { construirSystem, MARCA_CANAL, PROVEEDORES_BASE } from './prompt.js';
@@ -70,7 +73,11 @@ export default {
           BOT_EMAIL: !!env.BOT_EMAIL,
           BOT_PASSWORD: !!env.BOT_PASSWORD,
           ANTHROPIC_KEY: !!env.ANTHROPIC_KEY,
-        }
+          DEEPSEEK_KEY: !!env.DEEPSEEK_KEY,
+        },
+        // Que IA esta contestando y si tiene su clave cargada: si esto da false, el bot
+        // recibe los DM pero no llama a nadie y todo va a la bandeja.
+        ia: { proveedor: proveedorIA(env), conClave: !!claveIA(env) },
       }, null, 2), { headers: { ...CORS, 'Content-Type': 'application/json' } });
     }
 
@@ -210,10 +217,10 @@ async function procesarMensaje(ev, env) {
   } else if (pausado) {
     ia = { ...EN_MANO };
     console.log('bot PAUSADO en el chat de', senderId, '— no contesta, va a la bandeja');
-  } else if (env.ANTHROPIC_KEY && (texto || adjuntos.length)) {
+  } else if (claveIA(env) && (texto || adjuntos.length)) {
     ia = await pensarRespuesta(texto, adjuntos, env, historial);
   } else {
-    console.log(env.ANTHROPIC_KEY ? 'mensaje sin texto ni adjuntos' : 'sin ANTHROPIC_KEY: no se llama a la IA');
+    console.log(claveIA(env) ? 'mensaje sin texto ni adjuntos' : `sin clave de ${proveedorIA(env)}: no se llama a la IA`);
   }
 
   // El ida y vuelta se anota ANTES de mandar los DM, no después. Dos razones, las dos
@@ -1298,64 +1305,32 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     : `(el cliente mandó ${adjuntos.join(' y ')} sin texto)`;
 
   try {
-    // Cloudflare no permite que un Worker llame a otro en workers.dev (error 1042),
-    // así que se llama directo a la API de Anthropic.
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': env.ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-5',
-        // Sonnet 5 piensa por defecto y ese pensamiento se descuenta de max_tokens, asi
-        // que hay que dejar aire: si se corta a la mitad, el JSON queda truncado y
-        // volvemos al problema que estamos arreglando. Solo se paga lo que genera.
-        max_tokens: 4000,
-        system: sistema,
-        messages: turnosParaLaIA(historial, usuario),
-        output_config: {
-          // La API devuelve JSON valido si o si. Sonnet 4.6 no soportaba esto: por eso
-          // el cambio de modelo (mismo precio de lista, y mas nuevo).
-          format: { type: 'json_schema', schema: ESQUEMA_RESPUESTA },
-          // Contestar un DM no necesita que piense de mas: encarece cada mensaje y hace
-          // esperar al cliente. Si se lo nota flojo en las situaciones dificiles, esto
-          // es lo primero a subir.
-          effort: 'medium',
-        },
-      }),
-    });
+    const proveedor = proveedorIA(env);
+    const turnos = turnosParaLaIA(historial, usuario);
+    const res = proveedor === 'deepseek'
+      ? await llamarDeepSeek(env, sistema, turnos)
+      : await llamarAnthropic(env, sistema, turnos);
 
-    if (!r.ok) {
-      const cuerpo = await r.text();
-      console.log('IA error', r.status, cuerpo.slice(0, 300));
+    if (!res.ok) {
+      console.log('IA error', proveedor, res.status, res.cuerpo.slice(0, 300));
       // El aviso es lo unico de esto que se ve desde la bandeja. Sin el, un problema
       // de la API (sin credito, rate limit, servicio caido) se lee igual que "el modelo
       // dudo", y son cosas muy distintas: una se arregla contestando a mano, la otra
       // deja al bot mudo con TODOS hasta que alguien vaya a mirar los logs.
-      return { ...SIN_RESPUESTA, aviso: `⚠️ ${motivoDeLaFalla(r.status, cuerpo)} — el bot no pudo contestar` };
+      return { ...SIN_RESPUESTA, aviso: `⚠️ ${motivoDeLaFalla(res.status, res.cuerpo, proveedor)} — el bot no pudo contestar` };
     }
-
-    const d = await r.json();
 
     // Sin esto no hay forma de saber si el cache del prompt esta sirviendo. Con `cache
-    // leido` alto, pego y el mensaje sale a una decima parte; con `cache escrito` en
-    // todos los mensajes y `leido` siempre en cero, algo del bloque fijo esta cambiando
-    // entre llamadas y estamos pagando MAS que sin cache, en silencio.
-    const u = d.usage || {};
-    console.log(`tokens: entrada ${u.input_tokens ?? '?'} · cache leido ${u.cache_read_input_tokens ?? 0}` +
-                ` · cache escrito ${u.cache_creation_input_tokens ?? 0} · salida ${u.output_tokens ?? '?'}`);
+    // leido` alto, pego y el mensaje sale a una fraccion; con `leido` siempre en cero,
+    // algo del bloque fijo esta cambiando entre llamadas y estamos pagando de mas.
+    console.log(`tokens (${proveedor}): ${res.tokens}`);
 
-    // Con el esquema puesto, lo unico que puede volver mal formado es una respuesta
-    // cortada por max_tokens o un rechazo del modelo. Las dos se ven en stop_reason y
-    // no en el texto, asi que sin esto se diagnostican a ciegas.
-    if (d.stop_reason === 'max_tokens' || d.stop_reason === 'refusal') {
-      console.log('IA stop_reason:', d.stop_reason, JSON.stringify(d.stop_details || {}));
-    }
+    // Lo unico que puede volver mal formado es una respuesta cortada o un rechazo del
+    // modelo. Se ve en el motivo de corte y no en el texto, asi que sin esto se
+    // diagnostica a ciegas.
+    if (res.corte) console.log('IA corte:', res.corte);
 
-    const crudo = (d.content?.map(x => x.text || '').join('') || d.text || '').trim();
-    const out = JSON.parse(limpiarJson(crudo));
+    const out = JSON.parse(limpiarJson(res.crudo));
     const r2 = normalizar(out, textoCanal, fotosDoc);
 
     console.log('IA ->', r2.necesitaAtencion ? `atencion: ${r2.motivo} (prioridad ${r2.prioridad})` : 'sin atencion', '|', r2.mensajes.length, 'mensaje(s)');
@@ -1368,19 +1343,117 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
   }
 }
 
+// ── Qué IA contesta ───────────────────────────────────────────
+//
+// Dos proveedores, elegidos por IA_PROVEEDOR: Anthropic (el original) y DeepSeek, que se
+// agrego el 23/10/2026 cuando se acabo el credito de Anthropic. El resto del Worker no se
+// entera: las dos devuelven el mismo { ok, crudo, tokens, corte } y el JSON lo valida
+// normalizar() igual. Para cambiar de uno a otro alcanza con la variable y un deploy.
+
+export const proveedorIA = env => String(env.IA_PROVEEDOR || 'anthropic').toLowerCase() === 'deepseek' ? 'deepseek' : 'anthropic';
+export const claveIA = env => proveedorIA(env) === 'deepseek' ? env.DEEPSEEK_KEY : env.ANTHROPIC_KEY;
+
+async function llamarAnthropic(env, sistema, turnos) {
+  // Cloudflare no permite que un Worker llame a otro en workers.dev (error 1042),
+  // así que se llama directo a la API de Anthropic.
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-5',
+      // Sonnet 5 piensa por defecto y ese pensamiento se descuenta de max_tokens, asi
+      // que hay que dejar aire: si se corta a la mitad, el JSON queda truncado y
+      // volvemos al problema que estamos arreglando. Solo se paga lo que genera.
+      max_tokens: 4000,
+      system: sistema,
+      messages: turnos,
+      output_config: {
+        // La API devuelve JSON valido si o si. Sonnet 4.6 no soportaba esto: por eso
+        // el cambio de modelo (mismo precio de lista, y mas nuevo).
+        format: { type: 'json_schema', schema: ESQUEMA_RESPUESTA },
+        // Contestar un DM no necesita que piense de mas: encarece cada mensaje y hace
+        // esperar al cliente. Si se lo nota flojo en las situaciones dificiles, esto
+        // es lo primero a subir.
+        effort: 'medium',
+      },
+    }),
+  });
+  if (!r.ok) return { ok: false, status: r.status, cuerpo: await r.text() };
+
+  const d = await r.json();
+  const u = d.usage || {};
+  return {
+    ok: true,
+    crudo: (d.content?.map(x => x.text || '').join('') || d.text || '').trim(),
+    tokens: `entrada ${u.input_tokens ?? '?'} · cache leido ${u.cache_read_input_tokens ?? 0}` +
+            ` · cache escrito ${u.cache_creation_input_tokens ?? 0} · salida ${u.output_tokens ?? '?'}`,
+    corte: (d.stop_reason === 'max_tokens' || d.stop_reason === 'refusal') ? `${d.stop_reason} ${JSON.stringify(d.stop_details || {})}` : null,
+  };
+}
+
+/**
+ * DeepSeek habla el formato de OpenAI (chat/completions). Tres diferencias con Anthropic:
+ *
+ * - El system es un mensaje mas, de texto plano: los bloques con cache_control son cosa
+ *   de Anthropic. Se pegan en orden (fijo primero, variable despues), que es justo lo
+ *   que le sirve al cache de DeepSeek, que es automatico y por prefijo.
+ * - No hay esquema: `response_format: json_object` garantiza JSON valido, pero la forma
+ *   la pide el prompt (FORMATO DE SALIDA) y la valida normalizar(), como antes de los
+ *   structured outputs. Si el modelo mete un campo de mas, se ignora.
+ * - Con JSON mode a veces devuelve el contenido vacio: JSON.parse falla y el mensaje
+ *   sube a la bandeja como SIN_RESPUESTA, igual que cualquier otra respuesta rota.
+ */
+async function llamarDeepSeek(env, sistema, turnos) {
+  const r = await fetch('https://api.deepseek.com/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${env.DEEPSEEK_KEY}`,
+    },
+    body: JSON.stringify({
+      // El modelo de chat, sin razonamiento: para un DM alcanza y contesta mas rapido.
+      model: 'deepseek-chat',
+      max_tokens: 2000,
+      messages: [{ role: 'system', content: sistema.map(b => b.text).join('\n\n') }, ...turnos],
+      response_format: { type: 'json_object' },
+    }),
+  });
+  if (!r.ok) return { ok: false, status: r.status, cuerpo: await r.text() };
+
+  const d = await r.json();
+  const u = d.usage || {};
+  const eleccion = d.choices?.[0] || {};
+  return {
+    ok: true,
+    crudo: String(eleccion.message?.content || '').trim(),
+    tokens: `entrada ${u.prompt_tokens ?? '?'} · cache leido ${u.prompt_cache_hit_tokens ?? 0}` +
+            ` · cache no ${u.prompt_cache_miss_tokens ?? 0} · salida ${u.completion_tokens ?? '?'}`,
+    corte: eleccion.finish_reason && eleccion.finish_reason !== 'stop' ? eleccion.finish_reason : null,
+  };
+}
+
 /**
  * Traduce el error de la API a algo accionable para el que mira la bandeja.
  *
  * Interesa la diferencia entre "hay que poner plata", "hay que esperar" y "hay que
  * revisar", que son tres acciones distintas y ninguna es contestar el mensaje a mano.
  */
-export function motivoDeLaFalla(status, cuerpo) {
+export function motivoDeLaFalla(status, cuerpo, proveedor = 'anthropic') {
   const txt = String(cuerpo || '');
-  if (/credit balance is too low/i.test(txt)) return 'SIN CRÉDITO en la API de Anthropic: cargá saldo en console.anthropic.com';
-  if (status === 401 || status === 403)       return 'La API de Anthropic rechazó la credencial (ANTHROPIC_KEY)';
-  if (status === 429)                         return 'La API de Anthropic pidió esperar (demasiados mensajes juntos)';
-  if (status >= 500)                          return `La API de Anthropic falló (${status})`;
-  return `La API de Anthropic devolvió ${status}`;
+  const ds = proveedor === 'deepseek';
+  const api = ds ? 'DeepSeek' : 'Anthropic';
+  // Anthropic lo dice en el texto con un 400; DeepSeek contesta 402 "Insufficient Balance".
+  if (status === 402 || /credit balance is too low|insufficient balance/i.test(txt)) {
+    return `SIN CRÉDITO en la API de ${api}: cargá saldo en ${ds ? 'platform.deepseek.com' : 'console.anthropic.com'}`;
+  }
+  if (status === 401 || status === 403)       return `La API de ${api} rechazó la credencial (${ds ? 'DEEPSEEK_KEY' : 'ANTHROPIC_KEY'})`;
+  if (status === 429)                         return `La API de ${api} pidió esperar (demasiados mensajes juntos)`;
+  if (status >= 500)                          return `La API de ${api} falló (${status})`;
+  return `La API de ${api} devolvió ${status}`;
 }
 
 /**
