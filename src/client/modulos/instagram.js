@@ -200,19 +200,24 @@ export function renderBandeja() {
     const semaforo = `<button class="bd-semaforo ${pausado ? 'sem-off' : 'sem-on'}"
       title="${pausado ? solo ? esc(x.motivoPausa) + '. Tocá para que el bot vuelva a contestar.' : 'El bot no contesta este chat. Tocá para que vuelva a contestar.' : 'El bot contesta este chat solo. Tocá para pausarlo y seguirlo vos.'}"
       ${on('click', 'toggleBotChat', x.id)}>${pausado ? solo ? '🔴 Te lo dejó' : '🔴 Pausado' : '🟢 Bot'}</button>`;
-    const etiqueta = x.necesitaAtencion ? `<span class="est-badge ${vencida ? 'est-abandono' : 'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>` : `<span class="consig-tipo ${x.estado === 'cerrado' ? 'tipo-permuta' : 'tipo-consig'}" style="white-space:nowrap;">${esc(contextoApp.ESTADOS_BOT[x.estado] || x.estado || '—')}</span>`;
-    const bajada = x.necesitaAtencion ? esc(contextoApp.MOTIVOS_BOT[x.motivo] || x.motivo || 'Sin motivo') : esc(contextoApp.ESTADOS_BOT[x.estado] || x.estado || '');
+    const etiqueta = x.necesitaAtencion ? `<span class="est-badge ${vencida ? 'est-abandono' : 'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>` : `<span class="consig-tipo tipo-consig" style="white-space:nowrap;">Al día</span>`;
+    const bajada = x.necesitaAtencion ? esc(contextoApp.MOTIVOS_BOT[x.motivo] || x.motivo || 'Sin motivo') : (x.respondido ? 'Lo contestó el bot' : 'El bot no contestó');
+    // En la fila cerrada va lo último que escribió el cliente, en vez del resumen que
+    // armaba el modelo. Si la IA falló, va el aviso del Worker: dice por qué (sin crédito,
+    // rate limit...), que no es lo mismo que "el bot dudó".
+    const ultimoTxt = String(x.ultimoMensaje || '');
+    const ultimo = x.aviso || (ultimoTxt ? '“' + ultimoTxt.slice(0, 90) + (ultimoTxt.length > 90 ? '…' : '') + '”' : '');
     return `<div class="card" style="margin-bottom:8px;${vencida && x.necesitaAtencion ? 'border-color:#F09595;' : ''}">
       <div ${on('click', 'toggleConv', x.id)} style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;">
         <div style="min-width:0;">
           <div style="font-weight:600;font-size:15px;">${abierta ? '▾' : '▸'} 💬 ${esc(quien)}</div>
           <div style="font-size:12px;color:var(--text3);margin-top:2px;">${bajada} · ${t ? haceCuanto(ahora - t) : 'sin fecha'}${x.ultimoProducto ? ' · ' + esc(x.ultimoProducto) : ''}</div>
-          ${!abierta && x.resumen ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(x.resumen)}</div>` : ''}
+          ${!abierta && ultimo ? `<div style="font-size:12px;color:var(--text2);margin-top:4px;">${esc(ultimo)}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">${semaforo}${etiqueta}</div>
       </div>
       ${!abierta ? '' : `
-      ${x.resumen ? `<div style="font-size:13px;color:var(--text2);margin-top:8px;">${esc(x.resumen)}</div>` : ''}
+      ${x.aviso ? `<div class="proveedor-alerta alerta-urgente">${esc(x.aviso)}</div>` : ''}
       ${renderChat(x)}
       ${pausado ? `<div class="proveedor-alerta alerta-atencion">🔴 <b>El bot está pausado en este chat</b> — contestale vos desde Instagram. Lo que le escribas se anota acá abajo, y cuando lo vuelvas a prender el bot retoma sabiendo todo lo que le dijiste.</div>` : ''}
       ${vencida ? `<div class="proveedor-alerta alerta-urgente">⏰ <b>Pasaron las 24 h</b> — Instagram ya no deja que el bot conteste. Escribile vos desde la app y después marcala como contestada.</div>` : ''}
@@ -362,14 +367,10 @@ export function inicializarInstagram() {
   contextoApp.DIAS_CONVS = 60;
   contextoApp.desdeConvs = () => new Date(Date.now() - contextoApp.DIAS_CONVS * 24 * 60 * 60 * 1000); // A partir de cuándo una conversación se considera dormida y sirve para remarketing.
   contextoApp.DORMIDA_DESDE = 3 * 24 * 60 * 60 * 1000;
-  contextoApp.ESTADOS_BOT = {
-    cerrado: 'Va a pasar',
-    indeciso: 'Interesado',
-    permuta: 'Permuta',
-    reparacion: 'Reparación',
-    reclamo: 'Reclamo',
-    curioso: 'Consulta suelta'
-  }; // Cada pestaña: a quién muestra, cómo los ordena y qué decir cuando no hay ninguno.
+  // Cada pestaña: a quién muestra, cómo los ordena y qué decir cuando no hay ninguno.
+  // Hasta el 23/10/2026 había también "Van a pasar" e "Interesados", armadas con una
+  // categoría que el modelo ponía en cada mensaje. Se sacaron: no se usaban y cada
+  // mensaje pagaba esos tokens al pedo.
   contextoApp.TABS_BD = {
     atencion: {
       label: '🔔 Para vos',
@@ -378,23 +379,11 @@ export function inicializarInstagram() {
       ordena: (a, b) => (a.prioridad ?? 99) - (b.prioridad ?? 99) || msDe(a.ultimoMensajeCliente) - msDe(b.ultimoMensajeCliente),
       vacio: 'No hay nada esperándote: el bot viene contestando todo solo. 🎉'
     },
-    pasan: {
-      label: '🛍 Van a pasar',
-      filtra: x => x.estado === 'cerrado',
-      ordena: (a, b) => msDe(b.ultimoMensajeCliente) - msDe(a.ultimoMensajeCliente),
-      vacio: 'Todavía nadie dijo que pasa por el local.'
-    },
-    indecisos: {
-      label: '🤔 Interesados',
-      filtra: x => x.estado === 'indeciso',
-      ordena: (a, b) => msDe(b.ultimoMensajeCliente) - msDe(a.ultimoMensajeCliente),
-      vacio: 'Sin consultas de compra en este período.'
-    },
     dormidas: {
       // Para remarketing a mano: preguntaron, no cerraron y se quedaron callados. Los más
       // recientes primero, que son los que todavía se acuerdan de vos.
       label: '💤 Sin novedades',
-      filtra: x => Date.now() - msDe(x.ultimoMensajeCliente) >= contextoApp.DORMIDA_DESDE && x.estado !== 'curioso',
+      filtra: x => Date.now() - msDe(x.ultimoMensajeCliente) >= contextoApp.DORMIDA_DESDE,
       ordena: (a, b) => msDe(b.ultimoMensajeCliente) - msDe(a.ultimoMensajeCliente),
       vacio: 'Ninguna conversación quedó colgada hace más de 3 días.'
     },
