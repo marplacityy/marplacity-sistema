@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento, sinLasQueNoSalieron, proveedorIA, claveIA } from './worker-ig.js';
+import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento, sinLasQueNoSalieron, proveedorIA, claveIA, turnosParaDeepSeek } from './worker-ig.js';
 import { construirSystem as _construirSystem } from './prompt.js';
 // construirSystem devuelve bloques (por el cache del prompt); los tests miran el texto.
 const construirSystem = o => _construirSystem(o).map(b => b.text).join('\n\n');
@@ -258,6 +258,21 @@ console.log('\n── motivoDeLaFalla ──');
   ok(/DEEPSEEK_KEY/.test(motivoDeLaFalla(401, '{}', 'deepseek')), 'deepseek 401 apunta a DEEPSEEK_KEY');
   ok(!/Anthropic/.test(motivoDeLaFalla(500, '{}', 'deepseek')), 'con deepseek no se menciona a Anthropic');
   ok(/Anthropic/.test(motivoDeLaFalla(500, '{}')), 'sin proveedor sigue siendo Anthropic');
+}
+
+console.log('\n── turnosParaDeepSeek ──');
+// DeepSeek copiaba el formato del turno anterior del bot (texto plano) y contestaba en
+// prosa, o en espacios en blanco con modo JSON. Paso el 23/10/2026 con "Qué colores tenes?".
+{
+  const turnos = [{ role: 'user', content: 'tenes el 14?' }, { role: 'assistant', content: 'si\n500 usd' }, { role: 'user', content: 'colores?' }];
+  const ds = turnosParaDeepSeek(turnos, 'iPhone 14');
+  const bot = JSON.parse(ds[1].content);
+  ok(Array.isArray(bot.mensajes) && bot.mensajes.length === 2 && bot.mensajes[1] === '500 usd', 'lo del bot va como JSON con sus mensajes', ds[1].content);
+  ok(bot.producto === 'iPhone 14' && bot.necesita_atencion === false && bot.prioridad === 99, 'con todos los campos del formato, y el producto del doc');
+  ok(/colores\?\n\n\(contestá SOLO con el JSON/.test(ds[2].content), 'el ultimo mensaje del cliente lleva el recordatorio', ds[2].content);
+  ok(ds[0].content === 'tenes el 14?', 'los otros turnos del cliente quedan igual');
+  ok(turnos[2].content === 'colores?' && turnos[1].content === 'si\n500 usd', 'no toca los turnos originales');
+  ok(JSON.parse(turnosParaDeepSeek([{ role: 'assistant', content: 'x' }])[0].content).producto === null, 'sin producto va null');
 }
 
 console.log('\n── proveedorIA / claveIA ──');

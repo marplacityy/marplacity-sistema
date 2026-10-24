@@ -226,7 +226,7 @@ async function procesarMensaje(ev, env) {
     ia = { ...EN_MANO };
     console.log('bot PAUSADO en el chat de', senderId, '— no contesta, va a la bandeja');
   } else if (claveIA(env)) {
-    ia = await pensarRespuesta(texto, adjuntos, env, historial);
+    ia = await pensarRespuesta(texto, adjuntos, env, historial, { producto: previo?.ultimoProducto || null });
   } else {
     console.log(`sin clave de ${proveedorIA(env)}: no se llama a la IA, va a la bandeja`);
   }
@@ -824,7 +824,7 @@ async function reanudar(request, env) {
 
   // El ultimo mensaje del cliente va como "el mensaje de ahora"; todo lo anterior, de
   // contexto. Es el mismo reparto que hace el webhook.
-  const ia = await pensarRespuesta(String(ultima.texto || ''), [], env, historial.slice(0, -1));
+  const ia = await pensarRespuesta(String(ultima.texto || ''), [], env, historial.slice(0, -1), { producto: previo.ultimoProducto || null });
   const enviados = await mandarAutomatico(env, igUserId, ia.mensajes, { cfg });
   const quedoSinMandar = enviados < ia.mensajes.length;
 
@@ -1264,7 +1264,7 @@ const EN_MANO = {
   mensajes: [],
 };
 
-async function pensarRespuesta(texto, adjuntos, env, historial) {
+async function pensarRespuesta(texto, adjuntos, env, historial, { producto = null } = {}) {
   const idToken = await tokenDelBot(env);
   if (!idToken) return { ...SIN_RESPUESTA };
 
@@ -1316,7 +1316,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
     const proveedor = proveedorIA(env);
     const turnos = turnosParaLaIA(historial, usuario);
     const res = proveedor === 'deepseek'
-      ? await llamarDeepSeek(env, sistema, turnos)
+      ? await llamarDeepSeek(env, sistema, turnos, { producto })
       : await llamarAnthropic(env, sistema, turnos);
 
     if (!res.ok) {
@@ -1351,7 +1351,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
       if (proveedor !== 'deepseek') throw e;
       // Sin modo JSON: el vacio es repetible para el mismo mensaje, asi que repetir la
       // misma llamada no sirve (probado el 23/10/2026). Ver llamarDeepSeek().
-      const otra = await llamarDeepSeek(env, sistema, turnos, { modoJson: false });
+      const otra = await llamarDeepSeek(env, sistema, turnos, { modoJson: false, producto });
       if (!otra.ok) throw new Error(`reintento: ${otra.status} ${String(otra.cuerpo).slice(0, 200)}`);
       console.log(`tokens (${proveedor}, reintento sin modo JSON): ${otra.tokens}`);
       try {
@@ -1442,7 +1442,37 @@ async function llamarAnthropic(env, sistema, turnos) {
  *   se queda con lo que hay entre llaves, que es como se trabajaba antes de los
  *   structured outputs.
  */
-async function llamarDeepSeek(env, sistema, turnos, { modoJson = true } = {}) {
+/**
+ * Los turnos, como los ve DeepSeek. Dos cosas que Anthropic no necesitaba porque el
+ * esquema le forzaba la salida:
+ *
+ * - Lo que el bot dijo antes va como el JSON que se le pide, no como texto suelto. El
+ *   modelo copia el formato del turno anterior antes que una regla a 17.000 tokens de
+ *   distancia: con el historial en texto plano, el PRIMER mensaje de cada charla salia
+ *   bien y el segundo volvia en prosa (sin modo JSON) o en espacios en blanco (con modo
+ *   JSON). Paso el 23/10/2026 con "Qué colores tenes?". El `producto` es el ultimo que
+ *   guardo el doc: si fuera null el modelo aprenderia a no completarlo, y sin producto
+ *   el cron no tiene a quien seguir.
+ * - Un recordatorio pegado al ultimo mensaje del cliente, que es lo que mas pesa.
+ *
+ * No toca los turnos que recibe: devuelve copias.
+ */
+export function turnosParaDeepSeek(turnos, producto = null) {
+  const RECORDATORIO = '\n\n(contestá SOLO con el JSON del FORMATO DE SALIDA, con todos sus campos)';
+  const salida = turnos.map(t => t.role !== 'assistant' ? { ...t } : {
+    role: 'assistant',
+    content: JSON.stringify({
+      necesita_atencion: false, motivo: null, prioridad: 99, paso_a_humano: false,
+      producto: producto || null,
+      mensajes: String(t.content || '').split('\n').map(x => x.trim()).filter(Boolean),
+    }),
+  });
+  const ultimo = salida[salida.length - 1];
+  if (ultimo && ultimo.role === 'user') ultimo.content += RECORDATORIO;
+  return salida;
+}
+
+async function llamarDeepSeek(env, sistema, turnos, { modoJson = true, producto = null } = {}) {
   const r = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
@@ -1453,7 +1483,7 @@ async function llamarDeepSeek(env, sistema, turnos, { modoJson = true } = {}) {
       // El modelo de chat, sin razonamiento: para un DM alcanza y contesta mas rapido.
       model: 'deepseek-chat',
       max_tokens: 2000,
-      messages: [{ role: 'system', content: sistema.map(b => b.text).join('\n\n') }, ...turnos],
+      messages: [{ role: 'system', content: sistema.map(b => b.text).join('\n\n') }, ...turnosParaDeepSeek(turnos, producto)],
       ...(modoJson ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
