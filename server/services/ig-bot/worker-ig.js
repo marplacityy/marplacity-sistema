@@ -1347,12 +1347,19 @@ async function pensarRespuesta(texto, adjuntos, env, historial) {
       // tokens ilegibles). Se loguea lo que vino y se reintenta UNA vez: el prompt entero
       // esta en cache, asi que el reintento cuesta centavos y le ahorra a Juni una fila en
       // la bandeja por un hipo del modelo.
-      console.log('IA respuesta ilegible:', e.message, '| crudo:', JSON.stringify(res.crudo.slice(0, 300)));
+      console.log('IA respuesta ilegible:', e.message, '| respuesta:', res.detalle);
       if (proveedor !== 'deepseek') throw e;
-      const otra = await llamarDeepSeek(env, sistema, turnos);
-      if (!otra.ok) throw new Error(`reintento: ${otra.status}`);
-      console.log(`tokens (${proveedor}, reintento): ${otra.tokens}`);
-      out = JSON.parse(limpiarJson(otra.crudo));
+      // Sin modo JSON: el vacio es repetible para el mismo mensaje, asi que repetir la
+      // misma llamada no sirve (probado el 23/10/2026). Ver llamarDeepSeek().
+      const otra = await llamarDeepSeek(env, sistema, turnos, { modoJson: false });
+      if (!otra.ok) throw new Error(`reintento: ${otra.status} ${String(otra.cuerpo).slice(0, 200)}`);
+      console.log(`tokens (${proveedor}, reintento sin modo JSON): ${otra.tokens}`);
+      try {
+        out = JSON.parse(limpiarJson(otra.crudo));
+      } catch (e2) {
+        console.log('IA reintento ilegible:', e2.message, '| respuesta:', otra.detalle);
+        throw e2;
+      }
     }
     const r2 = normalizar(out, textoCanal, fotosDoc);
 
@@ -1415,6 +1422,7 @@ async function llamarAnthropic(env, sistema, turnos) {
     tokens: `entrada ${u.input_tokens ?? '?'} · cache leido ${u.cache_read_input_tokens ?? 0}` +
             ` · cache escrito ${u.cache_creation_input_tokens ?? 0} · salida ${u.output_tokens ?? '?'}`,
     corte: (d.stop_reason === 'max_tokens' || d.stop_reason === 'refusal') ? `${d.stop_reason} ${JSON.stringify(d.stop_details || {})}` : null,
+    detalle: JSON.stringify({ stop_reason: d.stop_reason, content: d.content }).slice(0, 700),
   };
 }
 
@@ -1427,10 +1435,14 @@ async function llamarAnthropic(env, sistema, turnos) {
  * - No hay esquema: `response_format: json_object` garantiza JSON valido, pero la forma
  *   la pide el prompt (FORMATO DE SALIDA) y la valida normalizar(), como antes de los
  *   structured outputs. Si el modelo mete un campo de mas, se ignora.
- * - Con JSON mode a veces devuelve el contenido vacio: JSON.parse falla y el mensaje
- *   sube a la bandeja como SIN_RESPUESTA, igual que cualquier otra respuesta rota.
+ * - Con JSON mode a veces devuelve el contenido VACIO (unos 20-30 tokens de nada, con
+ *   finish_reason "stop"), y lo hace de forma repetible para ciertos mensajes: paso tres
+ *   veces seguidas con "Qué colores tenes?" el 23/10/2026, reintento incluido. Por eso
+ *   el reintento va SIN response_format: el prompt pide JSON pelado igual y limpiarJson()
+ *   se queda con lo que hay entre llaves, que es como se trabajaba antes de los
+ *   structured outputs.
  */
-async function llamarDeepSeek(env, sistema, turnos) {
+async function llamarDeepSeek(env, sistema, turnos, { modoJson = true } = {}) {
   const r = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {
@@ -1442,7 +1454,7 @@ async function llamarDeepSeek(env, sistema, turnos) {
       model: 'deepseek-chat',
       max_tokens: 2000,
       messages: [{ role: 'system', content: sistema.map(b => b.text).join('\n\n') }, ...turnos],
-      response_format: { type: 'json_object' },
+      ...(modoJson ? { response_format: { type: 'json_object' } } : {}),
     }),
   });
   if (!r.ok) return { ok: false, status: r.status, cuerpo: await r.text() };
@@ -1456,6 +1468,8 @@ async function llamarDeepSeek(env, sistema, turnos) {
     tokens: `entrada ${u.prompt_tokens ?? '?'} · cache leido ${u.prompt_cache_hit_tokens ?? 0}` +
             ` · cache no ${u.prompt_cache_miss_tokens ?? 0} · salida ${u.completion_tokens ?? '?'}`,
     corte: eleccion.finish_reason && eleccion.finish_reason !== 'stop' ? eleccion.finish_reason : null,
+    // Para el log cuando lo que vino no se puede leer: la respuesta entera, recortada.
+    detalle: JSON.stringify({ finish_reason: eleccion.finish_reason, message: eleccion.message, usage: u }).slice(0, 700),
   };
 }
 
