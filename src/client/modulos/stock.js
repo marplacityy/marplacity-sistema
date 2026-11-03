@@ -6,6 +6,7 @@ import { setSyncDot } from '../core/datos.js';
 import { showToast, esc } from '../core/interfaz.js';
 import { workerHeaders, textoDeIA } from './reportes.js';
 import { populateProveedoresDL } from './consignacion.js';
+import { rescatarSerie } from '../../shared/serie.js';
 
 export
 // ── Stock permutas ────────────────────────────────────
@@ -452,14 +453,14 @@ Cada objeto puede tener estos campos (poné null en los que no aparezcan, NO inv
 - gb: capacidad, ej "256GB", "1TB"
 - bateria: SOLO el número de salud de batería, ej "Batería 92%" o "bat 92" o "🔋92%" → 92 (número sin %)
 - ciclos: número de ciclos de carga si aparece, ej "415 ciclos" → 415
-- imei: IMEI o número de serie si aparece (15 dígitos), como string
+- imei: IMEI o NÚMERO DE SERIE, como string. El IMEI tiene 15 dígitos; el número de serie de Apple es alfanumérico de 10 a 12 caracteres (ej "F2LXK3ABCD12"), puede venir como "S/N", "SN", "Serie" o sin etiqueta. Los dos van SIEMPRE acá, nunca en notas
 - estadoProducto: si menciona estado, ej "Nuevo", "Usado", "Impecable"
 - cantidad: número, default 1
 - precio: número sin símbolos ni separadores de miles, null si no hay
 - itemId: ID o código interno si hay
-- notas: cualquier otro dato relevante (ej "sin caja", "liberado")
+- notas: cualquier otro dato relevante (ej "sin caja", "liberado"). NUNCA el IMEI ni el número de serie
 
-Interpretá con inteligencia: "92%" cerca de batería o un 🔋 es batería; 15 dígitos es IMEI; "(415 ciclos)" son ciclos. Si un item tiene Cant > 1, expandilo en objetos individuales.
+Interpretá con inteligencia: "92%" cerca de batería o un 🔋 es batería; 15 dígitos es IMEI; un código alfanumérico en mayúsculas es el número de serie; "(415 ciclos)" son ciclos. Si la lista viene en columnas separadas por tabulaciones, la columna que sigue al nombre del artículo es el N° de serie o IMEI. Si un item tiene Cant > 1, expandilo en objetos individuales.
 
 Lista:
 ${texto}`
@@ -469,7 +470,7 @@ ${texto}`
       const data = await response.json();
       console.log('API response:', JSON.stringify(data).slice(0, 500));
       const raw = textoDeIA(data).replace(/```json|```/g, '').trim();
-      contextoApp.listaParseada = JSON.parse(raw);
+      contextoApp.listaParseada = JSON.parse(raw).map(rescatarSerie);
 
       // Render preview
       const moneda = document.getElementById('lista-moneda').value;
