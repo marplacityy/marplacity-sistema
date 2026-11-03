@@ -26,10 +26,7 @@
 
           <div class="grid2">
             <div class="field"><label>Proveedor</label>
-              <div style="display:flex;gap:6px;">
-                <input type="text" id="cp-proveedor" placeholder="Nombre del proveedor o particular" list="proveedores-dl" style="flex:1" autocomplete="off" data-change="autoTipoProveedor">
-                <datalist id="proveedores-dl"></datalist>
-              </div>
+              <select id="cp-proveedor" data-change="elegirProveedor" data-args='["$this"]'><option value="">Elegí el proveedor...</option></select>
             </div>
             <div class="field"><label>Tipo</label>
               <select id="cp-tipo">
@@ -91,6 +88,15 @@
 
       <!-- TAB: PROVEEDORES -->
       <div id="consig-tab-proveedores" style="display:none">
+        <div class="card" id="prov-lista-card">
+          <div class="card-title">Lista de proveedores</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Son los que aparecen para elegir en el campo Proveedor. Sacar uno de la lista no borra sus equipos ni sus pagos.</p>
+          <div class="input-add">
+            <input type="text" id="nuevo-proveedor" placeholder="Nombre del proveedor..." data-enter="agregarProveedor">
+            <button class="btn-add" data-click="agregarProveedor">+ Agregar</button>
+          </div>
+          <div class="tags" id="proveedores-tags"></div>
+        </div>
         <div id="proveedores-list"></div>
       </div>
 
@@ -101,7 +107,7 @@
           <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Pegá la lista en cualquier formato — la IA la interpreta automáticamente y te muestra una vista previa para confirmar antes de guardar.</p>
           <div class="field">
             <label>Proveedor (se aplica a todos los items)</label>
-            <input type="text" id="lista-proveedor" placeholder="Nombre del proveedor" list="proveedores-dl" autocomplete="off">
+            <select id="lista-proveedor" data-change="elegirProveedor" data-args='["$this"]'><option value="">El que diga la lista</option></select>
           </div>
           <div class="field">
             <label>Lista de productos</label>
@@ -141,8 +147,7 @@
           <div class="card-title">Registrar pago a proveedor</div>
           <div class="grid2">
             <div class="field"><label>Proveedor</label>
-              <input type="text" id="pago-proveedor" placeholder="Nombre del proveedor" list="proveedores-dl2" autocomplete="off">
-              <datalist id="proveedores-dl2"></datalist>
+              <select id="pago-proveedor" data-change="elegirProveedor" data-args='["$this"]'><option value="">Elegí el proveedor...</option></select>
             </div>
             <div class="field"><label>Fecha del pago</label><input type="date" id="pago-fecha"></div>
           </div>

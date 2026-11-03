@@ -15,7 +15,7 @@ import { renderEncargues } from '../modulos/encargues.js';
 import { renderInv, renderICatTags, populateICatSelects } from '../modulos/inventario.js';
 import { renderCatalogo, renderFichaCatalogo, pintarBadgePedidos, renderPedidos } from '../modulos/catalogo.js';
 import { renderFijos } from '../modulos/gastos-fijos.js';
-import { renderConsig, renderPagos } from '../modulos/consignacion.js';
+import { renderConsig, renderPagos, populateProveedoresDL } from '../modulos/consignacion.js';
 import { renderStock } from '../modulos/stock.js';
 import { renderAmort } from '../modulos/amortizaciones.js';
 import { msDe, renderBandeja } from '../modulos/instagram.js';
@@ -482,6 +482,7 @@ export async function init() {
           renderICatTags();
           populateICatSelects();
         }
+        populateProveedoresDL();
         if (d.tc) {
           document.getElementById('tc').value = d.tc;
           document.getElementById('cfg-tc').value = d.tc;

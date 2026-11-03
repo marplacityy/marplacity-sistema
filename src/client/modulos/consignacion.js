@@ -1,17 +1,43 @@
 /** modulos/consignacion: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
 import { on } from '../../shared/seguridad.js';
-import { esc, showToast } from '../core/interfaz.js';
+import { esc, saveCfgData, showToast } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { addDoc, serverTimestamp, updateDoc, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { printTicket80 } from './pos.js';
 
+const EDITAR_PROVEEDORES = '__editar__';
+
+// Los proveedores que se eligen en los desplegables. Se guardan en config/{uid}; hasta
+// que se edita la lista por primera vez, salen de los que ya tienen equipos cargados.
+export function listaProveedores() {
+  if (Array.isArray(contextoApp.cfg.consigProveedores)) return contextoApp.cfg.consigProveedores;
+  return [...new Set(contextoApp.consigItems.map(c => c.proveedor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+}
+async function guardarListaProveedores(lista) {
+  contextoApp.cfg.consigProveedores = [...lista].sort((a, b) => a.localeCompare(b, 'es'));
+  populateProveedoresDL();
+  await saveCfgData();
+}
+export function renderProveedoresTags() {
+  const el = document.getElementById('proveedores-tags');
+  if (!el) return;
+  const lista = listaProveedores();
+  el.innerHTML = lista.length ? lista.map(p => `<div class="tag"><span>${esc(p)}</span><button ${on('click', 'eliminarProveedor', p)} title="Sacar de la lista">×</button></div>`).join('') : '<span style="font-size:12px;color:var(--text3)">Todavía no hay proveedores en la lista.</span>';
+}
 export function populateProveedoresDL() {
   const provs = [...new Set(contextoApp.consigItems.map(c => c.proveedor).filter(Boolean))].sort();
-  ['proveedores-dl', 'proveedores-dl2'].forEach(id => {
+  const lista = listaProveedores();
+  [['cp-proveedor', 'Elegí el proveedor...'], ['pago-proveedor', 'Elegí el proveedor...'], ['lista-proveedor', 'El que diga la lista']].forEach(([id, vacio]) => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = provs.map(p => `<option value="${esc(p)}">`).join('');
+    if (!el) return;
+    const prev = el.value;
+    // Si lo elegido ya no está en la lista (se sacó recién), queda igual hasta que se guarde
+    const opciones = prev && prev !== EDITAR_PROVEEDORES && !lista.includes(prev) ? [...lista, prev] : lista;
+    el.innerHTML = `<option value="">${vacio}</option>` + opciones.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('') + `<option value="${EDITAR_PROVEEDORES}">✏️ Editar proveedores...</option>`;
+    el.value = prev === EDITAR_PROVEEDORES ? '' : prev;
   });
+  renderProveedoresTags();
   // pago filter
   const pflSel = document.getElementById('pago-fl-proveedor');
   if (pflSel) {
@@ -309,6 +335,34 @@ export function inicializarConsignacion() {
     if (tab === 'proveedores') renderProveedores();
     if (tab === 'pagos') renderPagos();
     if (tab === 'productos') renderConsig();
+  };
+  window.elegirProveedor = function (sel) {
+    if (sel.value === EDITAR_PROVEEDORES) {
+      sel.value = '';
+      window.setConsigTab('proveedores', document.querySelector('#page-consig .tab-btn[data-args*="proveedores"]'));
+      document.getElementById('prov-lista-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('nuevo-proveedor').focus();
+      return;
+    }
+    if (sel.id === 'cp-proveedor') window.autoTipoProveedor();
+  };
+  window.agregarProveedor = async function () {
+    const input = document.getElementById('nuevo-proveedor');
+    const nombre = input.value.trim().replace(/\s+/g, ' ');
+    if (!nombre) return;
+    const lista = listaProveedores();
+    if (lista.some(p => p.toLowerCase() === nombre.toLowerCase())) {
+      showToast('Ese proveedor ya está en la lista.', true);
+      return;
+    }
+    input.value = '';
+    await guardarListaProveedores([...lista, nombre]);
+    showToast('Proveedor agregado ✓');
+  };
+  window.eliminarProveedor = async function (nombre) {
+    if (!confirm(`¿Sacar a ${nombre} de la lista?\n\nSus equipos y pagos no se borran; solo deja de aparecer para elegir.`)) return;
+    await guardarListaProveedores(listaProveedores().filter(p => p !== nombre));
+    showToast('Proveedor sacado de la lista ✓');
   };
   window.autoTipoProveedor = function () {
     const nombre = document.getElementById('cp-proveedor').value.trim();

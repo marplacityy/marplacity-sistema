@@ -108,6 +108,29 @@ test('guardar un gasto lo lleva al listado y al cierre de caja', async ({ page }
   expect(errores).toEqual([]);
 });
 
+test('el proveedor de consignación se elige de una lista que se edita aparte', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await ir(page, 'consig');
+  // Sin lista guardada, salen los proveedores que ya tienen equipos
+  await expect(page.locator('#cp-proveedor option')).toHaveText(['Elegí el proveedor...', 'Proveedor prueba', '✏️ Editar proveedores...']);
+  await page.locator('#cp-proveedor').selectOption('__editar__');
+  await expect(page.locator('#consig-tab-proveedores')).toBeVisible();
+  await expect(page.locator('#nuevo-proveedor')).toBeFocused();
+  await page.locator('#nuevo-proveedor').fill('  Juan   Pérez ');
+  await page.locator('#prov-lista-card button[data-click="agregarProveedor"]').click();
+  await expect.poll(() => page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba').consigProveedores)).toEqual(['Juan Pérez', 'Proveedor prueba']);
+  await page.locator('#proveedores-tags .tag', { hasText: 'Proveedor prueba' }).locator('button').click();
+  await expect.poll(() => page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba').consigProveedores)).toEqual(['Juan Pérez']);
+  await expect(page.locator('#pago-proveedor option')).toHaveText(['Elegí el proveedor...', 'Juan Pérez', '✏️ Editar proveedores...']);
+  await page.locator('#page-consig .tab-btn[data-args*="productos"]').click();
+  await page.locator('#cp-proveedor').selectOption('Juan Pérez');
+  await page.locator('#cp-producto').fill('iPhone 13');
+  await page.locator('#btn-cp-guardar').click();
+  await expect.poll(() => page.evaluate(() => window.__datosPrueba.listar('consig').some(g => g.proveedor === 'Juan Pérez' && g.producto === 'iPhone 13'))).toBe(true);
+  expect(errores).toEqual([]);
+});
+
 test('venta con equipo y accesorio actualiza inventario, cliente y comprobante', async ({ page }) => {
   const errores = await preparar(page);
   await entrar(page);
