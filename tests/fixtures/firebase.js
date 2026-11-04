@@ -25,7 +25,11 @@ export const getAuth = () => autenticacion;
 export const serverTimestamp = () => ({ seconds: Date.now() / 1000 });
 export const increment = n => ({ __incremento: n });
 export const collection = (_db, nombre) => ({ path: nombre, coleccion: true });
-export function doc(base, ...partes) { return { path: [base.path, ...partes].filter(Boolean).join('/') }; }
+// Como en Firestore, doc(colección) sin id genera uno nuevo.
+export function doc(base, ...partes) {
+  if (base.coleccion && !partes.length) partes = [crypto.randomUUID()];
+  return { path: [base.path, ...partes].filter(Boolean).join('/') };
+}
 export const where = (campo, op, valor) => ({ tipo: 'where', campo, op, valor });
 export const orderBy = (campo, orden = 'asc') => ({ tipo: 'orderBy', campo, orden });
 export const limit = cantidad => ({ tipo: 'limit', cantidad });

@@ -6,7 +6,10 @@
 
       <div class="card" style="padding:0;overflow:hidden;">
         <div id="ag-chat" style="height:52vh;min-height:320px;overflow-y:auto;padding:16px;background:var(--bg);"></div>
+        <div id="ag-adjunto" style="display:none;padding:8px 12px 0;background:var(--surface);border-top:1px solid var(--border);"></div>
         <div style="display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:var(--surface);">
+          <input type="file" id="ag-archivo" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif" style="display:none" data-change="adjuntarAgente" data-args='["$this"]'>
+          <button class="btn-secondary" style="width:auto;padding:11px 14px;" data-click="clickEn" data-args='["ag-archivo"]' title="Adjuntar una factura (PDF o foto)">📎</button>
           <input type="text" id="ag-input" placeholder="Gasté 15 dólares en cosas de limpieza…" autocomplete="off"
                  data-enter="mandarAlAgente"
                  style="flex:1;padding:11px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:14px;color:var(--text);outline:none;">
@@ -18,6 +21,7 @@
         <button class="btn-secondary" data-click="ejemploAgente" data-args='["¿Cómo me fue esta semana?"]'>¿Cómo me fue esta semana?</button>
         <button class="btn-secondary" data-click="ejemploAgente" data-args='["Gasté 15 dólares en cosas de limpieza para el local"]'>Anotar un gasto</button>
         <button class="btn-secondary" data-click="ejemploAgente" data-args='["¿Qué iPhone 15 tengo en stock?"]'>Buscar en el stock</button>
+        <button class="btn-secondary" data-click="clickEn" data-args='["ag-archivo"]'>📄 Cargar una factura al inventario</button>
         <button class="btn-secondary" style="color:var(--text3);" data-click="limpiarAgente">Empezar de nuevo</button>
       </div>
     </div>

@@ -131,6 +131,48 @@ test('el proveedor de consignación se elige de una lista que se edita aparte', 
   expect(errores).toEqual([]);
 });
 
+test('el asistente lee una factura y la carga al inventario recién al confirmar', async ({ page }) => {
+  const errores = await preparar(page);
+  const pedidos = [];
+  const respuestas = [
+    { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'proponer_inventario', input: { proveedor: 'Mayorista X', numero_factura: '0001-00012345', moneda: 'USD', items: [
+      { nombre: 'Funda iPhone 15', cantidad: 10, costo: 4, categoria: 'Accesorios', refId: 'funda-1' },
+      { nombre: 'Cargador 20W', cantidad: 6, costo: 7.5, categoria: 'Accesorios', sku: 'CG20' },
+      { nombre: 'Templado genérico', cantidad: 2, costo: 1, categoria: 'Accesorios', refId: 'no-existe' }
+    ] } }] },
+    { stop_reason: 'end_turn', content: [{ type: 'text', text: 'Te dejé la factura lista para confirmar.' }] }
+  ];
+  await page.route('**/api/ia**', async route => {
+    pedidos.push(route.request().postDataJSON());
+    await route.fulfill({ json: respuestas.shift() });
+  });
+  await entrar(page);
+  await ir(page, 'asistente');
+  await page.locator('#ag-archivo').setInputFiles({ name: 'factura.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 factura de prueba') });
+  await expect(page.locator('#ag-adjunto')).toContainText('factura.pdf');
+  await page.locator('#btn-ag-enviar').click();
+  await expect(page.locator('#ag-chat')).toContainText('Factura para cargar al inventario');
+  const primero = pedidos[0].messages[0].content;
+  expect(primero[0]).toMatchObject({ type: 'document', source: { type: 'base64', media_type: 'application/pdf' } });
+  expect(primero[1].text).toContain('factura.pdf');
+  // Nada se guarda hasta confirmar
+  expect(await page.evaluate(() => window.__datosPrueba.listar('inventario').length)).toBe(2);
+  // El templado venía con un refId que no existe: queda como producto nuevo, y se destilda
+  await expect(page.locator('#ag-f0-r2-destino')).toHaveValue('');
+  await page.locator('#ag-f0-r2-ok').uncheck();
+  await page.locator('#ag-chat button', { hasText: 'Cargar al inventario' }).click();
+  await expect(page.locator('#ag-chat')).toContainText('Cargado al inventario');
+  const inv = await page.evaluate(() => window.__datosPrueba.listar('inventario'));
+  expect(inv).toHaveLength(3);
+  const funda = inv.find(x => x.nombre === 'Funda iPhone 15');
+  expect(funda.qty).toBe(15);
+  expect(funda.costo).toBe(4);
+  expect(funda.costoHist.map(h => h.costo)).toEqual([3, 4]);
+  const cargador = inv.find(x => x.nombre === 'Cargador 20W');
+  expect(cargador).toMatchObject({ qty: 6, costo: 7.5, moneda: 'USD', sku: 'CG20', proveedor: 'Mayorista X', notas: 'Factura 0001-00012345', userId: 'usuario-prueba' });
+  expect(errores).toEqual([]);
+});
+
 test('venta con equipo y accesorio actualiza inventario, cliente y comprobante', async ({ page }) => {
   const errores = await preparar(page);
   await entrar(page);
