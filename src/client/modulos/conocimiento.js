@@ -6,6 +6,7 @@ import { showToast, esc, escJs, requiereDuenoDelLocal } from '../core/interfaz.j
 import { setSyncDot, deb } from '../core/datos.js';
 import { setDoc, serverTimestamp, addDoc, deleteDoc, doc } from 'firebase/firestore';
 import { workerHeaders, textoDeIA } from './reportes.js';
+import { itemsDeListaEcommodo } from '../../shared/lista-ecommodo.js';
 
 export
 // ── Datos del local ──
@@ -66,11 +67,10 @@ export function pintarPromptBot() {
     est.innerHTML += `<div style="font-size:12px;color:var(--neg);margin-top:6px;">No pude leer el original: ${esc(e.message)}</div>`;
   });
 }
-export
 // ── Listas de precios ──
 // listasItems viene ordenado por fecha desc, así que la primera de cada origen
 // es la vigente. Las anteriores quedan como historial.
-function kbUltimaLista(origen) {
+export function kbUltimaLista(origen) {
   return contextoApp.listasItems.find(l => l.origen === origen) || null;
 }
 
@@ -92,7 +92,7 @@ export function proveedores() {
 }
 export const proveedorDe = id => proveedores().find(p => p.id === id) || null;
 /** Lo que cada doc de lista lleva del proveedor, para que el bot y el catálogo no dependan del id. */
-const metaProveedor = origen => {
+export const metaProveedor = origen => {
   const p = proveedorDe(origen);
   return { proveedor: p ? p.nombre : origen, tipo: p ? p.tipo : 'publico' };
 };
@@ -187,7 +187,6 @@ export function renderKbPreview(origen) {
   </div>`).join('');
   if (!(contextoApp.kbParseada[origen] || []).length) document.getElementById('kb-' + origen + '-preview').style.display = 'none';
 }
-export
 /**
  * Suma los productos nuevos a los que ya estaban.
  *
@@ -196,7 +195,7 @@ export
  * lista con SOLO lo pegado, así que sumar un producto borraba de la vista los cientos
  * anteriores — y el bot, que mira la lista más reciente, dejaba de conocerlos.
  */
-function fusionarListaKb(previos, nuevos) {
+export function fusionarListaKb(previos, nuevos) {
   const porClave = new Map(nuevos.map(it => [contextoApp.claveItemKb(it), it]));
   const pisados = new Set();
   const actualizados = previos.map(it => {
@@ -244,6 +243,64 @@ export function pintarTramosProv(origen = contextoApp.listasTab) {
       <td>${t.length > 1 && x.hasta != null ? `<button class="ei-btn del" ${on('click', 'quitarTramoProv', i)} title="Quitar">×</button>` : ''}</td>
     </tr>`).join('');
 }
+/**
+ * Interpreta una lista pegada. Primero con la IA; si no responde, o no devuelve nada
+ * útil, con el lector de listas de Ecommodo (`shared/lista-ecommodo.js`), que no
+ * depende de ningún servicio. Devuelve {items, conIA} con los precios tal cual figuran.
+ */
+export async function interpretarTextoLista(texto, esCosto) {
+  try {
+    const response = await fetch(contextoApp.WORKER_URL, {
+      method: 'POST',
+      headers: await workerHeaders(),
+      body: JSON.stringify({
+        model: 'claude-opus-5',
+        max_tokens: 8000,
+        output_config: {
+          effort: 'low'
+        },
+        messages: [{
+          role: 'user',
+          content: `Sos un experto en listas de precios de celulares. Analizá esta lista de precios ${esCosto ? 'DE UN PROVEEDOR (son costos)' : 'AL PÚBLICO'} y extraé cada producto, sin importar el formato (puede venir desordenada, con emojis, abreviada, con varias líneas por item). Devolvé SOLO un JSON array válido, sin texto adicional, sin markdown, sin backticks.
+
+Cada objeto tiene exactamente estos campos (poné null en los que no aparezcan, NO inventes):
+- producto: nombre del modelo, ej "iPhone 17 Pro" (obligatorio)
+- gb: capacidad, ej "256GB", "1TB"
+- color: color si está, ej "Desert Titanium", "Negro"
+- precioPublico: número sin símbolos ni separadores de miles
+- condicion: "nuevo" o "usado", SOLO si la lista lo aclara para ese producto (con esas palabras, con "sellado", "0km", "impecable", una batería, ciclos, o un encabezado que separe una sección de otra). Si no lo dice, va null. NO lo deduzcas del precio ni del modelo.
+
+IMPORTANTE: copiá el precio que figura en la lista tal cual${esCosto ? ' (es el costo; el margen se suma después, no lo sumes vos)' : ': YA ES el precio final al público'}. No le apliques ningún margen, recargo, descuento ni redondeo. Si una línea dice "sin stock" o "agotado", no la incluyas.
+
+Si una línea repite un mismo modelo con varias capacidades o colores y sus precios, generá un objeto por cada combinación. Ignorá encabezados, saludos, avisos y todo lo que no sea un producto con precio.
+
+Lista:
+${texto}`
+        }]
+      })
+    });
+    const data = await response.json();
+    const raw = textoDeIA(data).replace(/```json|```/g, '').trim();
+    const arr = JSON.parse(raw);
+    const items = (Array.isArray(arr) ? arr : []).filter(x => x && x.producto);
+    if (items.length) return { items, conIA: true };
+  } catch (e) {
+    console.warn('lista sin IA:', e.message);
+  }
+  return { items: itemsDeListaEcommodo(texto), conIA: false };
+}
+
+/** A una lista de costo se le suma el margen: lo interpretado es el costo. */
+export function conMargenDeCosto(items) {
+  const tramos = contextoApp.tramosEditando || contextoApp.tramosProv();
+  return items.map(it => {
+    const costo = Number(it.precioPublico);
+    if (!Number.isFinite(costo)) return it;
+    const m = conMargenProv(costo, tramos);
+    return { ...it, precioPublico: Math.round(m.precio), _costo: costo, _suma: m.suma };
+  });
+}
+
 export function inicializarConocimiento() {
   // ── Base de conocimiento (bot de Instagram) ──────────────
   // Dos cosas viven acá: el doc conocimiento/{uid} con los datos del local en texto
@@ -566,56 +623,16 @@ export function inicializarConocimiento() {
     // En una lista de costo el precio que figura es el costo: se le suma el margen después.
     const esCosto = proveedorDe(origen)?.tipo === 'costo';
     try {
-      const response = await fetch(contextoApp.WORKER_URL, {
-        method: 'POST',
-        headers: await workerHeaders(),
-        body: JSON.stringify({
-          model: 'claude-opus-5',
-          max_tokens: 8000,
-          output_config: {
-            effort: 'low'
-          },
-          messages: [{
-            role: 'user',
-            content: `Sos un experto en listas de precios de celulares. Analizá esta lista de precios ${esCosto ? 'DE UN PROVEEDOR (son costos)' : 'AL PÚBLICO'} y extraé cada producto, sin importar el formato (puede venir desordenada, con emojis, abreviada, con varias líneas por item). Devolvé SOLO un JSON array válido, sin texto adicional, sin markdown, sin backticks.
-
-Cada objeto tiene exactamente estos campos (poné null en los que no aparezcan, NO inventes):
-- producto: nombre del modelo, ej "iPhone 17 Pro" (obligatorio)
-- gb: capacidad, ej "256GB", "1TB"
-- color: color si está, ej "Desert Titanium", "Negro"
-- precioPublico: número sin símbolos ni separadores de miles
-- condicion: "nuevo" o "usado", SOLO si la lista lo aclara para ese producto (con esas palabras, con "sellado", "0km", "impecable", una batería, ciclos, o un encabezado que separe una sección de otra). Si no lo dice, va null. NO lo deduzcas del precio ni del modelo.
-
-IMPORTANTE: copiá el precio que figura en la lista tal cual${esCosto ? ' (es el costo; el margen se suma después, no lo sumes vos)' : ': YA ES el precio final al público'}. No le apliques ningún margen, recargo, descuento ni redondeo. Si una línea dice "sin stock" o "agotado", no la incluyas.
-
-Si una línea repite un mismo modelo con varias capacidades o colores y sus precios, generá un objeto por cada combinación. Ignorá encabezados, saludos, avisos y todo lo que no sea un producto con precio.
-
-Lista:
-${texto}`
-          }]
-        })
-      });
-      const data = await response.json();
-      const raw = textoDeIA(data).replace(/```json|```/g, '').trim();
-      const arr = JSON.parse(raw);
-      let items = (Array.isArray(arr) ? arr : []).filter(x => x && x.producto);
-      if (esCosto) {
-        // Lo interpretado es el costo: se le suma el margen igual que a la tabla pegada.
-        const tramos = contextoApp.tramosEditando || contextoApp.tramosProv();
-        items = items.map(it => {
-          const costo = Number(it.precioPublico);
-          if (!Number.isFinite(costo)) return it;
-          const m = conMargenProv(costo, tramos);
-          return { ...it, precioPublico: Math.round(m.precio), _costo: costo, _suma: m.suma };
-        });
-      }
+      const leida = await interpretarTextoLista(texto, esCosto);
+      let items = leida.items;
+      if (esCosto) items = conMargenDeCosto(items);
       contextoApp.kbParseada[origen] = items;
       if (!contextoApp.kbParseada[origen].length) {
         showToast('No se reconoció ningún producto.', true);
       } else {
         renderKbPreview(origen);
         document.getElementById('kb-' + origen + '-preview').style.display = 'block';
-        showToast(`${contextoApp.kbParseada[origen].length} productos interpretados ✓`);
+        showToast(leida.conIA ? `${items.length} productos interpretados ✓` : `La IA no respondió: leí ${items.length} productos con el lector automático. Revisalos antes de guardar.`, !leida.conIA);
       }
     } catch (e) {
       console.error(e);

@@ -272,3 +272,36 @@ test('la orden de reparación genera un PDF con las bibliotecas instaladas', asy
   expect(bytes.length).toBeGreaterThan(3000);
   expect(errores).toEqual([]);
 });
+
+test('importar una lista pegada arma los productos, aunque la IA no responda', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await page.evaluate(() => window.__datosPrueba.cargar('catalogo/publico', { productos: [] }));
+  await ir(page, 'catalogo');
+  await page.locator('.cat-importar').click();
+  await expect(page.locator('#importar-lista-modal')).toHaveClass(/open/);
+  await page.locator('#imp-nombre').fill('Lista Valen');
+  await page.locator('#imp-texto').fill('🍎 SELLADOS 🍎\niPhone 16 128gb negro - u$s 850\n*USADOS*\n- iPhone 13 128gb 87% azul $ 380\nAirPods Pro 2 usd 210');
+  await page.locator('#btn-imp-interpretar').click();
+  // La IA de las pruebas no devuelve una lista: la lee el lector de Ecommodo.
+  await expect(page.locator('#imp-filas tr')).toHaveCount(3);
+  await expect(page.locator('#imp-aviso')).toContainText('lector automático');
+  await expect(page.locator('#imp-filas tr').nth(1).locator('select').nth(1)).toHaveValue('iPhone usados');
+  // Se corrige un precio y se saca un producto antes de importar.
+  await page.locator('#imp-filas tr').first().locator('input.precio').fill('900');
+  await page.locator('#imp-filas tr').first().locator('input.precio').dispatchEvent('change');
+  await page.locator('#imp-filas tr').nth(2).locator('.imp-quitar').click();
+  await expect(page.locator('#btn-imp-confirmar')).toHaveText('Importar 2 productos');
+  await page.locator('#btn-imp-confirmar').click();
+  await expect(page.locator('#btn-imp-listo')).toBeVisible();
+  await expect(page.locator('#imp-avance')).toContainText('Lista "Valen" guardada: 2 nuevos');
+  await page.locator('#btn-imp-listo').click();
+  await expect(page.locator('.cat-metric.on .m-label')).toHaveText('Lista Valen');
+  await expect(page.locator('.cat-prod')).toHaveCount(2);
+  const cfg = await page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba'));
+  expect(cfg.catalogoIncluidos).toHaveLength(2);
+  expect(Object.keys(cfg.catalogoNotas)).toHaveLength(2);
+  const conoc = await page.evaluate(() => window.__datosPrueba.leer('conocimiento/usuario-prueba'));
+  expect(conoc.proveedores.map(p => p.nombre)).toContain('Valen');
+  expect(errores).toEqual([]);
+});

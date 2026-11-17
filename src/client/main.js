@@ -30,6 +30,7 @@ import { inicializarConocimiento } from './modulos/conocimiento.js';
 import { inicializarListas } from './modulos/listas.js';
 import { inicializarArca } from './modulos/arca.js';
 import { inicializarCatalogo } from './modulos/catalogo.js';
+import { inicializarImportarLista } from './modulos/importar-lista.js';
 import { inicializarAsistente } from './modulos/asistente.js';
 import { inicializarFacturador } from './modulos/facturador.js';
 import { inicializarSesion } from './core/sesion.js';
@@ -68,6 +69,7 @@ export async function iniciarSistema() {
   inicializarListas();
   inicializarArca();
   inicializarCatalogo();
+  inicializarImportarLista();
   inicializarAsistente();
   inicializarFacturador();
   inicializarSesion();

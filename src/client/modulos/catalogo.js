@@ -364,7 +364,11 @@ export function renderCatalogo() {
         <div class="m-val" style="color:${lista.length ? 'var(--text)' : 'var(--text3)'};">${lista.length}</div>
         <div class="m-sub">${lista.length ? `${enTienda(lista)} en la tienda${sinPrecio ? ` · ${sinPrecio} sin precio` : ''}` : esc(sub)}</div>
       </div>`;
-    }).join('');
+    }).join('') + `<div class="metric cat-metric cat-importar" ${on('click', 'abrirImportarLista')}>
+        <div class="mas">＋</div>
+        <div class="m-label">Importar nueva lista</div>
+        <div class="m-sub">pegás la lista y se arma sola</div>
+      </div>`;
     resumen.textContent = (contextoApp.catFuente ? `${visibles.length} de ${FUENTES.find(f => f[0] === contextoApp.catFuente)?.[1] || contextoApp.catFuente}` : `${visibles.length} producto${visibles.length === 1 ? '' : 's'} de todas las fuentes`) + (ft ? ' con este filtro' : '') + ' · marcá los que quieras y tocá "Mandar a la tienda"';
   }
   document.getElementById('cat-sel-todos-btn').textContent = contextoApp.catSeleccion.size && contextoApp.catSeleccion.size >= visibles.length ? 'Deseleccionar' : 'Seleccionar todo';
@@ -1376,6 +1380,8 @@ export function inicializarCatalogo() {
       return { texto: borrador, conIA: false };
     }
   }
+
+  contextoApp.describirConIA = describirConIA;   // la usa también "Importar nueva lista"
 
   /** Escribir la descripción de un producto desde su ficha y guardarla. */
   window.generarDescripcionCatalogo = async function (id) {

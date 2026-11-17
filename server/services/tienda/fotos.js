@@ -18,11 +18,13 @@
  * desde el sistema. El Worker no tiene credenciales propias para escribir fotos.
  *
  * Variables:
- *   SERPAPI_KEY    (Secret)  clave de serpapi.com (250 búsquedas gratis por mes)
+ *   SERPAPI_KEY    (Secret)  clave de serpapi.com (250 búsquedas gratis por mes). Opcional:
+ *                            sin ella, o si no trae nada, busca como Ecommodo (fotos-ecommodo.js)
  *   FOTOS_BUCKET   (Text)    el bucket de Storage; si falta, el de src/shared/sitio.js
  */
 
 import { FOTOS_BUCKET, FOTOS_CARPETA } from '../../../src/shared/sitio.js';
+import { buscarComoEcommodo } from './fotos-ecommodo.js';
 
 const SERP = 'https://serpapi.com/search.json';
 const MAX_IMAGEN = 8 * 1024 * 1024;
@@ -35,6 +37,10 @@ export function urlImagenPermitida(valor) {
       && ['m.media-amazon.com', 'images-na.ssl-images-amazon.com', 'images-eu.ssl-images-amazon.com', 'images-fe.ssl-images-amazon.com'].includes(url.hostname);
   } catch { return false; }
 }
+
+// Los colores como los escribe una lista de acá, y como los titula Amazon.
+const COLORES_EN = { negro: 'Black', blanco: 'White', azul: 'Blue', rojo: 'Red', verde: 'Green', rosa: 'Pink', gris: 'Gray', plata: 'Silver', plateado: 'Silver', dorado: 'Gold', oro: 'Gold', violeta: 'Purple', lila: 'Purple', amarillo: 'Yellow', naranja: 'Orange', celeste: 'Blue', grafito: 'Graphite', titanio: 'Titanium', desierto: 'Desert', medianoche: 'Midnight' };
+const COLOR_ES = new RegExp(`\\b(${Object.keys(COLORES_EN).join('|')})\\b`, 'gi');
 
 /** Igual que slugFoto() del sistema: "iPhone 13" + "Red" → iphone-13-red. Exportado para el test. */
 export const slugFoto = nombre => String(nombre || '')
@@ -63,6 +69,7 @@ export function nombreParaAmazon(nombre) {
     .replace(/\b[SML]\/[SML]\b/g, ' ')                // tallas de malla M/L, S/M
     .replace(/\b\d+\s?gb\s+ram\b/gi, ' ')             // "8GB RAM" no ayuda a encontrar la foto
     .replace(/\baluminio\b/gi, 'Aluminum')
+    .replace(COLOR_ES, c => COLORES_EN[c.toLowerCase()])   // Amazon titula en inglés: "Azul" → "Blue"
     .replace(/\blavander\b/gi, 'Lavender')            // como lo escribe Amazon
     .replace(/\(\s*usb\s*-?\s*c\s*\)/gi, ' USB-C ')    // "( USB - C )" → "USB-C"
     .replace(/\b(\w+)\s+\1\b/gi, '$1')               // "Black Black" → "Black"
@@ -195,12 +202,21 @@ export async function traerFotos(env, { base, desde, urls }, token) {
 }
 
 export async function buscarEnAmazon(env, q) {
-  if (!env.SERPAPI_KEY) throw new Error('falta SERPAPI_KEY');
-  const u = `${SERP}?engine=amazon&amazon_domain=amazon.com&k=${encodeURIComponent(q)}&api_key=${env.SERPAPI_KEY}`;
-  const r = await fetch(u);
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok || d.error) throw new Error(`SerpApi: ${d.error || r.status}`);
-  return d.organic_results || [];
+  let falla = '';
+  if (env.SERPAPI_KEY) {
+    try {
+      const u = `${SERP}?engine=amazon&amazon_domain=amazon.com&k=${encodeURIComponent(q)}&api_key=${env.SERPAPI_KEY}`;
+      const r = await fetch(u);
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.error) throw new Error(`SerpApi: ${d.error || r.status}`);
+      if (d.organic_results?.length) return d.organic_results;
+    } catch (e) { falla = e.message; }
+  }
+  // Sin clave, sin cupo o sin resultados: la búsqueda de Ecommodo, que no usa ninguna.
+  const { resultados, fuentes } = await buscarComoEcommodo(q);
+  if (!resultados.length) console.log('fotos sin resultados', q, falla, JSON.stringify(fuentes));
+  if (!resultados.length && falla && Object.values(fuentes).every(v => typeof v === 'string')) throw new Error(falla);
+  return resultados;
 }
 
 /** Baja una imagen. Devuelve {bytes, ext} o null si no es una imagen. `externa`: una URL que eligió el dueño, de cualquier host público. */

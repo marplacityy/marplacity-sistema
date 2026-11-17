@@ -15,7 +15,7 @@ URL de producción: https://tienda.fiwind702050.workers.dev/
 | `GET /pedido/:id` | el estado del pedido, para la pantalla de vuelta del pago |
 | `POST /mp/webhook` | Mercado Pago avisa que un pago cambió |
 | `POST /stripe/webhook` | Stripe avisa que un pago cambió (`checkout.session.*`, `charge.refunded`) |
-| `POST /fotos` | busca en Amazon (SerpApi) las fotos de un producto y las sube a `fotos/` de Firebase Storage (`FOTOS_BUCKET`) con el token del dueño. Solo el dueño, con `X-Firebase-Token`. Ver `fotos.js` |
+| `POST /fotos` | busca en Amazon las fotos de un producto (con SerpApi si hay `SERPAPI_KEY`; sin clave, sin cupo o sin resultados, con la búsqueda de Ecommodo de `fotos-ecommodo.js`: DuckDuckGo Imágenes y la página de Amazon) y las sube a `fotos/` de Firebase Storage (`FOTOS_BUCKET`) con el token del dueño. Solo el dueño, con `X-Firebase-Token`. Ver `fotos.js` |
 | `POST /fotos/buscar` | candidatos de foto para elegir a mano: Amazon y Google Imágenes (grandes), con tamaño y fuente, sin bajar nada. Dos búsquedas de SerpApi. Solo el dueño |
 | `POST /fotos/traer` | baja las URLs elegidas o el link pegado (`{base, desde, urls}`, hosts públicos) y las sube a Firebase Storage con el nombre del producto y el token del dueño. Solo el dueño |
 

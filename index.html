@@ -47,6 +47,61 @@
 
 
 <!-- Stock Edit Modal -->
+<!-- Importar nueva lista (Catálogo web): pegar, revisar e importar. -->
+<div class="modal-backdrop" id="importar-lista-modal">
+  <div class="modal modal-ancho">
+    <div class="modal-header">
+      <h2>Importar nueva lista</h2>
+      <button class="modal-close" data-click="cerrarImportarLista">×</button>
+    </div>
+
+    <div id="imp-paso-1">
+      <p class="imp-ayuda">Pegá la lista de precios como te llegue —por WhatsApp, en tabla, con emojis— y se arman solos los productos: se interpretan, se ubican en su categoría, se les buscan las fotos en Amazon y se les escribe la descripción. Después editás lo que quieras.</p>
+      <div class="imp-fila">
+        <div class="field"><label for="imp-nombre">Proveedor de la lista</label>
+          <input type="text" id="imp-nombre" list="imp-proveedores" placeholder="Por ejemplo: Valen" autocomplete="off" data-input="impNombreCambio">
+          <datalist id="imp-proveedores"></datalist></div>
+        <div class="field"><label for="imp-tipo">Los precios son…</label>
+          <select id="imp-tipo"><option value="publico">el precio final al público</option><option value="costo">mi costo (se suma el margen)</option></select></div>
+        <div class="field"><label for="imp-moneda">Moneda</label>
+          <select id="imp-moneda"><option value="USD">USD u$s</option><option value="ARS">ARS $</option></select></div>
+      </div>
+      <div class="field"><label for="imp-texto">Lista pegada</label>
+        <textarea id="imp-texto" class="imp-texto" placeholder="Pegá la lista acá en cualquier formato…"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-click="cerrarImportarLista">Cancelar</button>
+        <button class="btn-save" id="btn-imp-interpretar" data-click="impInterpretar">✨ Interpretar con IA</button>
+      </div>
+    </div>
+
+    <div id="imp-paso-2" style="display:none;">
+      <p class="imp-ayuda"><b id="imp-cuenta"></b> · Corregí lo que haga falta antes de importar. <span id="imp-aviso" class="imp-aviso"></span></p>
+      <div class="imp-tabla">
+        <table>
+          <thead><tr><th>Producto</th><th>GB</th><th>Color</th><th>Condición</th><th>Categoría</th><th>Precio</th><th></th></tr></thead>
+          <tbody id="imp-filas"></tbody>
+        </table>
+      </div>
+      <div class="imp-opciones">
+        <label><input type="checkbox" id="imp-op-tienda" checked> Mandar a la tienda</label>
+        <label><input type="checkbox" id="imp-op-fotos" checked> Buscar fotos en Amazon</label>
+        <label><input type="checkbox" id="imp-op-desc" checked> Escribir descripciones con IA</label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-click="impVolver">← Volver</button>
+        <button class="btn-save" id="btn-imp-confirmar" data-click="impConfirmar">Importar</button>
+      </div>
+    </div>
+
+    <div id="imp-paso-3" style="display:none;">
+      <div id="imp-avance" class="imp-avance"></div>
+      <div class="modal-actions">
+        <button class="btn-save" id="btn-imp-listo" style="display:none;" data-click="cerrarImportarLista">Ver los productos</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="stock-edit-modal">
   <div class="modal">
     <div class="modal-header">
