@@ -134,3 +134,20 @@ input[type=checkbox],input[type=radio]{accent-color:var(--accent);}
   nav a:hover{transform:none;}
   .metric:hover{transform:none;}
 }
+
+/* ── Nada se sale de la pantalla ──
+   .main es un hijo flex: sin min-width:0 se estira hasta el ancho de su tabla más
+   ancha y arrastra a toda la página (título, pestañas y botones incluidos). Con esto
+   la página respeta el ancho y la que desliza es la tarjeta que tiene la tabla. */
+.main{min-width:0;}
+.page{min-width:0;max-width:100%;}
+.card:has(table),.page div:has(> table){overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.page img,.page video{max-width:100%;}
+
+/* Tablet: el menú lateral vuelve a su ancho angosto para dejarle lugar al contenido. */
+@media(min-width:681px) and (max-width:1024px){
+  .sidebar{width:220px;}
+  .main{margin-left:220px;padding:1.5rem;}
+  .logo{padding:1.25rem 1rem;font-size:1.1rem;}
+  nav a{padding:.65rem .75rem;gap:.7rem;}
+}

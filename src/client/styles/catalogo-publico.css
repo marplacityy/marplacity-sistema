@@ -274,6 +274,14 @@ button{cursor:pointer;}
 .aviso-flotante.ver{opacity:1;transform:translate(-50%,0);}
 .aviso-flotante.error{background:var(--mal);}
 
+/* Pantallas medianas: los rubros no entran en la cabecera junto al carrito; quedan en
+   las burbujas y en los filtros. */
+@media(min-width:969px) and (max-width:1180px){
+  .nav-rubros{display:none;}
+  .tienda{grid-template-columns:230px minmax(0,1fr);gap:1.5rem;}
+  .dos-columnas{grid-template-columns:minmax(0,1fr) 330px;}
+}
+
 /* ── Tablet y celular ── */
 @media(max-width:968px){
   .wrap{padding:0 1rem;}
@@ -292,12 +300,15 @@ button{cursor:pointer;}
   .burbujas::-webkit-scrollbar{display:none;}
   .burbuja{flex:0 0 78px;font-size:.75rem;}
   .burbuja .c{width:64px;height:64px;}
-  .tienda{grid-template-columns:1fr;gap:1rem;padding:1rem 0 3rem;}
+  .tienda{grid-template-columns:minmax(0,1fr);gap:1rem;padding:1rem 0 3rem;}
   .filtros-boton{display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;padding:.8rem;background:#fff;border:1px solid var(--border);border-radius:10px;font-size:.9375rem;font-weight:600;color:var(--text);}
   .filtros-boton svg{width:18px;height:18px;}
   .filtros{display:none;position:static;max-height:none;padding:1.25rem;}
   .filtros.abierto{display:block;}
   .seccion-titulo,.listado-titulo{font-size:1.25rem;}
+  .seccion-cab{gap:.5rem;}
+  .seccion-titulo{min-width:0;line-height:1.25;}
+  .vertodos{padding:.4rem 0;font-size:.8125rem;flex-shrink:0;}
   .fila{gap:.75rem;}
   .fila .prod{flex-basis:168px;}
   .grilla{grid-template-columns:repeat(2,minmax(0,1fr));gap:.75rem;}
@@ -307,11 +318,13 @@ button{cursor:pointer;}
   .prod-nombre{font-size:.8125rem;}
   .precio{font-size:1.0625rem;}
   .btn-ver{padding:.6rem .5rem;font-size:.8125rem;}
-  .producto{grid-template-columns:1fr;gap:1.5rem;padding:1.25rem;}
+  .producto{grid-template-columns:minmax(0,1fr);gap:1.5rem;padding:1.25rem;}
   .producto-nombre{font-size:1.375rem;}
+  .producto-acciones{flex-wrap:wrap;}
+  .producto-acciones .btn-primario{min-width:190px;}
   .producto-precio{font-size:1.75rem;}
   .pagina-titulo{font-size:1.5rem;}
-  .dos-columnas{grid-template-columns:1fr;}
+  .dos-columnas{grid-template-columns:minmax(0,1fr);}
   .resumen{position:static;}
   .carrito-item{flex-wrap:wrap;gap:.875rem;padding:1rem;}
   .carrito-foto{width:72px;height:72px;}

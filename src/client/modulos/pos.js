@@ -483,9 +483,11 @@ export function inicializarPos() {
     if (abriendo) {
       // Se arma cada vez: así refleja la pantalla en la que estás y cualquier link que se
       // haya agregado al menú lateral desde la última vez.
-      const links = [...document.querySelectorAll('.sidebar nav a[onclick*="goTo("]')];
+      // Los links del menú declaran su pantalla en data-click="goTo" + data-args='["x"]'.
+      const paginaDe = a => { try { return JSON.parse(a.dataset.args || '[]')[0] || ''; } catch { return ''; } };
+      const links = [...document.querySelectorAll('.sidebar nav a[data-click="goTo"]')].filter(paginaDe);
       document.getElementById('mas-grid').innerHTML = links.map(a => {
-        const pag = (a.getAttribute('onclick').match(/goTo\('([^']+)'\)/) || [])[1];
+        const pag = paginaDe(a);
         const svg = a.querySelector('svg')?.outerHTML || '';
         const nombre = a.textContent.trim();
         return `<button class="mas-item ${pag === contextoApp.currentPage ? 'activa' : ''}" ${on('click', 'irDesdeMas', pag)}>${svg}<span>${esc(nombre)}</span></button>`;
