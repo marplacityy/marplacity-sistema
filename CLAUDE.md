@@ -34,7 +34,7 @@ Los tests de navegador compilan una variante con `--mode prueba`, que reemplaza 
 **Antes de cada push hay que subir el sello de versión del sidebar**, en `index.html` dentro del `<div class="logo">`:
 
 ```html
-<div style="...">v2026.09.10-D · Node.js</div>
+<div class="logo-version">v2026.09.10-D · Node.js</div>
 ```
 
 Formato `vAAAA.MM.DD-<letra>`: fecha del deploy y una letra que incrementa con cada publicación del mismo día. Es la única forma de confirmar, desde el browser del local, que el deploy llegó y no se está viendo caché.
