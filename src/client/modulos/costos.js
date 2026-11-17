@@ -5,6 +5,7 @@ import { updateDoc, doc } from 'firebase/firestore';
 import { esc, showToast } from '../core/interfaz.js';
 import { cmpModeloRep } from './repuestos.js';
 import { setSyncDot } from '../core/datos.js';
+import { gananciaDeVentaUSD, costoVigente } from '../../shared/ganancia.js';
 
 export
 // form de alta: {refId, nombre, qty, costo, moneda}
@@ -90,56 +91,22 @@ export function costoMap(tipo) {
   }
   return cch.map;
 }
+// La cuenta vive en shared/ganancia.js (pura, con pruebas); acá solo se le pasan
+// el TC de hoy y los costos actuales de los productos.
+const costosActuales = () => ({
+  eq: costoMap('eq'),
+  consig: costoMap('consig'),
+  inv: costoMap('inv')
+});
 export function gananciaVentaUSD(v) {
-  if (!v.items || !v.items.length) {
-    // ingreso manual: usar la ganancia congelada
-    return v.gananciaUSD ?? (v.gananciaARS != null && v.tc ? v.gananciaARS / v.tc : null);
-  }
-  const tc = v.tc || parseFloat(contextoApp.cfg.tc) || null;
-  const aUSD = (val, mon) => mon === 'USD' ? val : tc ? val / tc : null;
-  let gan = 0,
-    hayCosto = false;
-  for (const ci of v.items) {
-    if (ci.tipo === 'rep' || ci.tipo === 'imp') continue; // reps se computan por su lado; importados sin costo
-    // costo ACTUAL del producto (fallback: el congelado en la venta)
-    let costoU = null;
-    if (ci.tipo === 'eq') {
-      const s = costoMap('eq').get(ci.refId);
-      if (s) costoU = s.valorUSD || 0;
-    } else if (ci.tipo === 'consig') {
-      const x = costoMap('consig').get(ci.refId);
-      if (x) costoU = x.precioUSD || 0;
-    } else if (ci.tipo === 'inv') {
-      const p = costoMap('inv').get(ci.refId);
-      if (p && p.costo != null) {
-        // costo vigente a la fecha de esta venta (historial de reposiciones)
-        let cCosto = p.costo,
-          cMon = p.moneda || ci.moneda || 'USD';
-        if (p.costoHist && p.costoHist.length && v.fecha) {
-          const vig = [...p.costoHist].filter(h => h.desde <= v.fecha).sort((a, b) => b.desde.localeCompare(a.desde))[0];
-          if (vig) {
-            cCosto = vig.costo;
-            cMon = vig.moneda || cMon;
-          }
-        }
-        costoU = aUSD(cCosto, cMon);
-      }
-    }
-    if (costoU == null) costoU = ci.costo != null ? aUSD(ci.costo, ci.moneda || 'USD') : null;
-    if (costoU == null || costoU === 0 && !ci.costo) {
-      // sin costo conocido: solo suma precio como ganancia si había costo congelado 0 explícito
-      if (ci.costo == null) continue;
-    }
-    hayCosto = true;
-    const precioU = aUSD(ci.precio || 0, ci.moneda || 'ARS');
-    if (precioU == null) continue;
-    gan += (precioU - (costoU || 0)) * (ci.qty || 1);
-  }
-  (v.cortesias || []).forEach(co => {
-    hayCosto = true;
-    gan -= co.costoUSD || 0;
+  return gananciaDeVentaUSD(v, {
+    tcActual: parseFloat(contextoApp.cfg.tc) || null,
+    costos: costosActuales()
   });
-  return hayCosto ? gan : null;
+}
+// Costo unitario con el que hoy se calcula la ganancia de un renglón: {costo, moneda} o null.
+export function costoItemVenta(ci, v) {
+  return costoVigente(ci, v?.fecha, costosActuales());
 }
 export function costoRepuestosUSD(r) {
   const tc = r.tc || parseFloat(contextoApp.cfg.tc) || null;

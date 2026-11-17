@@ -82,11 +82,17 @@ export function renderIngresos() {
   document.getElementById('inc-list-body').innerHTML = avisoVentana() + (_totF > 200 ? `<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totF} — refiná la búsqueda o el rango de fechas.</div>` : '') + items.map(g => {
     const mediosStr = g.medios && g.medios.length ? g.medios.map(m => `${esc(m.medio)} ${m.moneda === 'USD' ? 'u$s' : '$'}${Number(m.valor).toLocaleString('es-AR')}`).join(' + ') : '';
     const permutaStr = g.permuta ? ` + 💱 ${esc(g.permuta.descripcion || 'Permuta')} ${g.permuta.moneda === 'USD' ? 'u$s' : '$'}${Number(g.permuta.valor).toLocaleString('es-AR')}` : '';
-    const ganValUSD = g.gananciaUSD != null && (g.totalUSD || 0) > 0 ? g.gananciaUSD : null;
+    // La misma ganancia que suman el total de arriba y el reporte (costos actuales o corregidos
+    // a mano en la venta); la congelada queda de respaldo.
+    const ganDin = ganDinM.get(g.id);
+    const ganValUSD = ganDin != null ? ganDin : g.gananciaUSD != null && (g.totalUSD || 0) > 0 ? g.gananciaUSD : null;
     const ganValARS = g.gananciaARS != null && (g.totalARS || 0) > 0 ? g.gananciaARS : null;
-    const ganDisplay = ganValUSD != null ? (ganValUSD >= 0 ? '+' : '') + contextoApp.fmtUSD(ganValUSD) : ganValARS != null ? (ganValARS >= 0 ? '+' : '') + contextoApp.fmtARS(ganValARS) : null;
-    const ganColor2 = ganValUSD != null ? ganValUSD >= 0 ? 'profit-pos' : 'profit-neg' : ganValARS != null ? ganValARS >= 0 ? 'profit-pos' : 'profit-neg' : '';
-    const ganStr = ganDisplay ? `<span class="${ganColor2}" style="font-size:11px;font-family:'DM Mono',monospace;font-weight:600;">${ganDisplay}</span>` : '';
+    const ganDisplay = ganValUSD != null ? (ganValUSD > 0 ? '+' : '') + contextoApp.fmtUSD(ganValUSD) : ganValARS != null ? (ganValARS > 0 ? '+' : '') + contextoApp.fmtARS(ganValARS) : null;
+    const ganVal = ganValUSD != null ? ganValUSD : ganValARS;
+    // ganancia en cero: casi siempre es un costo mal cargado, se marca para corregirla con ✎
+    const ganCero = ganVal != null && Math.round(ganVal) === 0;
+    const ganColor2 = ganVal == null || ganCero ? '' : ganVal > 0 ? 'profit-pos' : 'profit-neg';
+    const ganStr = ganDisplay ? `<span class="${ganColor2}" style="font-size:11px;font-family:'DM Mono',monospace;font-weight:600;${ganCero ? 'color:#B26A00;' : ''}"${ganCero ? ' title="Ganancia en cero: revisá el costo con ✎"' : ''}>${ganCero ? 'gan. ' : ''}${ganDisplay}</span>` : '';
     return `<div class="expense-item">
       <div class="ei-dot inc"></div>
       <div class="ei-info">
@@ -120,7 +126,7 @@ export function renderIngresos() {
         <button class="ei-btn" ${on('click', 'enviarFacturaWa', g.id)} title="Enviar por WhatsApp" style="color:#1A6B3C;">📤</button>
         <button class="ei-btn" ${on('click', 'reimprimirFactura', g.id, 'termica')} title="Reimprimir ticket térmico">🖨</button>
         <button class="ei-btn" ${on('click', 'reimprimirFactura', g.id, 'a4')} title="Factura A4 (imprimir o guardar PDF)">📄</button>
-        <button class="ei-btn" ${on('click', g.items && g.items.length ? 'abrirFE' : 'editarIngreso', g.id)} title="Editar">✎</button>
+        <button class="ei-btn" ${on('click', g.items && g.items.length ? 'abrirFE' : 'editarIngreso', g.id)} title="Editar la venta, su costo y su ganancia">✎</button>
         <button class="ei-btn del" ${on('click', 'eliminarIngreso', g.id)} title="Eliminar">×</button>
       </div>
     </div>`;

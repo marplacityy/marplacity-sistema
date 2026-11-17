@@ -2,6 +2,7 @@ import { configuracion } from '../core/config-publica.js';
 /** modulos/reportes: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
 import { esc, showToast } from '../core/interfaz.js';
+import { on } from '../../shared/seguridad.js';
 import { getRange } from './gastos.js';
 import { gananciaVentaUSD, costoRepuestosUSD } from './costos.js';
 import { avisoVentana } from '../core/datos.js';
@@ -315,6 +316,8 @@ export function renderReporte() {
     if (soloRep) return;
     const costo = venta != null && gan != null ? Math.max(0, venta - gan) : null;
     rows.push({
+      // para corregir costo y ganancia desde acá: factura con items o ingreso manual
+      editar: on('click', (v.items || []).length ? 'abrirFE' : 'editarIngreso', v.id),
       fecha: v.fecha,
       num: v.numVenta ? '#V-' + v.numVenta : v.itemId || '—',
       cliente: v.clienteNombre || '—',
@@ -366,7 +369,7 @@ export function renderReporte() {
     html += `<div class="card"><div class="card-title">Detalle de operaciones (USD)</div>
       ${rowsCortadas ? `<p style="font-size:12px;color:var(--text2);margin-bottom:8px;">Mostrando las últimas 300 de ${totalRows} operaciones — achicá el período para ver un rango específico. Los totales del pie corresponden a lo mostrado.</p>` : ''}
       <div style="overflow-x:auto;"><table class="gf-table" style="min-width:640px;">
-        <thead><tr><th>Ticket</th><th>Cliente</th><th>Producto / Trabajo</th><th style="text-align:right">Venta</th><th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th></tr></thead>
+        <thead><tr><th>Ticket</th><th>Cliente</th><th>Producto / Trabajo</th><th style="text-align:right">Venta</th><th style="text-align:right">Costo</th><th style="text-align:right">Ganancia</th><th></th></tr></thead>
         <tbody>
           ${rows.map(r => `<tr>
             <td style="font-family:'DM Mono',monospace;font-size:12px;white-space:nowrap;">${esc(r.num)}<div style="font-size:10px;color:var(--text3);">${r.fecha || ''}</div></td>
@@ -375,6 +378,7 @@ export function renderReporte() {
             <td style="text-align:right;font-family:'DM Mono',monospace;">${f(r.venta)}</td>
             <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--text3);">${f(r.costo)}</td>
             <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;color:${(r.gan || 0) >= 0 ? '#237A4B' : 'var(--neg)'};">${f(r.gan)}</td>
+            <td style="text-align:right;">${r.editar ? `<button class="ei-btn" ${r.editar} title="Corregir el costo y la ganancia de esta venta">✎</button>` : ''}</td>
           </tr>`).join('')}
         </tbody>
         <tfoot><tr style="border-top:2px solid var(--border);">
@@ -382,6 +386,7 @@ export function renderReporte() {
           <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;">${f(totV)}</td>
           <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:var(--text3);">${f(totC)}</td>
           <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:#237A4B;">${f(totG)}</td>
+          <td></td>
         </tr></tfoot>
       </table></div>
     </div>`;

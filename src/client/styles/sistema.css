@@ -635,6 +635,22 @@
   .cart-precio:focus{border-color:var(--accent);}
   .cart-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:2px;}
   .cart-del:hover{color:var(--neg);}
+  /* Editar factura: debajo de cada producto, su costo y su ganancia */
+  .fe-item{border-bottom:1px solid var(--border);}
+  .fe-item:last-child{border-bottom:none;}
+  .fe-item .cart-item{border-bottom:none;padding-bottom:5px;}
+  .fe-costo{display:flex;align-items:center;flex-wrap:wrap;gap:6px 14px;padding:0 0 9px;font-size:11px;color:var(--text3);}
+  .fe-costo-grupo{display:flex;align-items:center;gap:6px;}
+  .fe-costo input{width:84px;padding:5px 7px;border-radius:6px;font-family:'DM Mono',monospace;font-size:12px;text-align:right;}
+  .fe-costo select{width:auto;padding:5px 24px 5px 7px;border-radius:6px;font-size:11px;color:var(--text2);background-position:right 7px center;}
+  .fe-costo input:disabled{opacity:.5;}
+  @media(max-width:560px){
+    /* en el celular el nombre ocupa su renglón: cantidad, precio y × ya no se salen de la ventana */
+    .fe-item .cart-item{flex-wrap:wrap;}
+    .fe-item .cart-item > input[type="text"]{flex:1 1 100% !important;}
+    .fe-item .cart-item > input[type="number"]{flex:1 1 0;min-width:0;}
+  }
+  .fe-costo-ayuda{font-size:11.5px;color:var(--text3);line-height:1.45;margin:8px 0 0;}
   .cortesia-box{background:var(--bg);border:1px dashed var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin:10px 0;}
   .cortesia-title{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;}
   .cortesia-btns{display:flex;gap:6px;flex-wrap:wrap;}

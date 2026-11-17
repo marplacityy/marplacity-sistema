@@ -89,9 +89,12 @@ export function renderInv() {
 }
 /** Arma la cortesía de una venta. Si hay un artículo del inventario para ese equipo,
  * queda enlazado (refId) y se va a descontar; si no, se avisa y solo cuenta el costo. */
+export function costoCortesiaUSD(tipo) {
+  return parseFloat(tipo === 'vidrio' ? contextoApp.cfg.cortVidrio : contextoApp.cfg.cortFunda) || (tipo === 'vidrio' ? 2 : 5);
+}
 export function armarCortesia(tipo, equipoNombre) {
   const nombre = tipo === 'vidrio' ? 'Vidrio templado' : 'Funda silicone case';
-  const costoUSD = parseFloat(tipo === 'vidrio' ? contextoApp.cfg.cortVidrio : contextoApp.cfg.cortFunda) || (tipo === 'vidrio' ? 2 : 5);
+  const costoUSD = costoCortesiaUSD(tipo);
   const p = equipoNombre ? buscarCortesiaEnInventario(tipo, equipoNombre, contextoApp.invItems) : null;
   if (!p) {
     showToast(`Sin ${nombre.toLowerCase()} en inventario para "${equipoNombre || 'este equipo'}": no se descuenta stock`, true);

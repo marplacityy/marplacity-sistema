@@ -151,6 +151,7 @@ onSnapshot(myQ(col))  →  applySnap('nombre', snap)  →  contextoApp.X  →  d
 
 - Bimonetario ARS/USD. Cada registro guarda su `tc`; el default es `cfg.tc`. Helpers `fmtARS`, `fmtUSD`, `fmtDual`.
 - Costos congelados en la venta (`ci.costo`), pero `gananciaVentaUSD()` (`modulos/costos.js`) prefiere el costo actual del producto; en inventario usa `costoHist`.
+- **Corregir la ganancia después de vender**: en "Editar factura" (`abrirFE`, `modulos/facturas.js`) cada renglón muestra costo y ganancia, y escribir uno despeja el otro. El costo corregido queda en el renglón (`costo` + `costoMoneda` + `costoManual: true`, y `costoAuto` con el costo anterior para poder volver vaciando el campo) y manda sobre el del producto. La cuenta es pura y está en `src/shared/ganancia.js` (`tests/ganancia.test.js`); `gananciaVentaUSD()` solo le pasa el TC y los costos actuales. No toca el costo del producto ni el stock. Los cobros de reparación (`tipo: 'rep'`) no llevan costo en la venta.
 - **Fechas: siempre `today()` / `isoLocal(d)`**, nunca `toISOString()`. Sin eso, después de las 21:00 (AR) las operaciones se fechan al día siguiente. Playwright corre en zona horaria de Buenos Aires por lo mismo.
 
 ### Flujos de dominio que cruzan pantallas

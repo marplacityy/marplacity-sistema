@@ -1,5 +1,5 @@
 import { configuracion } from '../core/config-publica.js';
-import { armarCortesia, ajustarInventarioPorCortesias } from './inventario.js';
+import { armarCortesia, costoCortesiaUSD, ajustarInventarioPorCortesias } from './inventario.js';
 import { on } from '../../shared/seguridad.js';
 /** modulos/facturas: lógica preservada de la aplicación original. */
 import { contextoApp } from '../core/estado.js';
@@ -9,10 +9,100 @@ import { setSyncDot } from '../core/datos.js';
 import { updateDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { resolverCliente } from './clientes.js';
 import { waNumber } from './whatsapp.js';
+import { gananciaVentaUSD, costoItemVenta } from './costos.js';
+import { gananciaRenglon, costoParaGanancia } from '../../shared/ganancia.js';
 import imprimirDocumentoUrl from '../core/imprimir-documento.js?url&no-inline';
 
+// ── Costo y ganancia por renglón: se pueden corregir después de vender ──
+// El costo corregido queda en el renglón (`costo` + `costoMoneda` + `costoManual`) y manda
+// sobre el del producto en todos los reportes. `costoAuto` guarda el costo que tenía antes,
+// para poder volver al cálculo automático vaciando el campo.
+const num = n => n == null ? '' : String(Math.round(n * 100) / 100);
+function tcFE() {
+  const v = contextoApp.ingresos.find(x => x.id === contextoApp.feId);
+  return v?.tc || parseFloat(contextoApp.cfg.tc) || null;
+}
+function costoGananciaFE(it) {
+  const v = contextoApp.ingresos.find(x => x.id === contextoApp.feId);
+  const c = costoItemVenta(it, v);
+  const moneda = c?.moneda || it.moneda || 'USD';
+  const tc = tcFE();
+  return {
+    costo: c ? c.costo : null,
+    moneda,
+    ganancia: c ? gananciaRenglon({ ...it, costo: c.costo, costoMoneda: moneda }, moneda, tc) : null,
+    // el precio está en otra moneda y no hay TC: no se puede despejar el costo desde la ganancia
+    sinTC: (it.moneda || 'ARS') !== moneda && !tc
+  };
+}
+function fijarCostoFE(it, costo, moneda) {
+  if (!it.costoManual) it.costoAuto = it.costo ?? null;
+  it.costo = Math.round(Math.max(0, costo) * 100) / 100;
+  it.costoMoneda = moneda;
+  it.costoManual = true;
+}
+function soltarCostoFE(it) {
+  if (!it.costoManual) return;
+  it.costo = it.costoAuto ?? null;
+  delete it.costoAuto;
+  delete it.costoMoneda;
+  delete it.costoManual;
+}
+function filaCostoFE(it, i) {
+  if (it.tipo === 'rep') return ''; // la ganancia de una reparación se calcula en la reparación
+  const cg = costoGananciaFE(it);
+  return `
+      <div class="fe-costo">
+        <span class="fe-costo-grupo">
+          <span>Costo unit.</span>
+          <input type="number" id="fe-costo-${i}" aria-label="Costo unitario" value="${num(cg.costo)}" placeholder="sin cargar" step="0.01" min="0" ${on('input', 'feSetCosto', i, '$value')} data-change="feRepintarCosto">
+          <select id="fe-costo-mon-${i}" aria-label="Moneda del costo" ${on('change', 'feSetCostoMoneda', i, '$value')}>
+            <option value="USD"${cg.moneda === 'USD' ? ' selected' : ''}>USD</option>
+            <option value="ARS"${cg.moneda === 'ARS' ? ' selected' : ''}>ARS</option>
+          </select>
+        </span>
+        <span class="fe-costo-grupo">
+          <span>Ganancia</span>
+          <input type="number" id="fe-gan-${i}" aria-label="Ganancia del renglón" value="${num(cg.ganancia)}" placeholder="—" step="0.01"${cg.sinTC ? ' disabled' : ''} ${on('input', 'feSetGanancia', i, '$value')} data-change="feRepintarCosto">
+          <span id="fe-gan-mon-${i}">${cg.moneda}</span>
+        </span>
+      </div>`;
+}
+// Refresca costo y ganancia de un renglón sin redibujar (no le saca el foco a quien escribe);
+// `origen` es el campo que se está tipeando, que no se pisa.
+function pintarCostoFE(i, origen) {
+  const it = contextoApp.feItems[i];
+  const cEl = document.getElementById('fe-costo-' + i);
+  const gEl = document.getElementById('fe-gan-' + i);
+  if (it && cEl && gEl) {
+    const cg = costoGananciaFE(it);
+    if (origen !== 'costo') cEl.value = num(cg.costo);
+    if (origen !== 'ganancia') gEl.value = num(cg.ganancia);
+    if (!origen) document.getElementById('fe-costo-mon-' + i).value = cg.moneda;
+    document.getElementById('fe-gan-mon-' + i).textContent = cg.moneda; // la ganancia se lee en la moneda del costo
+    gEl.disabled = cg.sinTC;
+  }
+  renderFEGanancia();
+}
+export function renderFEGanancia() {
+  const el = document.getElementById('fe-ganancia');
+  if (!el) return;
+  const v = contextoApp.ingresos.find(x => x.id === contextoApp.feId);
+  const cortesias = ['vidrio', 'funda'].filter(k => contextoApp.feCort[k]).map(k => ({ costoUSD: costoCortesiaUSD(k) }));
+  const g = v && contextoApp.feItems.length ? gananciaVentaUSD({ ...v, items: contextoApp.feItems, cortesias }) : null;
+  if (g == null) {
+    el.textContent = '—';
+    el.className = 'profit-val';
+    return;
+  }
+  const tc = tcFE();
+  const usd = Math.round(g * 100) / 100;
+  el.textContent = (usd < 0 ? '− ' : '') + 'u$s ' + Math.abs(usd).toLocaleString('es-AR') + (tc ? ' / ' + contextoApp.fmtARS(Math.round(Math.abs(g) * tc)) : '');
+  el.className = 'profit-val ' + (usd >= 0 ? 'profit-pos' : 'profit-neg');
+}
 export function renderFE() {
   document.getElementById('fe-items').innerHTML = contextoApp.feItems.length ? contextoApp.feItems.map((it, i) => `
+    <div class="fe-item">
     <div class="cart-item">
       <input type="text" class="cart-precio" style="flex:1;width:auto;text-align:left;font-family:inherit;" value="${esc(it.nombre)}" ${on('change', 'feSetNombre', i, '$value')}>
       ${it.tipo === 'inv' || it.tipo === 'imp' || it.tipo === 'manual' ? `
@@ -22,8 +112,10 @@ export function renderFE() {
       <input type="number" class="cart-precio" value="${esc(it.precio)}" step="0.01" min="0" ${on('change', 'feSetPrecio', i, '$value')}>
       <span style="font-size:10px;color:var(--text3);">${it.moneda}</span>
       <button class="cart-del" ${on('click', 'feDel', i)}>×</button>
+    </div>${filaCostoFE(it, i)}
     </div>`).join('') : '<div class="home-empty">Sin items — agregá al menos uno.</div>';
   renderFETot();
+  renderFEGanancia();
 }
 export function feTotals() {
   const v = contextoApp.ingresos.find(x => x.id === contextoApp.feId);
@@ -470,6 +562,37 @@ export function inicializarFacturas() {
     if (!contextoApp.feItems[i]) return;
     contextoApp.feItems[i].precio = parseFloat(val) || 0;
     renderFETot();
+    pintarCostoFE(i);
+  };
+  window.feSetCosto = function (i, val) {
+    const it = contextoApp.feItems[i];
+    if (!it) return;
+    const n = parseFloat(val);
+    if (isNaN(n)) soltarCostoFE(it); // vacío: vuelve al costo automático
+    else fijarCostoFE(it, n, document.getElementById('fe-costo-mon-' + i).value);
+    pintarCostoFE(i, 'costo');
+  };
+  window.feSetCostoMoneda = function (i, moneda) {
+    const it = contextoApp.feItems[i];
+    if (!it) return;
+    const n = parseFloat(document.getElementById('fe-costo-' + i).value);
+    if (!isNaN(n)) fijarCostoFE(it, n, moneda);
+    pintarCostoFE(i, 'costo');
+  };
+  // Escribir la ganancia despeja el costo: costo = precio − ganancia ÷ cantidad
+  window.feSetGanancia = function (i, val) {
+    const it = contextoApp.feItems[i];
+    if (!it) return;
+    const n = parseFloat(val);
+    if (isNaN(n)) return;
+    const moneda = document.getElementById('fe-costo-mon-' + i).value;
+    const costo = costoParaGanancia(it, n, moneda, tcFE());
+    if (costo == null) return;
+    fijarCostoFE(it, costo, moneda);
+    pintarCostoFE(i, 'ganancia');
+  };
+  window.feRepintarCosto = function (i) {
+    pintarCostoFE(i);
   };
   window.feSetNombre = function (i, val) {
     if (!contextoApp.feItems[i]) return;
@@ -554,6 +677,7 @@ export function inicializarFacturas() {
   window.feToggleCort = function (k) {
     contextoApp.feCort[k] = !contextoApp.feCort[k];
     document.getElementById('fe-cort-' + k).classList.toggle('on', contextoApp.feCort[k]);
+    renderFEGanancia();
   };
   window.saveFE = async function () {
     if (!contextoApp.feId) return;
@@ -649,7 +773,18 @@ export function inicializarFacturas() {
           tUSD += sub;
           if (tc) tARS += sub * tc;
         }
-        if (it.tipo === 'rep' || it.tipo === 'imp') return;
+        if (it.tipo === 'rep') return;
+        if (it.costoManual) {
+          // costo corregido a mano: trae su propia moneda, que puede no ser la del precio
+          const gu = gananciaRenglon(it, 'USD', tc),
+            ga = gananciaRenglon(it, 'ARS', tc);
+          if (gu == null && ga == null) return;
+          hayCosto = true;
+          if (gu != null) gUSD += gu;
+          if (ga != null) gARS += ga;
+          return;
+        }
+        if (it.tipo === 'imp') return;
         if (!it.costo) return;
         hayCosto = true;
         const g = ((it.precio || 0) - (it.costo || 0)) * (it.qty || 1);

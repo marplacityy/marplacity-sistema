@@ -108,9 +108,10 @@ nav a svg{width:18px;height:18px;}
 
 /* ── Campos ── */
 .field label{font-size:.8125rem;font-weight:500;}
-.field input,.field select,.field textarea{background:#fff;font-family:var(--font);}
+/* background-color y no background: el atajo borraba la flecha de los desplegables */
+.field input,.field select,.field textarea{background-color:#fff;font-family:var(--font);}
 .field input:focus,.field select:focus,.field textarea:focus{
-  border-color:var(--accent);box-shadow:0 0 0 3px rgba(217,119,87,.15);background:#fff;
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(217,119,87,.15);background-color:#fff;
 }
 input[type=checkbox],input[type=radio]{accent-color:var(--accent);}
 

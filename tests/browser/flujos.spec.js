@@ -213,6 +213,68 @@ test('reparar descuenta una pieza una sola vez y permite agregar notas', async (
   expect(errores).toEqual([]);
 });
 
+test('después de vender se corrige la ganancia de un producto y cambia en el listado y en el reporte', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await ir(page, 'ingresos');
+  // el equipo está cargado con valor u$s 400 y se vende a u$s 400: ganancia cero, que no es real
+  await page.evaluate(() => { window.addToCart('eq', 'equipo-1'); window.addToCart('inv', 'funda-1'); window.cartPrecio(0, 400); window.cartPrecio(1, 10); });
+  await page.locator('#pos-medio-moneda').selectOption('USD');
+  await page.evaluate(() => { window.completarPago(); window.addPosMedio(); });
+  await page.evaluate(() => window.cobrarPos(false));
+  await expect.poll(() => page.evaluate(() => window.__datosPrueba.listar('ingresos').length)).toBe(1);
+  const id = await page.evaluate(() => window.__datosPrueba.listar('ingresos')[0].id);
+  const leer = () => page.evaluate(id => window.__datosPrueba.leer('ingresos/' + id), id);
+
+  await ir(page, 'facturas');
+  await expect(page.locator('#inc-list-body')).toContainText('+u$s 7'); // solo la funda: 10 − 3
+  await page.evaluate(id => window.abrirFE(id), id);
+  await expect(page.locator('#fe-modal')).toHaveClass(/open/);
+  await expect(page.locator('#fe-costo-0')).toHaveValue('400');
+  await expect(page.locator('#fe-gan-0')).toHaveValue('0');
+  await expect(page.locator('#fe-gan-1')).toHaveValue('7');
+  await expect(page.locator('#fe-ganancia')).toHaveText(/^u\$s 7 /);
+
+  // escribir la ganancia despeja el costo…
+  await page.locator('#fe-gan-0').fill('80');
+  await expect(page.locator('#fe-costo-0')).toHaveValue('320');
+  await expect(page.locator('#fe-ganancia')).toHaveText(/^u\$s 87 /);
+  // …y escribir el costo recalcula la ganancia
+  await page.locator('#fe-costo-0').fill('350');
+  await expect(page.locator('#fe-gan-0')).toHaveValue('50');
+  await expect(page.locator('#fe-ganancia')).toHaveText(/^u\$s 57 /);
+  await page.evaluate(() => window.saveFE());
+  await expect.poll(async () => (await leer()).gananciaUSD).toBe(57);
+  let venta = await leer();
+  expect(venta.items[0]).toMatchObject({ costo: 350, costoMoneda: 'USD', costoManual: true, costoAuto: 400 });
+  expect(venta.items[1].costoManual).toBeUndefined(); // la funda no se tocó: sigue en automático
+  expect(venta.totalUSD).toBe(410); // corregir el costo no cambia lo cobrado
+  // el equipo y el inventario no se tocan
+  expect(await page.evaluate(() => window.__datosPrueba.leer('stock/equipo-1'))).toMatchObject({ valorUSD: 400, status: 'vendido' });
+  expect(await page.evaluate(() => window.__datosPrueba.leer('inventario/funda-1').qty)).toBe(4);
+  await expect(page.locator('#inc-list-body')).toContainText('+u$s 57');
+
+  // el reporte suma la ganancia corregida y deja corregirla desde ahí
+  await ir(page, 'reportes');
+  const fila = page.locator('#reporte-content tbody tr').first();
+  await expect(fila).toContainText('u$s 57');
+  await fila.locator('button.ei-btn').click();
+  await expect(page.locator('#fe-modal')).toHaveClass(/open/);
+  await expect(page.locator('#fe-costo-0')).toHaveValue('350');
+
+  // vaciar el costo vuelve al cálculo automático
+  await page.locator('#fe-costo-0').fill('');
+  await expect(page.locator('#fe-gan-0')).toHaveValue('0');
+  await page.evaluate(() => window.saveFE());
+  await expect.poll(async () => (await leer()).gananciaUSD).toBe(7);
+  venta = await leer();
+  expect(venta.items[0].costo).toBe(400);
+  expect(venta.items[0].costoManual).toBeUndefined();
+  expect(venta.items[0].costoAuto).toBeUndefined();
+  await expect(page.locator('#reporte-content tbody tr').first()).toContainText('u$s 7');
+  expect(errores).toEqual([]);
+});
+
 test('un reporte de más de 300 ventas se puede abrir sin errores', async ({ page }) => {
   const errores = await preparar(page);
   await entrar(page);
