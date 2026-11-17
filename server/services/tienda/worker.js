@@ -39,6 +39,7 @@
 import { leerDoc, escribirDoc } from '../facturador/firestore.js';
 import { fotosParaProducto, candidatosDeFotos, traerFotos, urlPublicaSegura } from './fotos.js';
 import { TIENDA_PUBLICA } from '../../../src/shared/sitio.js';
+import { cantidadMaxima, MAX_CANTIDAD_PEDIDO } from '../../../src/shared/catalogo.js';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -92,6 +93,36 @@ export default {
 
 const PAGOS = ['mp', 'tarjeta', 'efectivo'];
 const ENTREGAS = ['retiro', 'envio'];
+const MAX_ITEMS = 20;
+const MAX_CANTIDAD = MAX_CANTIDAD_PEDIDO;
+
+/**
+ * Las líneas del pedido con el precio de lo publicado, o {error}. `productos` es el
+ * catálogo publicado; `items` viene validado. Exportado para el test.
+ */
+export function lineasDelPedido(items, productos) {
+  const lineas = [];
+  for (const it of items) {
+    const producto = (productos || []).find(x => x && x.id === it.id);
+    if (!producto) return { error: 'un producto del carrito ya no está en el catálogo', estado: 404 };
+    if (it.cantidad > cantidadMaxima(producto)) return { error: `de "${producto.nombre}" hay una sola unidad`, estado: 400 };
+    const precioUSD = Number(producto.precioUSD) || 0;
+    if (precioUSD <= 0) return { error: 'el producto no tiene precio válido', estado: 400 };
+    lineas.push({
+      id: producto.id, nombre: producto.nombre || '', gb: producto.gb || '', color: producto.color || '',
+      tipo: producto.tipo || 'equipo', precioUSD, cantidad: it.cantidad,
+    });
+  }
+  return { lineas, totalUSD: lineas.reduce((s, l) => s + l.precioUSD * l.cantidad, 0) };
+}
+
+/** El renglón que ven Mercado Pago y Stripe: el producto, o cuántos son si hay varios. */
+const tituloDelPedido = pedido => {
+  const items = pedido.items?.length ? pedido.items : [{ ...pedido.producto, cantidad: 1 }];
+  const nombre = l => [l.nombre, l.gb, l.color].filter(Boolean).join(' ') + (l.cantidad > 1 ? ` x${l.cantidad}` : '');
+  const unidades = items.reduce((s, l) => s + (l.cantidad || 1), 0);
+  return (items.length === 1 ? nombre(items[0]) : `${unidades} productos: ${items.map(nombre).join(', ')}`).slice(0, 250);
+};
 
 /**
  * Lo que manda la página, limpio y validado. Devuelve {error} si algo no sirve.
@@ -100,8 +131,22 @@ const ENTREGAS = ['retiro', 'envio'];
 export function validarPedido(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'pedido inválido' };
   const t = (v, max) => String(v ?? '').trim().slice(0, max);
+  // El carrito manda `items`; la tienda vieja mandaba un solo `productoId`.
+  const crudos = Array.isArray(body.items) ? body.items : [{ id: body.productoId, cantidad: 1 }];
+  if (crudos.length > MAX_ITEMS) return { error: `el carrito admite hasta ${MAX_ITEMS} productos distintos` };
+  const items = [];
+  for (const it of crudos) {
+    const id = t(it?.id, 120);
+    const cantidad = it?.cantidad == null ? 1 : Number(it.cantidad);
+    if (!id) return { error: 'falta el producto' };
+    if (!Number.isInteger(cantidad) || cantidad < 1 || cantidad > MAX_CANTIDAD) return { error: 'cantidad inválida' };
+    const repetido = items.find(x => x.id === id);
+    if (repetido) repetido.cantidad += cantidad; else items.push({ id, cantidad });
+  }
+  if (items.some(x => x.cantidad > MAX_CANTIDAD)) return { error: 'cantidad inválida' };
   const p = {
-    productoId: t(body.productoId, 120),
+    items,
+    productoId: items[0]?.id || '',
     pago: t(body.pago, 20),
     entrega: t(body.entrega, 20),
     direccion: t(body.direccion, 300),
@@ -152,10 +197,11 @@ async function crearPedido(request, env, url) {
 
   // El producto y el precio salen de lo publicado, nunca del pedido.
   const catalogo = await leerDoc(env, idToken, 'catalogo/publico');
-  const producto = (catalogo?.productos || []).find(x => x && x.id === p.productoId);
-  if (!producto) return json({ error: 'ese producto ya no está en el catálogo' }, 404);
+  const carrito = lineasDelPedido(p.items, catalogo?.productos);
+  if (carrito.error) return json({ error: carrito.error }, carrito.estado);
 
-  const monto = montoDelPedido(producto, p.pago, catalogo.cobro);
+  // Las reglas de cobro (tope de MP, recargos) se aplican al total del carrito.
+  const monto = montoDelPedido({ precioUSD: carrito.totalUSD }, p.pago, catalogo.cobro);
   if (monto.error) return json({ error: monto.error }, 400);
 
   const id = crypto.randomUUID();
@@ -163,10 +209,9 @@ async function crearPedido(request, env, url) {
   const pedido = {
     userId: env.OWNER_UID,
     estado: p.pago === 'efectivo' ? 'reservado' : 'creado',
-    producto: {
-      id: producto.id, nombre: producto.nombre || '', gb: producto.gb || '', color: producto.color || '',
-      tipo: producto.tipo || 'equipo', precioUSD: Number(producto.precioUSD) || 0,
-    },
+    // `producto` es la primera línea: lo leen las pantallas de antes del carrito.
+    producto: (({ cantidad: _c, ...l }) => l)(carrito.lineas[0]),
+    items: carrito.lineas,
     pago: p.pago,
     entrega: p.entrega,
     direccion: p.direccion,
@@ -220,6 +265,7 @@ async function verPedido(id, env) {
   return json({
     id, estado: d.estado, pago: d.pago, entrega: d.entrega,
     producto: d.producto?.nombre || '', montoUSD: d.montoUSD, montoARS: d.montoARS,
+    items: (d.items || []).map(l => ({ nombre: l.nombre, gb: l.gb, color: l.color, cantidad: l.cantidad, precioUSD: l.precioUSD })),
   });
 }
 
@@ -318,7 +364,7 @@ async function preferenciaMP(env, pedidoId, pedido, origin) {
   if (!env.MP_ACCESS_TOKEN) throw new Error('falta MP_ACCESS_TOKEN');
   if (env.RUNTIME_NODE && !env.TIENDA_WEBHOOK_URL) throw new Error('Configurá TIENDA_WEBHOOK_URL con la URL pública del webhook de Node.js.');
   const vuelta = `${env.CATALOGO_URL || TIENDA_PUBLICA}?pedido=${pedidoId}`;
-  const titulo = [pedido.producto.nombre, pedido.producto.gb, pedido.producto.color].filter(Boolean).join(' ');
+  const titulo = tituloDelPedido(pedido);
   const r = await fetch(`${MP}/checkout/preferences`, {
     method: 'POST',
     headers: { ...mpHeaders(env), 'X-Idempotency-Key': pedidoId },
@@ -448,7 +494,7 @@ const formStripe = obj => {
 async function sesionStripe(env, pedidoId, pedido) {
   if (!env.STRIPE_SECRET_KEY) throw new Error('falta STRIPE_SECRET_KEY');
   const vuelta = `${env.CATALOGO_URL || TIENDA_PUBLICA}?pedido=${pedidoId}`;
-  const titulo = [pedido.producto.nombre, pedido.producto.gb, pedido.producto.color].filter(Boolean).join(' ');
+  const titulo = tituloDelPedido(pedido);
   const r = await fetch(`${STRIPE}/checkout/sessions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': pedidoId },

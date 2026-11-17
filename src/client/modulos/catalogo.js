@@ -34,12 +34,14 @@ export function renderPedidos() {
     const [txt, cls] = contextoApp.PED_ESTADOS[p.estado] || [p.estado, ''];
     const prod = p.producto || {},
       cli = p.cliente || {};
+    // Un pedido del carrito trae `items`; los de antes, un solo `producto`.
+    const lineas = p.items?.length ? p.items : [{ ...prod, cantidad: 1 }];
     const wa = (cli.whatsapp || '').replace(/\D/g, '');
-    const msg = encodeURIComponent(`Hola ${cli.nombre || ''}! Te escribo por tu pedido del ${prod.nombre || ''} en el catálogo de MarplaCity.`);
+    const msg = encodeURIComponent(`Hola ${cli.nombre || ''}! Te escribo por tu pedido ${lineas.length > 1 ? `de ${lineas.length} productos` : `del ${prod.nombre || ''}`} en el catálogo de MarplaCity.`);
     return `<tr style="${contextoApp.pedidoAbierto(p) ? '' : 'opacity:.6;'}">
       <td style="font-family:'DM Mono',monospace;font-size:11.5px;">${esc(cuando(p.creado))}<div class="sub" style="font-size:10px;color:var(--text3);">${esc(p.id.slice(0, 8))}</div></td>
       <td>${esc(cli.nombre || '—')}<div class="sub" style="font-size:11px;">${wa ? `<a href="https://wa.me/${wa}?text=${msg}" target="_blank" rel="noopener">📱 ${esc(cli.whatsapp)}</a>` : ''}${cli.email ? ' · ' + esc(cli.email) : ''}</div></td>
-      <td>${esc(prod.nombre || '')}<div class="sub" style="font-size:11px;color:var(--text3);">${esc([prod.gb, prod.color, prod.tipo === 'pedido' ? 'a pedido' : ''].filter(Boolean).join(' · '))}</div></td>
+      <td>${lineas.map(l => `${l.cantidad > 1 ? `<strong>${esc(l.cantidad)} ×</strong> ` : ''}${esc(l.nombre || '')}<div class="sub" style="font-size:11px;color:var(--text3);">${esc([l.gb, l.color, l.tipo === 'pedido' ? 'a pedido' : ''].filter(Boolean).join(' · '))}</div>`).join('')}</td>
       <td>${esc(contextoApp.PED_PAGOS[p.pago] || p.pago)}<div class="sub" style="font-family:'DM Mono',monospace;font-size:11.5px;">${monto(p)}</div></td>
       <td>${p.entrega === 'envio' ? 'Envío' : 'Retira'}${p.direccion ? `<div class="sub" style="font-size:11px;color:var(--text3);">${esc(p.direccion)}</div>` : ''}</td>
       <td><span class="badge ${cls}">${esc(txt)}</span></td>

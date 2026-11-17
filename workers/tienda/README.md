@@ -11,7 +11,7 @@ URL de producción: https://tienda.fiwind702050.workers.dev/
 | ruta | qué |
 |---|---|
 | `GET /` | diagnóstico: qué variables están cargadas |
-| `POST /pedido` | crea el pedido. Devuelve `{id, estado, url}`; si hay `url`, la página manda al cliente ahí a pagar |
+| `POST /pedido` | crea el pedido con el carrito (`items: [{id, cantidad}]`, hasta 20 líneas y 5 unidades por producto; un usado, una sola). Sigue aceptando el `productoId` suelto de la tienda anterior. Devuelve `{id, estado, url}`; si hay `url`, la página manda al cliente ahí a pagar |
 | `GET /pedido/:id` | el estado del pedido, para la pantalla de vuelta del pago |
 | `POST /mp/webhook` | Mercado Pago avisa que un pago cambió |
 | `POST /stripe/webhook` | Stripe avisa que un pago cambió (`checkout.session.*`, `charge.refunded`) |
@@ -36,7 +36,7 @@ Formas de pago:
 Un doc por pedido, id al azar (UUID). Estados: `creado` (esperando el pago) →
 `pagado` / `pendiente` / `rechazado` / `devuelto`, o `reservado` (efectivo).
 
-Campos: `producto` (id, nombre, gb, color, tipo, precioUSD), `pago`, `entrega`, `direccion`,
+Campos: `items` (una línea por producto: id, nombre, gb, color, tipo, precioUSD, cantidad), `producto` (la primera línea, para lo que se hizo antes del carrito), `pago`, `entrega`, `direccion`,
 `cliente` (nombre, whatsapp, email), `montoUSD`, `montoARS`, `tc`, `creado`, `fecha`,
 `actualizado`, `pagadoEn`, `mp` (preferenceId, paymentId, status, statusDetail, monto,
 medio), `userId`.

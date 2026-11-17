@@ -4,7 +4,7 @@
  *   node workers/tienda/test-tienda.mjs
  */
 import assert from 'node:assert/strict';
-import { validarPedido, montoDelPedido, firmaMPValida, firmaStripeValida } from './worker.js';
+import { validarPedido, montoDelPedido, lineasDelPedido, firmaMPValida, firmaStripeValida } from './worker.js';
 import { elegirImagenes, slugFoto, nombreParaAmazon, urlSubidaStorage, urlPublicaSegura, candidatosDeGoogle } from './fotos.js';
 
 // ── urlPublicaSegura y candidatosDeGoogle ──
@@ -41,6 +41,33 @@ assert.equal(ok.email, 'ana@x.com');
 assert.ok(validarPedido({ productoId: 'x', pago: 'bitcoin', entrega: 'retiro', nombre: 'Ana', whatsapp: '2235551234' }).error);
 assert.ok(validarPedido({ productoId: 'x', pago: 'mp', entrega: 'envio', nombre: 'Ana', whatsapp: '2235551234' }).error, 'envío sin dirección');
 assert.ok(validarPedido({ productoId: 'x', pago: 'mp', entrega: 'retiro', nombre: 'Ana', whatsapp: '12' }).error, 'whatsapp corto');
+
+// ── El carrito: varios productos en un pedido ──
+{
+  const base = { pago: 'efectivo', entrega: 'retiro', nombre: 'Ana', whatsapp: '2235551234' };
+  assert.deepEqual(ok.items, [{ id: 'stock_1', cantidad: 1 }], 'el pedido de un solo producto sigue entrando');
+  const v = validarPedido({ ...base, items: [{ id: 'a', cantidad: 2 }, { id: 'b' }, { id: 'a', cantidad: 1 }] });
+  assert.deepEqual(v.items, [{ id: 'a', cantidad: 3 }, { id: 'b', cantidad: 1 }], 'el mismo producto dos veces se suma');
+  assert.ok(validarPedido({ ...base, items: [] }).error, 'carrito vacío');
+  assert.ok(validarPedido({ ...base, items: [{ id: 'a', cantidad: 0 }] }).error, 'cantidad cero');
+  assert.ok(validarPedido({ ...base, items: [{ id: 'a', cantidad: 1.5 }] }).error, 'cantidad con decimales');
+  assert.ok(validarPedido({ ...base, items: [{ id: 'a', cantidad: 99 }] }).error, 'cantidad exagerada');
+  assert.ok(validarPedido({ ...base, items: [{ cantidad: 1 }] }).error, 'línea sin producto');
+  assert.ok(validarPedido({ ...base, items: Array.from({ length: 21 }, (_, i) => ({ id: 'p' + i })) }).error, 'demasiadas líneas');
+
+  const productos = [
+    { id: 'a', nombre: 'Funda', precioUSD: 10, tipo: 'accesorio', condicion: 'nuevo' },
+    { id: 'b', nombre: 'iPhone 13', gb: '128GB', precioUSD: 400, condicion: 'usado' },
+    { id: 'c', nombre: 'Sin precio', precioUSD: 0 },
+  ];
+  const l = lineasDelPedido([{ id: 'a', cantidad: 3 }, { id: 'b', cantidad: 1 }], productos);
+  assert.equal(l.totalUSD, 430, 'el total sale del precio publicado por la cantidad');
+  assert.equal(l.lineas[0].cantidad, 3);
+  assert.equal(l.lineas[1].gb, '128GB');
+  assert.equal(lineasDelPedido([{ id: 'x', cantidad: 1 }], productos).estado, 404, 'producto que ya no está');
+  assert.ok(lineasDelPedido([{ id: 'b', cantidad: 2 }], productos).error, 'un usado es una sola unidad');
+  assert.ok(lineasDelPedido([{ id: 'c', cantidad: 1 }], productos).error, 'sin precio no se vende');
+}
 
 // ── montoDelPedido ──
 const cobro = { tc: 1410, recargoTarjetaPct: 5, recargoMpPct: 8, mpMaxUSD: 200 };

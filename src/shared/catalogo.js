@@ -139,3 +139,7 @@ function armarMapaFotos(archivos, clasificacion) {
   for (const k in mapa) mapa[k].sort((a, b) => peso(a) - peso(b) || a.length - b.length || a.localeCompare(b));
   return mapa;
 }
+
+/** Cuántas unidades de un producto entran en un pedido de la tienda: un usado es una unidad única. */
+export const MAX_CANTIDAD_PEDIDO = 5;
+export const cantidadMaxima = producto => (producto?.condicion === 'usado' ? 1 : MAX_CANTIDAD_PEDIDO);

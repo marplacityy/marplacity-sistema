@@ -1,5 +1,5 @@
 import { esc, on } from '../shared/seguridad.js';
-import { RUBROS_CATALOGO, rubroDe } from '../shared/catalogo.js';
+import { RUBROS_CATALOGO, rubroDe, cantidadMaxima } from '../shared/catalogo.js';
 import { activarEventos } from './core/eventos.js';
 activarEventos();
 import { cargarConfiguracion } from './core/config-publica.js';
@@ -50,29 +50,20 @@ const inicial = nombre => {
 
 const fotosDe = p => Array.isArray(p.fotos) ? p.fotos : (p.foto ? [p.foto] : []);
 
-/** La galería de la tarjeta: las fotos apiladas con puntitos, o la inicial si no hay. */
-function galeria(p){
-  const fotos = fotosDe(p);
-  if (!fotos.length) return esc(inicial(p.nombre));
-  // Si el archivo no carga, se quita: nunca una imagen rota.
-  return `${fotos.map((f, k) => `<img src="${esc(f)}" alt="${esc(p.nombre)}" loading="lazy"
-      class="${k === 0 ? 'ver' : ''}" ${on('error', 'quitarImagen', '$this')}>`).join('')}
-    ${fotos.length > 1 ? `<div class="puntos">${fotos.map((_, k) =>
-      `<button class="punto${k === 0 ? ' on' : ''}" aria-label="Foto ${k+1}" ${on('click', 'verFoto', '$this', k)}></button>`).join('')}</div>` : ''}`;
+/** La foto de la tarjeta: la primera, o la inicial del modelo si no hay. */
+function fotoTarjeta(p){
+  const foto = fotosDe(p)[0];
+  // Si el archivo no carga, se cambia por la inicial: nunca una imagen rota.
+  return foto
+    ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" ${on('error', 'fotoFallo', '$this', inicial(p.nombre))}>`
+    : `<span class="sin-foto">${esc(inicial(p.nombre))}</span>`;
 }
 
 const sello = p => p.tipo === 'pedido' ? '<span class="sello">A pedido</span>' : '';
-const notaPrecio = p => p.tipo === 'pedido' ? 'Se trae a pedido' : 'Disponible en el local';
+const linkProducto = p => '#p=' + encodeURIComponent(p.id);
+const nombreCompleto = p => [p.titulo || p.nombre, p.gb, p.color].filter(Boolean).join(' ');
 
-/** Los botones de abajo de la tarjeta: comprar y, si el local cargó número, WhatsApp. */
-function acciones(p, texto, handler){
-  const wa = linkWhatsApp(p);
-  return `<div class="prod-acciones">
-    <button class="btn-comprar" type="button" ${on('click', handler, p.id)}>${texto}</button>
-    ${wa ? `<a class="btn-wa" href="${wa}" target="_blank" rel="noopener" aria-label="Consultar por WhatsApp" data-stop>${ICONO_WA}</a>` : ''}
-  </div>`;
-}
-
+/** La tarjeta de un producto, como la de Ecommodo: foto, nombre, precio y "Ver producto". */
 function tarjeta(p){
   const specs = [
     p.gb && `<span class="chip">${esc(p.gb)}</span>`,
@@ -81,14 +72,14 @@ function tarjeta(p){
     p.estado && `<span class="chip">${esc(p.estado)}</span>`,
   ].filter(Boolean).join('');
 
-  // Tocar la tarjeta abre la ficha; el botón va directo al pedido.
   return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
-    <div class="prod-foto">${sello(p)}${galeria(p)}</div>
-    <div class="prod-nombre">${esc(p.titulo || p.nombre)}</div>
-    <div class="chips">${specs}</div>
-    <div class="precio">${usd(p.precioUSD)}</div>
-    <div class="precio-nota">${notaPrecio(p)}</div>
-    ${acciones(p, 'Comprar', 'abrirPedido')}
+    <div class="prod-foto">${sello(p)}${fotoTarjeta(p)}</div>
+    <div class="prod-info">
+      <h3 class="prod-nombre">${esc(p.titulo || p.nombre)}</h3>
+      <div class="chips">${specs}</div>
+      <div class="precio">${usd(p.precioUSD)}</div>
+      <a class="btn-ver" href="${esc(linkProducto(p))}" data-stop>Ver producto</a>
+    </div>
   </article>`;
 }
 
@@ -99,58 +90,107 @@ function linkWhatsApp(p){
     (p.tipo === 'pedido' ? ' (a pedido)' : ''));
   return `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${texto}`;
 }
+const waDelLocal = texto => LOCAL.whatsapp
+  ? `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}${texto ? '?text=' + encodeURIComponent(texto) : ''}` : null;
+
+// ── Las páginas ──────────────────────────────────────────────
+//
+// La tienda tiene dos zonas: el listado con sus filtros (#vista-tienda) y una página
+// suelta (#vista-pagina) donde se arma el producto, el carrito, el checkout o el
+// resultado del pedido. Cada una tiene su link y `desdeUrl` decide cuál se ve.
+
+function mostrarPagina(html){
+  document.getElementById('pagina').innerHTML = html;
+  document.getElementById('vista-tienda').hidden = true;
+  document.getElementById('vista-pagina').hidden = false;
+  window.scrollTo({ top: 0 });
+}
+function mostrarTienda(){
+  document.getElementById('vista-pagina').hidden = true;
+  document.getElementById('vista-tienda').hidden = false;
+}
+
+const volver = (texto = 'Volver a la tienda', href = '#') =>
+  `<a class="volver" href="${esc(href)}"><span aria-hidden="true">←</span> ${esc(texto)}</a>`;
+
+let AVISO_T = null;
+/** Un aviso que aparece abajo y se va solo. */
+function aviso(texto, error){
+  const el = document.getElementById('aviso-flotante');
+  el.textContent = texto;
+  el.className = 'aviso-flotante ver' + (error ? ' error' : '');
+  clearTimeout(AVISO_T);
+  AVISO_T = setTimeout(() => { el.className = 'aviso-flotante'; }, 2600);
+}
+
+/** Tocar una tarjeta o elegir una variante lleva a la página del producto (#p=id). */
+window.abrirFicha = id => { location.hash = '#p=' + encodeURIComponent(id); };
 
 /**
- * La ficha del producto. Se abre al tocar la tarjeta y queda en la URL (#p=id), así el
- * link a un producto puntual se puede pegar en WhatsApp o Instagram y cae ahí directo.
+ * La página del producto: galería a la izquierda y, a la derecha, el precio, la
+ * disponibilidad, las variantes, la cantidad y los botones de compra. El link (#p=id) se
+ * puede pegar en WhatsApp o Instagram y cae directo acá.
  */
-window.abrirFicha = id => {
+function paginaProducto(id){
   const p = PRODUCTOS.find(x => x.id === id);
-  if (!p) return;
+  if (!p) {
+    mostrarPagina(`<div class="vacio"><div class="vacio-icono">🔍</div><h2>Producto no encontrado</h2>
+      <p>Puede que ya se haya vendido.</p><a class="btn-primario" href="#">Volver a la tienda</a></div>`);
+    return;
+  }
   const fotos = fotosDe(p);
   const wa = linkWhatsApp(p);
   const grupo = grupoDe(p);   // si es una variante de un modelo, la capacidad y el color van en selectores
+  const max = cantidadMaxima(p);
   const specs = [
-    p.tipo === 'pedido' && '<span class="chip pedido">A pedido</span>',
     p.gb && !grupo && `<span class="chip">${esc(p.gb)}</span>`,
     p.color && !grupo && `<span class="chip">${esc(p.color)}</span>`,
     p.bateria != null && `<span class="chip bat">Batería ${esc(p.bateria)}%</span>`,
     p.estado && `<span class="chip">${esc(p.estado)}</span>`,
   ].filter(Boolean).join('');
+  const formas = formasDePago(p);
 
-  document.getElementById('ficha-contenido').innerHTML = `
-    <button class="ficha-cerrar" ${on('click', 'cerrarFicha')} aria-label="Cerrar">×</button>
-    <div class="ficha-cuerpo">
-      <div class="ficha-galeria">
-        <div class="ficha-grande" id="ficha-grande">${fotos.length
+  mostrarPagina(`${volver('Volver a la tienda', hashVista() || '#')}
+    <div class="producto" id="ficha">
+      <div class="producto-fotos">
+        <div class="producto-grande" id="ficha-grande">${fotos.length
           ? `<img src="${esc(fotos[0])}" alt="${esc(p.nombre)}" ${on('error', 'fotoFallo', '$this', inicial(p.nombre))}>`
-          : esc(inicial(p.nombre))}</div>
-        ${fotos.length > 1 ? `<div class="ficha-mini">${fotos.map((f, k) =>
+          : `<span class="sin-foto">${esc(inicial(p.nombre))}</span>`}</div>
+        ${fotos.length > 1 ? `<div class="producto-minis">${fotos.map((f, k) =>
           `<img src="${esc(f)}" class="${k === 0 ? 'on' : ''}" alt="" ${on('click', 'verGrande', '$this', f)} ${on('error', 'quitarImagen', '$this')}>`).join('')}</div>` : ''}
       </div>
-      <div class="ficha-datos">
-        <div class="ficha-nombre">${esc(p.titulo || p.nombre)}</div>
+      <div class="producto-datos">
+        <h1 class="producto-nombre">${esc(p.titulo || p.nombre)}</h1>
+        <div class="producto-precio">${usd(p.precioUSD)}</div>
+        <div class="producto-stock ${p.tipo === 'pedido' ? 'pedido' : 'ok'}">${p.tipo === 'pedido'
+          ? '📦 Entrega a pedido: te confirmamos la demora por WhatsApp'
+          : '✓ Stock inmediato: está en el local'}</div>
         ${grupo ? selectoresVariante(p, grupo) : ''}
-        <div class="chips">${specs}</div>
-        ${p.descripcion ? `<div class="ficha-desc">${esc(p.descripcion)}</div>` : ''}
-        ${p.tipo === 'pedido'
-          ? '<div class="ficha-nota">Este producto no está en el local: se trae a pedido. Escribinos y te decimos la demora.</div>'
-          : '<div class="ficha-nota">Está en el local: lo podés pasar a ver y llevártelo en el momento.</div>'}
-        <div class="ficha-precio">${usd(p.precioUSD)}</div>
-        <div class="ficha-nota">Precio en dólar billete, válido pagando en efectivo. Por otros medios de pago, consultá.</div>
-        <div class="ficha-acciones">
-          <button class="consultar" ${on('click', 'abrirPedido', p.id)}>Comprar</button>
-          ${wa ? `<a class="btn-sec" href="${wa}" target="_blank" rel="noopener">Preguntar por WhatsApp</a>` : ''}
-          <button class="btn-sec" ${on('click', 'compartirFicha', p.id)}>Compartir</button>
+        ${specs ? `<div class="chips">${specs}</div>` : ''}
+        <div class="producto-meta"><span>Categoría:</span> <a href="#c=${slug(catDe(p))}">${esc(catDe(p))}</a></div>
+        <div class="producto-acciones">
+          ${max > 1 ? `<div class="cantidad">
+            <button type="button" aria-label="Reducir cantidad" ${on('click', 'cambiarCantidadFicha', -1)}>−</button>
+            <input type="number" id="ficha-cantidad" value="1" min="1" max="${max}" aria-label="Cantidad" readonly>
+            <button type="button" aria-label="Aumentar cantidad" ${on('click', 'cambiarCantidadFicha', 1)}>+</button>
+          </div>` : ''}
+          <button class="btn-primario" type="button" ${on('click', 'agregarAlCarrito', p.id)}>Agregar al carrito</button>
         </div>
+        <button class="btn-oscuro" type="button" ${on('click', 'comprarAhora', p.id)}>Comprar ahora</button>
+        <div class="producto-links">
+          ${wa ? `<a href="${wa}" target="_blank" rel="noopener">${ICONO_WA} Preguntar por WhatsApp</a>` : ''}
+          <button type="button" ${on('click', 'compartirFicha', p.id)}>Compartir</button>
+        </div>
+        <div class="producto-pagos">
+          <h3>Medios de pago</h3>
+          ${formas.map(f => `<div class="pago-fila"><span>${f.titulo}</span><strong>${f.total}</strong></div>`).join('')}
+          <p>Precio en dólar billete, válido pagando en efectivo.</p>
+        </div>
+        ${p.descripcion ? `<div class="producto-desc"><h3>Descripción</h3><p>${esc(p.descripcion)}</p></div>` : ''}
       </div>
-    </div>`;
-
-  const d = document.getElementById('ficha');
-  if (!d.open) d.showModal();
-  if (location.hash !== '#p=' + id) history.replaceState(null, '', '#p=' + encodeURIComponent(id));
+    </div>`);
   metaDeProducto(p);
-};
+}
 
 // Los metadatos de la página siguen al producto abierto: sirven al compartir el link y a
 // los buscadores. Al cerrar vuelven los de la tienda.
@@ -166,20 +206,18 @@ function metaDeProducto(p){
   else if (kw) kw.remove();
 }
 
-window.cerrarFicha = () => document.getElementById('ficha').close();
 window.quitarImagen = el => el.remove();
-window.fotoFallo = (el, texto) => { el.parentNode.textContent = texto; };
-window.cerrarFichaSiFondo = (e, el) => { if (e.target === el) window.cerrarFicha(); };
-// Al cerrar —por el botón, Escape o tocando afuera— el link vuelve a ser el de la vista
-// (la categoría o el rubro donde estaba parado, o la portada).
-document.getElementById('ficha').addEventListener('close', () => {
-  if (/^#p=/.test(location.hash)) history.replaceState(null, '', hashVista() || location.pathname + location.search);
-  metaDeProducto(null);
-});
+window.fotoFallo = (el, texto) => { const s = document.createElement('span'); s.className = 'sin-foto'; s.textContent = texto; el.replaceWith(s); };
 
 window.verGrande = (mini, src) => {
   document.getElementById('ficha-grande').innerHTML = `<img src="${esc(src)}" alt="">`;
   mini.parentNode.querySelectorAll('img').forEach(i => i.classList.toggle('on', i === mini));
+};
+
+window.cambiarCantidadFicha = delta => {
+  const el = document.getElementById('ficha-cantidad');
+  if (!el) return;
+  el.value = Math.max(1, Math.min(Number(el.max) || 1, (Number(el.value) || 1) + delta));
 };
 
 /** Comparte el link del producto: la hoja del celular si existe, si no copia el link. */
@@ -189,11 +227,129 @@ window.compartirFicha = async id => {
   const titulo = p ? `${p.nombre} — ${usd(p.precioUSD)}` : document.title;
   try {
     if (navigator.share) await navigator.share({ title: titulo, text: titulo, url });
-    else { await navigator.clipboard.writeText(url); alert('Link copiado'); }
+    else { await navigator.clipboard.writeText(url); aviso('Link copiado'); }
   } catch (e) { /* canceló */ }
 };
 
-// ── El pedido ────────────────────────────────────────────────
+// ── El carrito ───────────────────────────────────────────────
+//
+// Vive en el navegador del cliente (no hay login): una lista de {id, cantidad}. Los
+// precios nunca se guardan: salen siempre del catálogo publicado, acá y en el Worker.
+
+const CLAVE_CARRITO = 'marplacity_carrito';
+let CARRITO = [];
+
+function leerCarrito(){
+  try {
+    const crudo = JSON.parse(localStorage.getItem(CLAVE_CARRITO) || '[]');
+    CARRITO = (Array.isArray(crudo) ? crudo : []).map(x => ({ id: String(x?.id || ''), cantidad: Math.floor(Number(x?.cantidad)) || 1 }));
+  } catch (e) { CARRITO = []; }
+  // Lo que ya no está publicado se va solo, y nadie pasa del máximo de su producto.
+  CARRITO = CARRITO.filter(x => PRODUCTOS.some(p => p.id === x.id)).slice(0, 20);
+  for (const x of CARRITO) x.cantidad = Math.max(1, Math.min(cantidadMaxima(PRODUCTOS.find(p => p.id === x.id)), x.cantidad));
+}
+function guardarCarrito(){
+  try { localStorage.setItem(CLAVE_CARRITO, JSON.stringify(CARRITO)); } catch (e) { /* navegación privada: dura lo que dure la página */ }
+  pintarGloboCarrito();
+}
+const unidadesCarrito = () => CARRITO.reduce((s, x) => s + x.cantidad, 0);
+/** Las líneas del carrito con su producto y su subtotal. */
+const lineasCarrito = () => CARRITO.map(x => ({ ...x, p: PRODUCTOS.find(p => p.id === x.id) })).filter(l => l.p)
+  .map(l => ({ ...l, subtotal: (Number(l.p.precioUSD) || 0) * l.cantidad }));
+const totalCarrito = () => lineasCarrito().reduce((s, l) => s + l.subtotal, 0);
+
+function pintarGloboCarrito(){
+  const n = unidadesCarrito();
+  document.querySelectorAll('[data-carrito]').forEach(el => { el.textContent = n; if (el.classList.contains('carrito-globo')) el.hidden = !n; });
+}
+
+/** Suma al carrito respetando el máximo del producto. Devuelve si entró algo. */
+function sumarAlCarrito(id, cantidad){
+  const p = PRODUCTOS.find(x => x.id === id);
+  if (!p) return false;
+  const max = cantidadMaxima(p);
+  const linea = CARRITO.find(x => x.id === id);
+  if (linea) {
+    if (linea.cantidad >= max) { aviso(max === 1 ? 'Ya está en tu carrito: es una unidad única' : `Máximo ${max} por pedido`, true); return false; }
+    linea.cantidad = Math.min(max, linea.cantidad + cantidad);
+  } else {
+    if (CARRITO.length >= 20) { aviso('El carrito está lleno', true); return false; }
+    CARRITO.push({ id, cantidad: Math.min(max, cantidad) });
+  }
+  guardarCarrito();
+  return true;
+}
+const cantidadElegida = () => Number(document.getElementById('ficha-cantidad')?.value) || 1;
+
+window.agregarAlCarrito = id => { if (sumarAlCarrito(id, cantidadElegida())) aviso('Producto agregado al carrito'); };
+window.comprarAhora = id => {
+  if (!CARRITO.some(x => x.id === id)) sumarAlCarrito(id, cantidadElegida());
+  location.hash = '#checkout';
+};
+window.cambiarCantidad = (id, delta) => {
+  const linea = CARRITO.find(x => x.id === id);
+  if (!linea) return;
+  const max = cantidadMaxima(PRODUCTOS.find(p => p.id === id));
+  linea.cantidad = Math.max(1, Math.min(max, linea.cantidad + delta));
+  guardarCarrito();
+  paginaCarrito();
+};
+window.quitarDelCarrito = id => { CARRITO = CARRITO.filter(x => x.id !== id); guardarCarrito(); paginaCarrito(); };
+window.vaciarCarrito = () => { CARRITO = []; guardarCarrito(); paginaCarrito(); };
+
+const fotoMini = p => fotosDe(p)[0]
+  ? `<img src="${esc(fotosDe(p)[0])}" alt="" loading="lazy" ${on('error', 'fotoFallo', '$this', inicial(p.nombre))}>`
+  : `<span class="sin-foto">${esc(inicial(p.nombre))}</span>`;
+const specsDe = p => [p.gb, p.color, p.estado, p.bateria != null && `Batería ${p.bateria}%`].filter(Boolean).join(' · ');
+
+/** La página del carrito: los productos con su cantidad y, al costado, el resumen. */
+function paginaCarrito(){
+  const lineas = lineasCarrito();
+  metaDeProducto(null);
+  if (!lineas.length) {
+    mostrarPagina(`<h1 class="pagina-titulo">Tu carrito</h1>
+      <div class="vacio"><div class="vacio-icono">🛒</div><h2>Tu carrito está vacío</h2>
+      <p>Agregá productos para empezar tu compra.</p><a class="btn-primario" href="#">Ver productos</a></div>`);
+    return;
+  }
+  const total = totalCarrito();
+  mostrarPagina(`${volver('Seguir comprando')}
+    <h1 class="pagina-titulo">Tu carrito</h1>
+    <div class="dos-columnas">
+      <div class="carrito-lista">${lineas.map(l => {
+        const max = cantidadMaxima(l.p);
+        return `<div class="carrito-item">
+          <a class="carrito-foto" href="${esc(linkProducto(l.p))}">${fotoMini(l.p)}</a>
+          <div class="carrito-datos">
+            <a class="n" href="${esc(linkProducto(l.p))}">${esc(l.p.titulo || l.p.nombre)}</a>
+            <div class="d">${esc(specsDe(l.p))}</div>
+            <div class="u">${usd(l.p.precioUSD)} c/u${l.p.tipo === 'pedido' ? ' · a pedido' : ''}</div>
+          </div>
+          <div class="carrito-cant">
+            ${max > 1 ? `<div class="cantidad chica">
+              <button type="button" aria-label="Reducir cantidad" ${on('click', 'cambiarCantidad', l.id, -1)}>−</button>
+              <input type="number" value="${l.cantidad}" readonly aria-label="Cantidad">
+              <button type="button" aria-label="Aumentar cantidad" ${on('click', 'cambiarCantidad', l.id, 1)}>+</button>
+            </div>` : '<span class="unica">Unidad única</span>'}
+            <div class="subtotal">${usd(l.subtotal)}</div>
+            <button class="quitar" type="button" ${on('click', 'quitarDelCarrito', l.id)}>Quitar</button>
+          </div>
+        </div>`; }).join('')}
+        <button class="link-suave" type="button" ${on('click', 'vaciarCarrito')}>Vaciar carrito</button>
+      </div>
+      <aside class="resumen">
+        <h2>Resumen de compra</h2>
+        <div class="resumen-fila"><span>Productos (${unidadesCarrito()})</span><span>${usd(total)}</span></div>
+        <div class="resumen-fila"><span>Envío</span><span>A coordinar</span></div>
+        <div class="resumen-total"><span>Total</span><span>${usd(total)}</span></div>
+        <a class="btn-primario ancho" href="#checkout">Finalizar compra</a>
+        <a class="btn-borde ancho" href="#">Seguir comprando</a>
+        <p class="resumen-nota">Precio en dólar billete. En el próximo paso elegís cómo pagar.</p>
+      </aside>
+    </div>`);
+}
+
+// ── Las formas de pago ───────────────────────────────────────
 
 const ars = n => Math.round(n).toLocaleString('es-AR') + ' pesos';
 
@@ -230,103 +386,117 @@ function formasDePago(p){
 }
 const usd_ = n => 'u$s ' + Math.round(n).toLocaleString('es-AR');
 
-let PEDIDO_ID = null;   // el producto que se está pidiendo
+// ── El checkout ──────────────────────────────────────────────
 
-window.abrirPedido = id => {
-  const p = PRODUCTOS.find(x => x.id === id);
-  if (!p) return;
-  PEDIDO_ID = id;
-  const foto = fotosDe(p)[0];
-  const formas = formasDePago(p);
-  const specs = [p.gb, p.color, p.estado, p.bateria != null && `Batería ${esc(p.bateria)}%`].filter(Boolean).join(' · ');
+/** El resumen del pedido del checkout: los productos y el total según la forma de pago. */
+function resumenCheckout(){
+  return `<h2>Resumen del pedido</h2>
+    ${lineasCarrito().map(l => `<div class="resumen-item">
+      <div class="carrito-foto chica">${fotoMini(l.p)}<span class="cant">${l.cantidad}</span></div>
+      <div class="n">${esc(l.p.titulo || l.p.nombre)}<div class="d">${esc(specsDe(l.p))}</div></div>
+      <div class="s">${usd(l.subtotal)}</div>
+    </div>`).join('')}
+    <div class="resumen-fila"><span>Subtotal</span><span>${usd(totalCarrito())}</span></div>
+    <div class="resumen-fila"><span>Envío</span><span id="resumen-envio">Retiro en el local</span></div>
+    <div class="resumen-total"><span id="total-titulo">Total</span><span id="total-monto"></span></div>`;
+}
 
-  document.getElementById('ficha-contenido').innerHTML = `
-    <button class="ficha-cerrar" ${on('click', 'cerrarFicha')} aria-label="Cerrar">×</button>
-    <form class="pedido-form" id="form-pedido" ${on('submit', 'mandarPedido', '$event', p.id)}>
-      <button type="button" class="volver" ${on('click', 'abrirFicha', p.id)}>← Volver al producto</button>
-      <div class="pedido-titulo">Tu pedido</div>
-      <div class="pedido-prod">
-        ${foto ? `<img src="${esc(foto)}" alt="">` : ''}
-        <div><div class="n">${esc(p.nombre)}</div><div style="font-size:12px;color:var(--text2);">${esc(specs)}</div><div class="p">${usd_(p.precioUSD)}</div></div>
+/**
+ * La página del checkout: contacto, entrega y pago en tarjetas numeradas y el resumen
+ * al costado. Confirmar manda el carrito al Worker, que cobra con el precio publicado.
+ */
+function paginaCheckout(){
+  metaDeProducto(null);
+  if (!lineasCarrito().length) { location.hash = '#carrito'; return; }
+  const formas = formasDePago({ precioUSD: totalCarrito() });
+  const aPedido = lineasCarrito().some(l => l.p.tipo === 'pedido');
+  mostrarPagina(`${volver('Volver al carrito', '#carrito')}
+    <h1 class="pagina-titulo">Finalizar compra</h1>
+    <form class="dos-columnas" id="form-pedido" ${on('submit', 'mandarPedido', '$event')}>
+      <div class="checkout-pasos">
+        <section class="paso">
+          <h2><span class="num">1</span>Información de contacto</h2>
+          <div class="campo"><label for="ck-nombre">Nombre y apellido *</label><input id="ck-nombre" name="nombre" required autocomplete="name"></div>
+          <div class="campo-doble">
+            <div class="campo"><label for="ck-wa">WhatsApp *</label><input id="ck-wa" name="whatsapp" type="tel" required autocomplete="tel" placeholder="223 ..."></div>
+            <div class="campo"><label for="ck-email">Email (para el comprobante)</label><input id="ck-email" name="email" type="email" autocomplete="email"></div>
+          </div>
+        </section>
+        <section class="paso">
+          <h2><span class="num">2</span>Método de entrega</h2>
+          <label class="opcion"><input type="radio" name="entrega" value="retiro" checked ${on('change', 'pintarEnvio')}>
+            <div><div class="t">Retiro en el local</div><div class="d">${esc(LOCAL.direccion || 'Lo pasás a buscar')}${LOCAL.horarios ? ' · ' + esc(LOCAL.horarios) : ''}</div></div><span class="precio-op">Gratis</span></label>
+          <label class="opcion"><input type="radio" name="entrega" value="envio" ${on('change', 'pintarEnvio')}>
+            <div><div class="t">Envío a domicilio</div><div class="d">El costo te lo pasamos por WhatsApp según la zona</div></div><span class="precio-op">A coordinar</span></label>
+          <div class="campo" id="campo-direccion" hidden><label for="ck-dir">Dirección de entrega *</label><textarea id="ck-dir" name="direccion" rows="2" placeholder="Calle y número, ciudad"></textarea></div>
+        </section>
+        <section class="paso">
+          <h2><span class="num">3</span>Método de pago</h2>
+          ${formas.map((f, k) => `<label class="opcion">
+            <input type="radio" name="pago" value="${esc(f.id)}" ${k === 0 ? 'checked' : ''} ${on('change', 'pintarTotal')}>
+            <div><div class="t">${f.titulo}</div><div class="d">${f.detalle}</div></div><span class="precio-op">${f.total}</span>
+          </label>`).join('')}
+          ${aPedido ? '<p class="paso-nota">Tu carrito tiene productos a pedido: te confirmamos la demora antes de entregarlos.</p>' : ''}
+        </section>
       </div>
-      ${p.tipo === 'pedido' ? '<div class="ficha-nota">Este producto se trae a pedido: te confirmamos la demora antes de cobrarlo.</div>' : ''}
-
-      <div class="pedido-sec">¿Cómo querés pagar?</div>
-      ${formas.map((f, k) => `<label class="opcion">
-        <input type="radio" name="pago" value="${esc(f.id)}" ${k === 0 ? 'checked' : ''} ${on('change', 'pintarTotal')}>
-        <div><div class="t">${f.titulo}</div><div class="d">${f.detalle}</div></div>
-      </label>`).join('')}
-
-      <div class="pedido-sec">¿Cómo lo recibís?</div>
-      <label class="opcion"><input type="radio" name="entrega" value="retiro" checked ${on('change', 'pintarEnvio')}>
-        <div><div class="t">Lo paso a buscar</div><div class="d">${esc(LOCAL.direccion || 'por el local')}${LOCAL.horarios ? ' · ' + esc(LOCAL.horarios) : ''}</div></div></label>
-      <label class="opcion"><input type="radio" name="entrega" value="envio" ${on('change', 'pintarEnvio')}>
-        <div><div class="t">Envío a domicilio</div><div class="d">El costo del envío te lo pasamos por WhatsApp según la zona</div></div></label>
-      <div class="campo" id="campo-direccion" hidden><span>Dirección de entrega</span><textarea name="direccion" rows="2" placeholder="Calle y número, ciudad"></textarea></div>
-
-      <div class="pedido-sec">Tus datos</div>
-      <div class="campo"><span>Nombre y apellido</span><input name="nombre" required autocomplete="name"></div>
-      <div class="campo"><span>WhatsApp</span><input name="whatsapp" type="tel" required autocomplete="tel" placeholder="223 ..."></div>
-      <div class="campo"><span>Email (para el comprobante)</span><input name="email" type="email" autocomplete="email"></div>
-
-      <div class="pedido-total"><span class="s" id="total-titulo">Total</span><span class="m" id="total-monto"></span></div>
-      <button class="consultar" type="submit" id="btn-pedido"></button>
-      <button class="btn-sec" type="button" ${on('click', 'pedidoPorWhatsApp', p.id)}>Seguir por WhatsApp</button>
-      <div class="ficha-nota">Al confirmar te escribimos por WhatsApp para coordinar.</div>
-    </form>`;
-
+      <aside class="resumen">
+        ${resumenCheckout()}
+        <button class="btn-primario ancho" type="submit" id="btn-pedido"></button>
+        ${LOCAL.whatsapp ? `<button class="btn-borde ancho" type="button" ${on('click', 'pedidoPorWhatsApp')}>Seguir por WhatsApp</button>` : ''}
+        <p class="resumen-nota">Al confirmar te escribimos por WhatsApp para coordinar.</p>
+      </aside>
+    </form>`);
   window.pintarTotal();
-  const d = document.getElementById('ficha');
-  if (!d.open) d.showModal();
-  d.scrollTop = 0;
-};
+}
 
 window.pintarEnvio = () => {
   const f = document.getElementById('form-pedido');
   const envio = f.entrega.value === 'envio';
   document.getElementById('campo-direccion').hidden = !envio;
   f.direccion.required = envio;
+  document.getElementById('resumen-envio').textContent = envio ? 'A coordinar' : 'Retiro en el local';
 };
 
 window.pintarTotal = () => {
   const f = document.getElementById('form-pedido');
-  const p = PRODUCTOS.find(x => x.id === PEDIDO_ID);
-  if (!p || !f) return;
-  const forma = formasDePago(p).find(x => x.id === f.pago.value);
+  if (!f) return;
+  const forma = formasDePago({ precioUSD: totalCarrito() }).find(x => x.id === f.pago.value);
   document.getElementById('total-monto').textContent = forma.total;
   document.getElementById('total-titulo').textContent = forma.id === 'efectivo' ? 'A pagar en el local' : 'Total';
   document.getElementById('btn-pedido').textContent = forma.boton;
 };
 
 /** El pedido escrito para WhatsApp, con lo que el cliente haya completado hasta ahí. */
-function textoPedido(p, f){
-  const forma = formasDePago(p).find(x => x.id === f.pago.value);
+function textoPedido(f){
+  const forma = formasDePago({ precioUSD: totalCarrito() }).find(x => x.id === f.pago.value);
+  const lineas = lineasCarrito();
   return [
-    `Hola! Quiero comprar: ${p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} (${usd_(p.precioUSD)})`,
+    'Hola! Quiero comprar:',
+    ...lineas.map(l => `• ${l.cantidad > 1 ? l.cantidad + ' x ' : ''}${nombreCompleto(l.p)} (${usd_(l.subtotal)})${l.p.tipo === 'pedido' ? ' — a pedido' : ''}`),
     `Pago: ${forma.titulo} — ${forma.total}`,
     f.entrega.value === 'envio' ? `Entrega: envío a ${f.direccion.value.trim() || '(a confirmar)'}` : 'Entrega: lo paso a buscar',
     f.nombre.value.trim() ? `Nombre: ${f.nombre.value.trim()}` : '',
     f.whatsapp.value.trim() ? `WhatsApp: ${f.whatsapp.value.trim()}` : '',
     f.email.value.trim() ? `Email: ${f.email.value.trim()}` : '',
-    p.tipo === 'pedido' ? '(producto a pedido)' : '',
   ].filter(Boolean).join('\n');
 }
 
 /** "Seguir por WhatsApp": sale con lo que haya, sin exigir los datos. El local cierra la venta como quiera. */
-window.pedidoPorWhatsApp = id => {
-  const p = PRODUCTOS.find(x => x.id === id);
-  if (!LOCAL.whatsapp) { alert('El local todavía no cargó su WhatsApp. Escribinos por Instagram.'); return; }
-  window.open(`https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(textoPedido(p, document.getElementById('form-pedido')))}`, '_blank', 'noopener');
+window.pedidoPorWhatsApp = () => {
+  const url = waDelLocal(textoPedido(document.getElementById('form-pedido')));
+  if (!url) { aviso('El local todavía no cargó su WhatsApp. Escribinos por Instagram.', true); return; }
+  window.open(url, '_blank', 'noopener');
 };
 
 /**
  * Confirmar el pedido. Todo va al Worker: Mercado Pago y tarjeta devuelven a dónde ir a
  * pagar; la reserva en efectivo queda hecha y se muestra la pantalla final.
  */
-window.mandarPedido = async (ev, id) => {
+window.mandarPedido = async ev => {
   ev.preventDefault();
-  const p = PRODUCTOS.find(x => x.id === id);
   const f = ev.target;
+  const lineas = lineasCarrito();
+  if (!lineas.length) { location.hash = '#carrito'; return; }
 
   const btn = document.getElementById('btn-pedido');
   const texto = btn.textContent;
@@ -336,16 +506,20 @@ window.mandarPedido = async (ev, id) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        productoId: p.id, pago: f.pago.value, entrega: f.entrega.value, direccion: f.direccion.value,
+        items: lineas.map(l => ({ id: l.id, cantidad: l.cantidad })),
+        pago: f.pago.value, entrega: f.entrega.value, direccion: f.direccion.value,
         nombre: f.nombre.value, whatsapp: f.whatsapp.value, email: f.email.value,
       }),
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `la tienda respondió ${r.status}`);
-    if (d.url) { location.href = d.url; return; }      // a pagar (Mercado Pago o Stripe)
-    pantallaPedido({ id: d.id, estado: d.estado, producto: p.nombre, pago: f.pago.value });
+    // A pagar (Mercado Pago o Stripe): el carrito se vacía recién cuando vuelve pagado.
+    if (d.url) { location.href = d.url; return; }
+    const producto = lineas.length === 1 ? nombreCompleto(lineas[0].p) : `${unidadesCarrito()} productos`;
+    CARRITO = []; guardarCarrito();
+    pantallaPedido({ id: d.id, estado: d.estado, producto, pago: f.pago.value });
   } catch (e) {
-    alert('No pudimos tomar el pedido: ' + e.message + '\n\nPodés seguir por WhatsApp.');
+    aviso('No pudimos tomar el pedido: ' + e.message + '. Podés seguir por WhatsApp.', true);
     btn.disabled = false; btn.textContent = texto;
   }
 };
@@ -353,30 +527,27 @@ window.mandarPedido = async (ev, id) => {
 /** La pantalla final: qué pasó con el pedido y cómo seguir. */
 function pantallaPedido(d){
   const MENSAJES = {
-    pagado:    ['✅ Pago aprobado', 'Ya tenemos tu pedido. Te escribimos por WhatsApp para coordinar la entrega.'],
-    reservado: ['✅ Reservado', 'Te lo guardamos 24 horas. Pasá por el local a retirarlo y pagalo ahí.'],
-    creado:    ['⏳ Pago pendiente', 'Todavía no nos llegó la confirmación del pago. Si ya pagaste, en unos minutos se actualiza.'],
-    pendiente: ['⏳ Pago en proceso', 'Mercado Pago está procesando el pago. Te avisamos cuando se acredite.'],
-    rechazado: ['❌ El pago no se completó', 'Podés intentar de nuevo con otro medio, o seguir por WhatsApp.'],
-    devuelto:  ['↩️ Pago devuelto', 'Este pago fue devuelto. Si tenés dudas, escribinos.'],
+    pagado:    ['ok', '¡Pedido realizado con éxito!', 'Ya tenemos tu pago. Te escribimos por WhatsApp para coordinar la entrega.'],
+    reservado: ['ok', '¡Pedido reservado!', 'Te lo guardamos 24 horas. Pasá por el local a retirarlo y pagalo ahí.'],
+    creado:    ['espera', 'Pago pendiente', 'Todavía no nos llegó la confirmación del pago. Si ya pagaste, en unos minutos se actualiza.'],
+    pendiente: ['espera', 'Pago en proceso', 'Mercado Pago está procesando el pago. Te avisamos cuando se acredite.'],
+    rechazado: ['mal', 'El pago no se completó', 'Podés intentar de nuevo con otro medio, o seguir por WhatsApp.'],
+    devuelto:  ['espera', 'Pago devuelto', 'Este pago fue devuelto. Si tenés dudas, escribinos.'],
   };
-  const [titulo, detalle] = MENSAJES[d.estado] || ['Pedido recibido', ''];
-  const wa = LOCAL.whatsapp
-    ? `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(`Hola! Hice el pedido ${d.id.slice(0, 8)} (${d.producto}) desde la tienda`)}`
-    : null;
-  document.getElementById('ficha-contenido').innerHTML = `
-    <button class="ficha-cerrar" ${on('click', 'cerrarFicha')} aria-label="Cerrar">×</button>
-    <div class="pedido-form">
-      <div class="pedido-titulo">${titulo}</div>
-      <div class="ficha-desc">${esc(detalle)}</div>
-      <div class="ficha-nota">Pedido ${esc(d.id.slice(0, 8))} · ${esc(d.producto)}</div>
-      <div class="ficha-acciones">
-        ${wa ? `<a class="consultar" href="${wa}" target="_blank" rel="noopener">Seguir por WhatsApp</a>` : ''}
-        <button class="btn-sec" type="button" ${on('click', 'cerrarFicha')}>Volver a la tienda</button>
+  const [clase, titulo, detalle] = MENSAJES[d.estado] || ['ok', 'Pedido recibido', ''];
+  const producto = d.items?.length > 1 ? `${d.items.reduce((s, l) => s + (l.cantidad || 1), 0)} productos` : d.producto;
+  const wa = waDelLocal(`Hola! Hice el pedido ${d.id.slice(0, 8)} (${producto}) desde la tienda`);
+  mostrarPagina(`<div class="resultado ${clase}">
+      <div class="resultado-icono">${clase === 'ok' ? '✓' : clase === 'mal' ? '×' : '…'}</div>
+      <h1>${titulo}</h1>
+      <p>${esc(detalle)}</p>
+      <div class="resultado-dato">Pedido <strong>${esc(d.id.slice(0, 8))}</strong>${producto ? ' · ' + esc(producto) : ''}</div>
+      <div class="resultado-acciones">
+        ${wa ? `<a class="btn-primario" href="${wa}" target="_blank" rel="noopener">Seguir por WhatsApp</a>` : ''}
+        ${d.estado === 'rechazado' ? '<a class="btn-borde" href="#checkout">Intentar de nuevo</a>' : ''}
+        <a class="btn-borde" href="#">Volver a la tienda</a>
       </div>
-    </div>`;
-  const dlg = document.getElementById('ficha');
-  if (!dlg.open) dlg.showModal();
+    </div>`);
 }
 
 /**
@@ -397,61 +568,83 @@ async function pedidoDesdeUrl(){
   const st = q.get('status') || q.get('collection_status');
   if (d.estado === 'creado' && st === 'approved') d.estado = 'pagado';
   if (d.estado === 'creado' && (st === 'rejected' || st === 'cancelled')) d.estado = 'rechazado';
+  // Si el pago no salió, el carrito sigue ahí para reintentar.
+  if (['pagado', 'pendiente', 'reservado'].includes(d.estado)) { CARRITO = []; guardarCarrito(); }
   pantallaPedido(d);
 }
 
-/** Cambia la foto que se ve. Vive en window porque la llama el click del puntito. */
-window.verFoto = (boton, k) => {
-  const caja = boton.closest('.prod-foto');
-  caja.querySelectorAll('img').forEach((img, i) => img.classList.toggle('ver', i === k));
-  caja.querySelectorAll('.punto').forEach((b, i) => b.classList.toggle('on', i === k));
-};
-
 // ── Navegación ───────────────────────────────────────────────
 //
-// Cada vista tiene su link: la portada es la página pelada, un rubro es #r=celulares y
-// una categoría #c=iphone-usados. Los links son <a href> comunes y `hashchange` arma la
-// vista, así el botón "atrás" del celular funciona y los links se pueden pegar en
-// WhatsApp o Instagram.
+// Cada vista tiene su link: la portada es la página pelada, un rubro es #r=celulares,
+// una categoría #c=iphone-usados, un producto #p=id, y #carrito y #checkout. Los links
+// son <a href> comunes y `hashchange` arma la vista, así el botón "atrás" del celular
+// funciona y los links se pueden pegar en WhatsApp o Instagram.
 
 /** El slug de un nombre para el link: "Accesorios de carga" → accesorios-de-carga. */
 const slug = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const categoriaPorSlug = sl => categorias().find(c => slug(c) === sl) || null;
 const rubroPorSlug = sl => rubros().map(r => r.nombre).find(r => slug(r) === sl) || null;
 
-/** El hash de la vista actual, sin contar la ficha abierta. */
+/** El hash del listado donde estaba parado, para volver desde un producto. */
 const hashVista = () => FILTRO !== 'todo' ? '#c=' + slug(FILTRO) : RUBRO ? '#r=' + slug(RUBRO) : '';
 
-/** Abre una categoría (o vuelve a la portada con 'todo'). */
-window.filtrar = cat => { location.hash = cat === 'todo' ? '' : '#c=' + slug(cat); };
+const POR_PAGINA = 20;
+let PAGINA = 1, PRECIO_MIN = '', PRECIO_MAX = '';
 
-/** Un filtro de la página de rubro: condición, entrega u orden. No va en la URL. */
+/** Un filtro del costado: categoría, condición, entrega u orden. Solo la categoría va en la URL. */
 window.setFiltro = (clave, valor, ev) => {
-  if (ev) ev.preventDefault();
+  if (ev?.preventDefault) ev.preventDefault();
+  if (clave === 'cat') { location.hash = valor; return; }
   if (clave === 'cond') COND = valor;
   else if (clave === 'entrega') ENTREGA = valor;
   else if (clave === 'orden') ORDEN = valor;
-  pintar();
+  PAGINA = 1;
+  pintarFiltros();
+  pintarProductos();
 };
+window.setPrecio = () => {
+  PRECIO_MIN = document.getElementById('precio-min').value;
+  PRECIO_MAX = document.getElementById('precio-max').value;
+  PAGINA = 1;
+  document.getElementById('precio-limpiar').hidden = !(PRECIO_MIN || PRECIO_MAX);
+  pintarProductos();
+};
+window.limpiarPrecio = () => { PRECIO_MIN = PRECIO_MAX = ''; PAGINA = 1; pintarFiltros(); pintarProductos(); };
+window.limpiarFiltros = () => {
+  COND = ENTREGA = PRECIO_MIN = PRECIO_MAX = ''; ORDEN = 'relevancia'; PAGINA = 1;
+  document.getElementById('q').value = '';
+  if (location.hash && !/^#p=/.test(location.hash)) { location.hash = ''; return; }
+  pintarFiltros(); pintarProductos();
+};
+window.irPagina = n => { PAGINA = n; pintarProductos(); document.getElementById('vista-tienda').querySelector('.tienda').scrollIntoView({ behavior: 'smooth' }); };
 
-window.toggleMenu = () => { const m = document.getElementById('menu'); m.hidden = !m.hidden; };
-const cerrarMenu = () => { document.getElementById('menu').hidden = true; };
+window.toggleMenu = () => document.getElementById('menu').classList.toggle('abierto');
+const cerrarMenu = () => document.getElementById('menu').classList.remove('abierto');
+window.toggleFiltros = () => document.getElementById('filtros').classList.toggle('abierto');
 window.cerrarTeclado = () => document.getElementById('q').blur();
+window.irAContacto = ev => { ev.preventDefault(); cerrarMenu(); document.getElementById('contacto').scrollIntoView({ behavior: 'smooth' }); };
 
-/** Arma la vista que pide la URL: #p=id es una ficha; #c y #r, una categoría o un rubro. */
+/** Arma la vista que pide la URL. */
 function desdeUrl(){
+  cerrarMenu();
   const p = /^#p=(.+)$/.exec(location.hash);
-  if (p) { window.abrirFicha(decodeURIComponent(p[1])); return; }
+  if (p) { paginaProducto(decodeURIComponent(p[1])); return; }
+  if (location.hash === '#carrito') { paginaCarrito(); return; }
+  if (location.hash === '#checkout') { paginaCheckout(); return; }
+  if (location.hash === '#contacto') return;
   const c = /^#c=(.+)$/.exec(location.hash);
   const r = /^#r=(.+)$/.exec(location.hash);
   const cat = c && categoriaPorSlug(decodeURIComponent(c[1]));
   const rub = r && rubroPorSlug(decodeURIComponent(r[1]));
   FILTRO = cat || 'todo';
   RUBRO = cat ? rubroDe(cat) : rub || null;
+  PAGINA = 1;
   if (!cat && !rub) document.getElementById('q').value = '';
-  cerrarMenu();
-  pintar();
-  document.getElementById('ficha').close();
+  document.getElementById('filtros').classList.remove('abierto');
+  metaDeProducto(null);
+  mostrarTienda();
+  pintarFiltros();
+  pintarProductos();
   window.scrollTo({ top: 0 });
 }
 
@@ -485,15 +678,15 @@ function tarjetaGrupo(lista){
   const gbs = [...new Set(lista.map(x => x.gb).filter(Boolean))].sort((a, b) => numGb(a) - numGb(b));
   const colores = [...new Set(lista.map(x => x.color).filter(Boolean))];
   const desde = Math.min(...lista.map(x => Number(x.precioUSD) || Infinity));
-  const foto = fotosDe(p)[0];
-  // Hay que elegir capacidad y color: el botón abre la ficha, no el pedido.
+  // Hay que elegir capacidad y color: eso se hace en la página del producto.
   return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
-    <div class="prod-foto">${sello(p)}${foto ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" ${on('error', 'quitarImagen', '$this')}>` : esc(inicial(p.nombre))}</div>
-    <div class="prod-nombre">${esc(p.nombre)}</div>
-    <div class="chips">${gbs.length ? `<span class="chip">${esc(gbs.join(' · '))}</span>` : ''}${colores.length > 1 ? `<span class="chip">${colores.length} colores</span>` : ''}</div>
-    <div class="precio"><span class="desde">desde</span>${usd(desde)}</div>
-    <div class="precio-nota">${notaPrecio(p)}</div>
-    ${acciones(p, 'Ver opciones', 'abrirFicha')}
+    <div class="prod-foto">${sello(p)}${fotoTarjeta(p)}</div>
+    <div class="prod-info">
+      <h3 class="prod-nombre">${esc(p.nombre)}</h3>
+      <div class="chips">${gbs.length ? `<span class="chip">${esc(gbs.join(' · '))}</span>` : ''}${colores.length > 1 ? `<span class="chip">${colores.length} colores</span>` : ''}</div>
+      <div class="precio"><span class="desde">desde</span>${usd(desde)}</div>
+      <a class="btn-ver" href="${esc(linkProducto(p))}" data-stop>Ver opciones</a>
+    </div>
   </article>`;
 }
 
@@ -501,7 +694,7 @@ function tarjetaGrupo(lista){
 const cuenta = lista => new Set(lista.map(p => claveGrupo(p) && GRUPOS.has(claveGrupo(p)) ? claveGrupo(p) : p.id)).size;
 
 /** Las entradas de una lista de productos: cada grupo una sola vez, en el lugar de su primer producto. */
-function entradas(lista){
+function entradasLista(lista){
   const vistos = new Set(), out = [];
   for (const p of lista) {
     const g = grupoDe(p);
@@ -511,8 +704,9 @@ function entradas(lista){
     vistos.add(k);
     out.push(tarjetaGrupo(g));
   }
-  return out.join('');
+  return out;
 }
+const entradas = lista => entradasLista(lista).join('');
 
 /** Los selectores de capacidad y color de la ficha, para la variante elegida. */
 function selectoresVariante(p, grupo){
@@ -556,17 +750,15 @@ const pasaFiltros = p => (!COND || (p.condicion || 'nuevo') === COND) && (!ENTRE
 const ordenar = lista => ORDEN === 'menor' ? [...lista].sort((a, b) => a.precioUSD - b.precioUSD)
   : ORDEN === 'mayor' ? [...lista].sort((a, b) => b.precioUSD - a.precioUSD) : lista;
 
+const pasaPrecio = p => (!PRECIO_MIN || p.precioUSD >= Number(PRECIO_MIN)) && (!PRECIO_MAX || p.precioUSD <= Number(PRECIO_MAX));
+
 // ── Las pantallas ────────────────────────────────────────────
 
-/** El menú de rubros de la barra, el desplegable y las burbujas de la portada. */
+/** Los rubros de la cabecera y las burbujas de la portada. */
 function pintarNavegacion(){
   const rs = rubros();
-  document.getElementById('nav-rubros').innerHTML = rs.map(r =>
-    `<a href="#r=${slug(r.nombre)}" class="${RUBRO === r.nombre ? 'on' : ''}">${esc(r.nombre)}</a>`).join('');
-  document.getElementById('menu-contenido').innerHTML = `<div class="menu-cols">${rs.map(r => `<div class="menu-rubro">
-      <a class="t" href="#r=${slug(r.nombre)}">${esc(r.nombre)}</a>
-      ${r.categorias.map(c => `<a class="c" href="#c=${slug(c)}">${esc(c)}<span class="n">${cuenta(deCategoria(c))}</span></a>`).join('')}
-    </div>`).join('')}</div>`;
+  document.getElementById('nav-rubros').innerHTML = rs.slice(0, 4).map(r =>
+    `<a class="nav-link" href="#r=${slug(r.nombre)}">${esc(r.nombre)}</a>`).join('');
   // La burbuja lleva la foto de algún producto del rubro; si ninguno tiene, un ícono.
   document.getElementById('burbujas').innerHTML = rs.map(r => {
     const icono = ICONOS[r.nombre] || '📦';
@@ -589,78 +781,108 @@ function pintarMiga(q){
 
 const textoConteo = n => `${n} producto${n === 1 ? '' : 's'}`;
 
-/** La página de un rubro o de una categoría: filtros a la izquierda y la grilla. */
-function pintarListado(){
-  const cat = FILTRO !== 'todo' ? FILTRO : null;
-  const todos = delRubro(RUBRO);
-  const base = cat ? todos.filter(p => catDe(p) === cat) : todos;
-  const lista = ordenar(base.filter(pasaFiltros));
+/** Los filtros del costado: categorías por rubro, condición, entrega, precio y orden. */
+function pintarFiltros(){
+  const base = RUBRO ? (FILTRO !== 'todo' ? deCategoria(FILTRO) : delRubro(RUBRO)) : PRODUCTOS;
   const conds = new Set(base.map(p => p.condicion || 'nuevo'));
   const entregas = new Set(base.map(p => tipoDe(p) === 'pedido' ? 'pedido' : 'inmediato'));
-  const opciones = (clave, actual, pares) => pares.map(([v, t]) =>
-    `<a class="f${actual === v ? ' on' : ''}" href="#" ${on('click', 'setFiltro', clave, v, '$event')}>${t}</a>`).join('');
+  const radio = (grupo, clave, valor, texto, marcado, extra = '') => `<label class="radio${extra}">
+    <input type="radio" name="${grupo}" ${marcado ? 'checked' : ''} ${on('change', 'setFiltro', clave, valor)}><span>${texto}</span></label>`;
+  const activos = !!(RUBRO || COND || ENTREGA || PRECIO_MIN || PRECIO_MAX);
 
-  const filtros = `<aside class="filtros">
-    <div class="grupo"><div class="t">Categorías</div>
-      <a class="f${!cat ? ' on' : ''}" href="#r=${slug(RUBRO)}">Todo ${esc(RUBRO)}<span class="n">${cuenta(todos)}</span></a>
-      ${rubros().find(r => r.nombre === RUBRO)?.categorias.map(c =>
-        `<a class="f${c === cat ? ' on' : ''}" href="#c=${slug(c)}">${esc(c)}<span class="n">${cuenta(deCategoria(c))}</span></a>`).join('') || ''}
+  document.getElementById('filtros-grupos').innerHTML = `
+    ${activos ? `<div class="filtros-activos"><span>Filtros activos</span><button type="button" ${on('click', 'limpiarFiltros')}>Limpiar todos</button></div>` : ''}
+    <div class="grupo"><h3>Categoría</h3>
+      ${radio('f-cat', 'cat', '', 'Todas las categorías', !RUBRO)}
+      ${rubros().map(r => radio('f-cat', 'cat', '#r=' + slug(r.nombre), `${esc(r.nombre)}<em>${cuenta(delRubro(r.nombre))}</em>`, RUBRO === r.nombre && FILTRO === 'todo', ' rubro')
+        + (RUBRO === r.nombre && r.categorias.length > 1 ? r.categorias.map(c =>
+          radio('f-cat', 'cat', '#c=' + slug(c), `${esc(c)}<em>${cuenta(deCategoria(c))}</em>`, FILTRO === c, ' sub')).join('') : '')).join('')}
     </div>
-    ${conds.size > 1 ? `<div class="grupo"><div class="t">Condición</div>${opciones('cond', COND, [['', 'Todos'], ['nuevo', 'Nuevos'], ['usado', 'Usados']])}</div>` : ''}
-    ${entregas.size > 1 ? `<div class="grupo"><div class="t">Entrega</div>${opciones('entrega', ENTREGA, [['', 'Todos'], ['inmediato', 'En el local'], ['pedido', 'A pedido']])}</div>` : ''}
-    <div class="grupo"><div class="t">Ordenar</div>
+    ${conds.size > 1 ? `<div class="grupo"><h3>Condición</h3>${[['', 'Todos'], ['nuevo', 'Nuevos'], ['usado', 'Usados']].map(([v, t]) => radio('f-cond', 'cond', v, t, COND === v)).join('')}</div>` : ''}
+    ${entregas.size > 1 ? `<div class="grupo"><h3>Entrega</h3>${[['', 'Todos'], ['inmediato', 'En el local'], ['pedido', 'A pedido']].map(([v, t]) => radio('f-ent', 'entrega', v, t, ENTREGA === v)).join('')}</div>` : ''}
+    <div class="grupo"><h3>Rango de precio (u$s)</h3>
+      <div class="precios">
+        <input type="number" id="precio-min" placeholder="Mínimo" min="0" inputmode="numeric" aria-label="Precio mínimo" value="${esc(PRECIO_MIN)}" ${on('input', 'setPrecio')}>
+        <input type="number" id="precio-max" placeholder="Máximo" min="0" inputmode="numeric" aria-label="Precio máximo" value="${esc(PRECIO_MAX)}" ${on('input', 'setPrecio')}>
+      </div>
+      <button class="limpiar" id="precio-limpiar" type="button" ${PRECIO_MIN || PRECIO_MAX ? '' : 'hidden'} ${on('click', 'limpiarPrecio')}>Limpiar</button>
+    </div>
+    <div class="grupo"><h3>Ordenar</h3>
       <select aria-label="Ordenar" ${on('change', 'setFiltro', 'orden', '$value')}>${[['relevancia', 'Más relevantes'], ['menor', 'Menor precio'], ['mayor', 'Mayor precio']].map(([v, t]) =>
         `<option value="${v}"${ORDEN === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
-    </div>
-  </aside>`;
-
-  document.getElementById('salida').innerHTML = `<h1 class="listado-titulo">${esc(cat || RUBRO)}</h1>
-    <div class="listado">${filtros}<div>
-      <div class="conteo">${textoConteo(cuenta(lista))}</div>
-      ${lista.length ? `<div class="grilla">${entradas(lista)}</div>` : '<div class="aviso">No hay productos con esos filtros.</div>'}
-    </div></div>`;
+    </div>`;
+  document.querySelectorAll('#nav-rubros a').forEach(a => a.classList.toggle('on', a.textContent === RUBRO));
 }
 
+/** La paginación de una grilla: anterior, los números cercanos y siguiente. */
+function paginacion(total){
+  const paginas = Math.ceil(total / POR_PAGINA);
+  if (paginas < 2) return '';
+  const nums = [];
+  for (let n = 1; n <= paginas; n++) {
+    if (n === 1 || n === paginas || Math.abs(n - PAGINA) <= 1) nums.push(`<button type="button" class="pag-num${n === PAGINA ? ' on' : ''}" ${n === PAGINA ? 'aria-current="page"' : ''} ${on('click', 'irPagina', n)}>${n}</button>`);
+    else if (Math.abs(n - PAGINA) === 2) nums.push('<span class="pag-puntos">…</span>');
+  }
+  return `<nav class="paginacion" aria-label="Paginación de productos">
+    <button type="button" class="pag-btn" ${PAGINA === 1 ? 'disabled' : ''} ${on('click', 'irPagina', PAGINA - 1)}>‹ Anterior</button>
+    <div class="pag-nums">${nums.join('')}</div>
+    <button type="button" class="pag-btn" ${PAGINA === paginas ? 'disabled' : ''} ${on('click', 'irPagina', PAGINA + 1)}>Siguiente ›</button>
+  </nav>`;
+}
+
+/** Una grilla paginada. Los grupos de variantes cuentan como una tarjeta. */
+function grilla(lista){
+  const tarjetas = entradasLista(lista);
+  PAGINA = Math.min(PAGINA, Math.max(1, Math.ceil(tarjetas.length / POR_PAGINA)));
+  return `<div class="grilla">${tarjetas.slice((PAGINA - 1) * POR_PAGINA, PAGINA * POR_PAGINA).join('')}</div>${paginacion(tarjetas.length)}`;
+}
+
+const vacio = (icono, titulo, detalle) => `<div class="vacio"><div class="vacio-icono">${icono}</div><h2>${titulo}</h2><p>${detalle}</p></div>`;
+
 /**
- * Qué se ve: buscando, todo lo que coincida en una grilla; adentro de un rubro o una
- * categoría, su página con filtros; si no, la portada con una sección por rubro.
+ * Qué se ve a la derecha: buscando o filtrando, una grilla con todo lo que coincida;
+ * adentro de un rubro o una categoría, la suya; si no, la portada con una sección por
+ * rubro, sus productos deslizando y "ver todos".
  */
-function pintar(){
+function pintarProductos(){
   const q = document.getElementById('q').value.trim().toLowerCase();
   const coincide = p => `${p.titulo || ''} ${p.nombre} ${p.gb} ${p.color} ${p.estado} ${catDe(p)}`.toLowerCase().includes(q);
   const salida = document.getElementById('salida');
   const conteo = document.getElementById('conteo');
   conteo.textContent = '';
   pintarMiga(q);
-  document.getElementById('burbujas').hidden = !!(q || RUBRO);
-  document.querySelectorAll('#nav-rubros a').forEach(a => a.classList.toggle('on', !q && a.textContent === RUBRO));
+  const filtrando = !!(COND || ENTREGA || PRECIO_MIN || PRECIO_MAX || ORDEN !== 'relevancia');
+  const portada = !q && !RUBRO && !filtrando;
+  document.getElementById('burbujas').hidden = !portada;
+  document.getElementById('portada').hidden = !portada;
 
   if (!PRODUCTOS.length) {
-    salida.innerHTML = '<div class="aviso">Por el momento no hay equipos publicados. Escribinos y te contamos qué hay.</div>';
+    salida.innerHTML = vacio('📦', 'Próximamente productos disponibles', 'Por el momento no hay equipos publicados. Escribinos y te contamos qué hay.');
     return;
   }
 
-  if (q) {
-    const lista = ordenar(PRODUCTOS.filter(p => coincide(p) && pasaFiltros(p)));
-    conteo.textContent = lista.length ? `${textoConteo(cuenta(lista))} para “${q}”` : '';
-    salida.innerHTML = lista.length ? `<div class="grilla">${entradas(lista)}</div>` : '<div class="aviso">No encontré nada con esa búsqueda.</div>';
+  if (!portada) {
+    const base = q ? PRODUCTOS.filter(coincide) : RUBRO ? (FILTRO !== 'todo' ? deCategoria(FILTRO) : delRubro(RUBRO)) : PRODUCTOS;
+    const lista = ordenar(base.filter(p => pasaFiltros(p) && pasaPrecio(p)));
+    const titulo = q ? '' : `<h2 class="listado-titulo">${esc(FILTRO !== 'todo' ? FILTRO : RUBRO || 'Todos los productos')}</h2>`;
+    conteo.textContent = lista.length ? textoConteo(cuenta(lista)) + (q ? ` para “${q}”` : '') : '';
+    salida.innerHTML = titulo + (lista.length ? grilla(lista) : vacio('🔍', 'No se encontraron productos', 'Probá con otra búsqueda o filtro.'));
     return;
   }
 
-  if (RUBRO) { pintarListado(); return; }
-
-  // La portada: una sección por rubro, con sus productos deslizando y "ver todos".
   salida.innerHTML = rubros().map(r => {
     const lista = delRubro(r.nombre);
     return `<section class="seccion">
       <div class="seccion-cab">
         <h2 class="seccion-titulo">${esc(r.nombre)}</h2>
-        <a class="vertodos" href="#r=${slug(r.nombre)}">Ver todos (${cuenta(lista)}) ›</a>
+        <a class="vertodos" href="#r=${slug(r.nombre)}">Ver todos (${cuenta(lista)}) <span aria-hidden="true">→</span></a>
       </div>
-      <div class="fila">${entradas(lista.slice(0, 12))}</div>
+      <div class="fila">${entradasLista(lista.slice(0, 12)).join('')}</div>
     </section>`;
   }).join('');
 }
+/** Todo junto, para quien lo llame desde afuera. */
+function pintar(){ pintarFiltros(); pintarProductos(); }
 
 function hace(iso){
   const min = Math.floor((Date.now() - new Date(iso)) / 60000);
@@ -705,25 +927,26 @@ function pie(actualizado){
     LOCAL = d.local || {};
     COBRO = d.cobro || {};
     CATEGORIAS = Array.isArray(d.categorias) ? d.categorias : [];
+    leerCarrito();
+    pintarGloboCarrito();
 
-    if(LOCAL.nombre) document.getElementById('marca').textContent = LOCAL.nombre;
-    const wa = document.getElementById('cab-wa');
-    if (LOCAL.whatsapp) { wa.href = `https://wa.me/${String(LOCAL.whatsapp).replace(/\D/g, '')}`; wa.hidden = false; }
+    if (LOCAL.nombre) { document.getElementById('marca').textContent = LOCAL.nombre; document.getElementById('portada-titulo').textContent = LOCAL.nombre; }
+    const wa = waDelLocal();
+    if (wa) for (const id of ['cab-wa', 'wa-flotante']) { const a = document.getElementById(id); a.href = wa; a.hidden = false; }
     document.getElementById('pie').innerHTML = pie(d.actualizado);
 
     pintarNavegacion();
     desdeUrl();
     pedidoDesdeUrl();
   }catch(e){
-    document.getElementById('salida').innerHTML =
-      '<div class="aviso">No pudimos cargar la tienda en este momento. Probá de nuevo en un rato.</div>';
+    document.getElementById('salida').innerHTML = vacio('⚠️', 'No pudimos cargar la tienda', 'Probá de nuevo en un rato.');
   }
 })();
 
-document.getElementById('q').addEventListener('input', pintar);
+document.getElementById('q').addEventListener('input', () => { PAGINA = 1; pintarProductos(); });
 window.addEventListener('hashchange', desdeUrl);
-// El menú se cierra tocando afuera.
+// El menú del celular se cierra tocando afuera.
 document.addEventListener('click', e => { if (!e.target.closest('#cab')) cerrarMenu(); });
 
 // Compatibilidad de los controles HTML al pasar a módulos ES.
-Object.assign(window, { tarjeta, linkWhatsApp, metaDeProducto, formasDePago, textoPedido, pantallaPedido, pedidoDesdeUrl, armarGrupos, tarjetaGrupo, entradas, selectoresVariante, categorias, rubros, pintar, hace });
+Object.assign(window, { tarjeta, linkWhatsApp, metaDeProducto, formasDePago, textoPedido, pantallaPedido, pedidoDesdeUrl, armarGrupos, tarjetaGrupo, entradas, selectoresVariante, categorias, rubros, pintar, hace, paginaProducto, paginaCarrito, paginaCheckout });
