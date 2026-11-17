@@ -19,7 +19,7 @@ vigentes; los números de línea y el layout monolítico son referencias histór
 - `npm run abrir` / `npm run detener`: iniciar o detener en esta PC.
 - `npm run dev`: desarrollo.
 - `npm run check`: linter, pruebas Node/dominio, compilación y navegador.
-- `npm run test:reglas`: pruebas Firestore con emulador demo y Java 21.
+- `npm run test:reglas`: pruebas de reglas de Firestore y de Storage con emulador demo y Java 21.
 - `npm run build:pages`: interfaz estática en `dist-pages/` para GitHub Pages.
 
 ## Deploy actual
@@ -83,7 +83,7 @@ Cada documento lleva `userId`. Toda escritura pasa por `withUser(obj)` y toda le
 
 Colecciones: `gastos`, `ingresos`, `stock`, `consig`, `pagos_consig`, `gastos_fijos`, `pagos_fijos`, `reparaciones`, `inventario`, `repuestos`, `precios_repuestos`, `clientes`, `cierres`, `encargues`, `amorts`, `cola_impresion`, `conversaciones` (DMs de Instagram: la escribe el Worker `ig-bot`, un doc por cliente), `pedidos` (compras del catálogo web: las crea el Worker `tienda`, el dueño solo las cierra), más el doc singular `config/{uid}`.
 
-Como la config de Firebase está en el HTML de un repo público, **las Security Rules son la única barrera real**. `firestore.rules` en la raíz es la fuente versionada; si agregás una colección hay que sumarla ahí también. Deploy: `firebase deploy --only firestore:rules` (y `--only storage` para `storage.rules`, las fotos). `firebase-tools` está instalado y logueado; `firebase deploy --only firestore:rules --dry-run` compila el archivo y avisa los errores sin publicar nada.
+Como la config de Firebase está en el HTML de un repo público, **las Security Rules son la única barrera real**. `firestore.rules` en la raíz es la fuente versionada; si agregás una colección hay que sumarla ahí también. Deploy: `firebase deploy --only firestore:rules` (y `--only storage --interactive --force` para `storage.rules`, las fotos: sin `--interactive` el CLI no revisa el rol que `firestore.get()` necesita). `firebase-tools` está instalado y logueado; `firebase deploy --only firestore:rules --dry-run` compila el archivo y avisa los errores sin publicar nada.
 
 ### Ciclo de datos: snapshot → array → render debounced
 

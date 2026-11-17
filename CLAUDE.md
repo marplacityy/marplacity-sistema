@@ -19,7 +19,7 @@ npm test                  # node --test tests/*.test.js (HTTP, estructura, segur
 npm run test:dominio      # tests puros sin red: catálogo, tienda, parseo del bot
 npm run test:browser      # Playwright: levanta tres servidores solo (ver playwright.config.js)
 npm run check             # lint + test + test:dominio + build + test:browser: lo mismo que corre CI
-npm run test:reglas       # reglas de Firestore en el emulador (necesita Java 21)
+npm run test:reglas       # reglas de Firestore y de Storage en el emulador (necesita Java 21)
 npm run build:pages       # interfaz estática en dist-pages/ con base /marplacity-sistema/
 ```
 
@@ -114,8 +114,10 @@ Colecciones: `gastos`, `ingresos`, `stock`, `consig`, `pagos_consig`, `gastos_fi
 firebase deploy --only firestore:rules --dry-run   # compila sin publicar
 firebase deploy --only firestore:rules             # publica (firebase-tools está logueado en esta PC)
 firebase deploy --only firestore:indexes
-firebase deploy --only storage                     # storage.rules: las fotos
+firebase deploy --only storage --interactive --force   # storage.rules: las fotos
 ```
+
+`storage.rules` usa `firestore.get()`, y para eso Storage necesita un rol sobre Firestore que el CLI solo revisa y otorga en modo interactivo: desde una sesión de agente o sin terminal lo saltea sin avisar. `--interactive --force` hace que lo revise y lo otorgue sin preguntar. Las reglas de Storage también tienen pruebas (`tests/reglas/storage.test.js`): del 12/10 al 17/11/2026 nadie pudo subir una foto porque la regla llamaba a `matches()` sobre un comodín `{archivo=**}`, que es una ruta y no un texto.
 
 ### Ciclo de datos: snapshot → contextoApp → render debounced
 

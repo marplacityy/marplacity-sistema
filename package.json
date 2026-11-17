@@ -18,7 +18,7 @@
     "test:browser": "playwright test",
     "lint": "eslint src server scripts tests vite.config.js playwright.config.js",
     "check": "npm run lint && npm test && npm run test:dominio && npm run build && npm run test:browser",
-    "test:reglas": "npx --yes firebase-tools@15.30.0 emulators:exec --only firestore --project demo-marplacity \"node --test tests/reglas/*.test.js\"",
+    "test:reglas": "npx --yes firebase-tools@15.30.0 emulators:exec --only firestore,storage --project demo-marplacity \"node --test --test-concurrency=1 tests/reglas/*.test.js\"",
     "build:pages": "vite build --mode pages"
   },
   "dependencies": {

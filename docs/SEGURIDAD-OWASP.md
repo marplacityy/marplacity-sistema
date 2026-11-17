@@ -46,7 +46,7 @@ npm run test:reglas
 npm audit --audit-level=high
 ```
 
-`check` ejecuta linter, pruebas Node, pruebas de dominio, compilación y navegador. `test:reglas` usa Java 21 y Firebase CLI fijado a 15.30.0, con proyecto **demo-marplacity** y emulador **127.0.0.1:8085**. El archivo de pruebas rechaza ejecutarse sin ese emulador. Las pruebas de navegador de operaciones sustituyen Firebase por datos ficticios y bloquean las APIs externas.
+`check` ejecuta linter, pruebas Node, pruebas de dominio, compilación y navegador. `test:reglas` usa Java 21 y Firebase CLI fijado a 15.30.0, con proyecto **demo-marplacity** y los emuladores de Firestore (**127.0.0.1:8085**) y Storage (**127.0.0.1:9199**). Los archivos de pruebas rechazan ejecutarse sin esos emuladores. Las pruebas de navegador de operaciones sustituyen Firebase por datos ficticios y bloquean las APIs externas.
 
 ## Pendientes para proteger también los servicios publicados
 

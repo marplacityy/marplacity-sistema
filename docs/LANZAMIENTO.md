@@ -73,9 +73,12 @@ las dos tiendas, el sistema y el bot arman las URLs con ella.
   `server/services/tienda/fotos.js`).
 - **Quién escribe**: `storage.rules`. Lectura pública; escritura solo del dueño del local
   (el `userId` de `catalogo/publico`, igual que en `firestore.rules`), solo imágenes y
-  hasta 8 MB. Publicar: `firebase deploy --only storage`. La primera vez que se publica,
-  Firebase pide permiso para que Storage lea Firestore (`firestore.get` en las reglas):
-  aceptarlo.
+  hasta 8 MB. Publicar: `firebase deploy --only storage --interactive --force`. Storage
+  necesita permiso para leer Firestore (`firestore.get` en las reglas, rol
+  `roles/firebaserules.firestoreServiceAgent`): el CLI lo revisa y lo otorga solo en modo
+  interactivo, y sin terminal lo saltea sin avisar; con esas dos opciones lo otorga sin
+  preguntar. Las reglas se prueban en el emulador con `npm run test:reglas`
+  (`tests/reglas/storage.test.js`).
 - **Lectura pública por URL fija**: las URLs `storage.googleapis.com/...` no pasan por las
   reglas de Firebase, sino por los permisos del bucket en Google Cloud. Una sola vez:
   Google Cloud Console → Cloud Storage → bucket `mis-gastos-21e7b.firebasestorage.app` →

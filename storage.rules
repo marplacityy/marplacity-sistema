@@ -14,11 +14,18 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/catalogo/publico).data.userId == request.auth.uid;
     }
 
-    match /fotos/{archivo=**} {
+    match /fotos/{todo=**} {
       allow read: if true;
-      // Nombres como los arma el sistema (iphone-15-black-2.jpg), sin subcarpetas; solo
-      // imágenes y hasta 8 MB. No se borra desde el sistema: una foto que se saca de un
-      // producto queda en la carpeta, sin asignar.
+    }
+
+    // Un solo tramo, `{archivo}` y no `{archivo=**}`: así no entran subcarpetas y, sobre
+    // todo, `archivo` es un texto. Con `=**` es una ruta, que no tiene `matches()`: la
+    // regla fallaba siempre y nadie podía subir, ni el dueño (pasó del 12/10 al 17/11/2026).
+    // tests/reglas/storage.test.js lo prueba en el emulador.
+    match /fotos/{archivo} {
+      // Nombres como los arma el sistema (iphone-15-black-2.jpg); solo imágenes y hasta
+      // 8 MB. No se borra desde el sistema: una foto que se saca de un producto queda en
+      // la carpeta, sin asignar.
       allow create, update: if esDuenoDelLocal()
         && archivo.matches('[a-z0-9][a-z0-9-]{0,118}[.](jpe?g|png|webp)')
         && request.resource.contentType.matches('image/(jpeg|png|webp)')
