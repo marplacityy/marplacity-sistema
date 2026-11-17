@@ -12,7 +12,7 @@
      no se vea hasta que el teléfono decida actualizar, y el sello de versión del
      sidebar —que es como confirmamos que un deploy llegó— dejaría de servir. -->
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#1A1917">
+<meta name="theme-color" content="#d97757">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="/icon-192.png" type="image/png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -20,8 +20,9 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MarplaCity">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/src/client/styles/sistema.css">
+<link rel="stylesheet" href="/src/client/styles/tema-ecommodo.css">
 </head>
 <body>
 
@@ -29,7 +30,7 @@
 <!-- LOGIN -->
 <div class="login-screen" id="login-screen">
   <div class="login-card">
-    <div class="login-logo">Mis Gastos <span>/ app</span></div>
+    <div class="login-logo"><span class="logo-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg></span>MarplaCity</div>
     <p class="login-sub">Ingresá para acceder a tus datos.</p>
     <div class="field"><label>Email</label><input type="email" id="login-email" autocomplete="username" placeholder="tu@email.com"></div>
     <div class="field"><label>Contraseña</label><input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••"></div>
@@ -668,7 +669,7 @@
 
 <div class="shell">
   <aside class="sidebar">
-    <div class="logo">Mis Gastos <span>/ app</span><span class="sync-dot" id="sync-dot"></span><div style="font-size:9px;color:var(--text3);font-weight:400;margin-top:2px;">v2026.11.04-A · Node.js</div></div>
+    <div class="logo"><span class="logo-icono"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg></span>MarplaCity<span class="sync-dot" id="sync-dot"></span><div class="logo-version">v2026.11.04-A · Node.js</div></div>
     <div class="global-search"><input type="text" id="gs-input" placeholder="🔍 Buscar en todo..." autocomplete="off"></div>
     <nav>
       <div class="nav-section">Principal</div>

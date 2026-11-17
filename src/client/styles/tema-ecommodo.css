@@ -1,0 +1,136 @@
+/*
+ * La estética de Ecommodo sobre el sistema: la misma paleta crema y terracota, Poppins,
+ * los radios, las sombras y el movimiento de sus botones y tarjetas. Va después de
+ * sistema.css y solo pisa la apariencia: ninguna regla de acá cambia qué se muestra ni
+ * dónde, así que sacando este archivo el sistema vuelve a verse como antes.
+ */
+:root{
+  --bg:#faf8f5;--surface:#fdfcfb;--surface-hover:#f8f6f2;--border:#e8e3db;
+  --text:#2d2a26;--text2:#6b6760;--text3:#9c9790;
+  --accent:#d97757;--accent-hover:#c66544;--accent-light:#fef4f0;--accent-fg:#fff;
+  --neg:#d85d5d;--neg-bg:#fceaea;--per:#6593c4;--per-bg:#eef4fb;
+  --green:#52a374;--green-bg:#e8f5ee;--inc:#52a374;--inc-bg:#e8f5ee;
+  --warn:#e09b4d;--warn-bg:#fef5e8;
+  --radius:14px;--radius-sm:10px;--radius-xs:6px;
+  --font:'Poppins',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --shadow-sm:0 1px 3px 0 rgba(45,42,38,.08);
+  --shadow-md:0 4px 8px -2px rgba(45,42,38,.12),0 2px 4px -1px rgba(45,42,38,.06);
+  --shadow-lg:0 12px 24px -4px rgba(45,42,38,.15),0 4px 8px -2px rgba(45,42,38,.08);
+  --ease:cubic-bezier(.4,0,.2,1);
+}
+
+html{scroll-behavior:smooth;}
+body{
+  font-family:var(--font);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  background:linear-gradient(135deg,#faf8f5 0%,#f5f1eb 100%);background-attachment:fixed;
+}
+button,input,select,textarea{font-family:var(--font);}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#e8e3db;border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:#d97757;}
+
+/* ── Sidebar ── */
+.sidebar{width:260px;padding:0;}
+.logo{
+  display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;
+  font-size:1.25rem;font-weight:700;letter-spacing:-.02em;text-transform:none;
+  padding:1.5rem;margin-bottom:0;
+}
+.logo-icono{
+  width:40px;height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(135deg,var(--accent) 0%,var(--accent-hover) 100%);
+  border-radius:var(--radius-sm);color:#fff;box-shadow:0 4px 12px rgba(217,119,87,.3);
+  transition:transform .3s ease;
+}
+.logo .logo-icono,.login-logo .logo-icono{color:#fff;}
+.logo-icono:hover{transform:rotate(-10deg) scale(1.05);}
+.logo-icono svg{width:20px;height:20px;}
+.logo-version{flex-basis:100%;font-size:10px;font-weight:400;letter-spacing:0;color:var(--text3);margin-top:-4px;}
+.sidebar .global-search{padding:1rem .75rem 0;margin:0;}
+.sidebar nav{flex:1;padding:.5rem .75rem 1rem;display:flex;flex-direction:column;gap:.25rem;}
+nav a{
+  gap:.875rem;padding:.7rem 1rem;border-radius:var(--radius-sm);margin-bottom:0;
+  font-size:.9rem;font-weight:500;position:relative;overflow:hidden;
+  transition:all .2s var(--ease);
+}
+nav a::before{
+  content:'';position:absolute;left:0;top:0;height:100%;width:3px;background:var(--accent);
+  transform:scaleY(0);transition:transform .2s var(--ease);border-radius:0 4px 4px 0;
+}
+nav a:hover{background:var(--surface-hover);color:var(--text);transform:translateX(4px);}
+nav a.active{background:var(--accent-light);color:var(--accent);font-weight:600;}
+nav a.active::before{transform:scaleY(1);}
+nav a svg{width:18px;height:18px;}
+.nav-section{font-size:.6875rem;font-weight:700;color:var(--text3);opacity:.75;padding:1.25rem 1rem .5rem;}
+.user-email{
+  margin:1rem 1rem .75rem;padding:.75rem;border-radius:var(--radius-sm);
+  background:var(--surface-hover);border:1px solid var(--border);font-size:.75rem;color:var(--text2);
+}
+.btn-logout{
+  margin:0 1rem 1rem;padding:.75rem 1rem;border-radius:var(--radius-sm);text-align:center;
+  font-size:.875rem;font-weight:600;color:var(--neg);transition:all .2s var(--ease);
+}
+.btn-logout:hover{background:var(--neg-bg);border-color:var(--neg);color:var(--neg);transform:translateY(-2px);box-shadow:0 4px 12px rgba(216,93,93,.2);}
+
+/* ── Contenido ── */
+.main{margin-left:260px;max-width:1200px;}
+.page.active{animation:eco-entra .3s ease-out;}
+@keyframes eco-entra{from{opacity:0;transform:translateY(20px);}to{opacity:1;transform:none;}}
+.page-header h1{font-size:1.75rem;font-weight:700;letter-spacing:-.025em;}
+.page-header p{font-size:.9375rem;}
+
+.card{box-shadow:var(--shadow-md);transition:box-shadow .25s var(--ease);}
+.card:hover{box-shadow:var(--shadow-lg);}
+.card-title{font-weight:600;}
+.metric{border-radius:var(--radius);box-shadow:var(--shadow-md);transition:all .25s var(--ease);}
+.metric:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px);}
+.metric .m-label{font-size:.8125rem;font-weight:500;color:var(--text2);}
+.metric .m-val{font-size:1.4rem;font-weight:700;letter-spacing:-.025em;}
+
+/* ── Botones ── */
+.btn-save,.btn-add,.btn-pagar{
+  font-weight:600;border:1px solid transparent;transition:all .15s var(--ease);
+}
+.btn-save:hover,.btn-add:hover,.btn-pagar:hover{
+  opacity:1;background:var(--accent-hover);transform:translateY(-1px);box-shadow:var(--shadow-md);
+}
+.btn-save:active,.btn-add:active,.btn-pagar:active{transform:none;}
+.btn-save:disabled{opacity:.6;transform:none;box-shadow:none;}
+.btn-secondary{background:var(--surface);font-weight:600;transition:all .15s var(--ease);}
+.btn-secondary:hover{background:var(--bg);border-color:var(--accent);}
+.btn-danger{font-weight:600;border-color:var(--neg);transition:all .15s var(--ease);}
+.btn-danger:hover{background:var(--neg);color:#fff;}
+.btn-print{background:var(--per);font-weight:600;}
+.tab-btn{font-weight:500;}
+.tab-btn:hover{border-color:var(--accent);color:var(--accent);}
+.tab-btn.active:hover{color:var(--accent-fg);}
+
+/* ── Campos ── */
+.field label{font-size:.8125rem;font-weight:500;}
+.field input,.field select,.field textarea{background:#fff;font-family:var(--font);}
+.field input:focus,.field select:focus,.field textarea:focus{
+  border-color:var(--accent);box-shadow:0 0 0 3px rgba(217,119,87,.15);background:#fff;
+}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent);}
+
+/* ── Modales, avisos y login ── */
+.modal{border-radius:var(--radius);box-shadow:0 24px 48px -8px rgba(45,42,38,.18),0 8px 16px -4px rgba(45,42,38,.1);animation:eco-escala .2s ease-out;}
+@keyframes eco-escala{from{opacity:0;transform:scale(.95);}to{opacity:1;transform:none;}}
+.modal-header h2{font-weight:700;letter-spacing:-.02em;}
+.toast{border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);}
+.login-screen{background:linear-gradient(135deg,#faf8f5 0%,#f5f1eb 100%);}
+.login-card{box-shadow:var(--shadow-lg);border-radius:18px;}
+.login-logo{display:flex;align-items:center;gap:.75rem;font-size:1.5rem;font-weight:700;letter-spacing:-.02em;text-transform:none;margin-bottom:.5rem;}
+
+/* ── Barra del teléfono ── */
+.mobile-tab.active{color:var(--accent);font-weight:600;}
+.mas-item{background:var(--surface);}
+.mas-item.activa{background:var(--accent-light);color:var(--accent);}
+
+@media(max-width:680px){
+  .main{margin-left:0;}
+  .page-header h1{font-size:1.5rem;}
+  nav a:hover{transform:none;}
+  .metric:hover{transform:none;}
+}
