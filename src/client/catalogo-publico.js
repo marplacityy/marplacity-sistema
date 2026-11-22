@@ -1,5 +1,5 @@
 import { esc, on } from '../shared/seguridad.js';
-import { RUBROS_CATALOGO, rubroDe, cantidadMaxima } from '../shared/catalogo.js';
+import { RUBROS_CATALOGO, rubroDe, cantidadMaxima, capacidadPareja } from '../shared/catalogo.js';
 import { activarEventos } from './core/eventos.js';
 activarEventos();
 import { cargarConfiguracion } from './core/config-publica.js';
@@ -25,7 +25,6 @@ let FILTRO = 'todo';   // la categoría abierta, o 'todo'
 let COND = '', ENTREGA = '', ORDEN = 'relevancia';   // los filtros de la página de rubro
 
 // La imagen de cada rubro cuando ningún producto suyo tiene foto.
-const ICONOS = { 'Celulares': '📱', 'Notebooks y tablets': '💻', 'Audio': '🎧', 'Smartwatch': '⌚', 'Accesorios': '🔌', 'Electrodomésticos': '🧊', 'Otros': '📦' };
 const ICONO_WA = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 1.8a8.2 8.2 0 0 1 0 16.4 8.1 8.1 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 0 1 12 3.8zm-3.3 4.4c-.2 0-.5 0-.7.3-.3.3-1 1-1 2.3s1 2.7 1.1 2.9c.2.2 2 3.1 4.9 4.3 2.4 1 2.9.8 3.4.7.5 0 1.7-.7 1.9-1.4.2-.7.2-1.2.2-1.4l-.5-.3-1.9-.9c-.3-.1-.4-.1-.6.1l-.9 1.1c-.2.2-.3.2-.6.1a7 7 0 0 1-3.4-3c-.3-.4.3-.4.8-1.5.1-.2 0-.4 0-.5l-.9-2c-.2-.6-.5-.5-.6-.5h-.6z"/></svg>';
 
 const usd = n => 'u$s ' + Math.round(n).toLocaleString('es-AR');
@@ -63,22 +62,22 @@ const sello = p => p.tipo === 'pedido' ? '<span class="sello">A pedido</span>' :
 const linkProducto = p => '#p=' + encodeURIComponent(p.id);
 const nombreCompleto = p => [p.titulo || p.nombre, p.gb, p.color].filter(Boolean).join(' ');
 
-/** La tarjeta de un producto, como la de Ecommodo: foto, nombre, precio y "Ver producto". */
+/**
+ * La tarjeta de un producto: la foto, el nombre, lo que el nombre no dice (capacidad,
+ * color, estado, batería) y el precio. Sin botón: toda la tarjeta lleva al producto.
+ */
 function tarjeta(p){
-  const specs = [
-    p.gb && `<span class="chip">${esc(p.gb)}</span>`,
-    p.color && `<span class="chip">${esc(p.color)}</span>`,
-    p.bateria != null && `<span class="chip bat">Batería ${esc(p.bateria)}%</span>`,
-    p.estado && `<span class="chip">${esc(p.estado)}</span>`,
-  ].filter(Boolean).join('');
+  const nombre = p.titulo || p.nombre;
+  const yaDicho = String(nombre).toLowerCase();
+  const detalle = [p.gb, p.color, p.estado].filter(v => v && !yaDicho.includes(String(v).toLowerCase())).map(esc);
+  if (p.bateria != null) detalle.push(`<span class="bat">Batería ${esc(p.bateria)}%</span>`);
 
   return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
     <div class="prod-foto">${sello(p)}${fotoTarjeta(p)}</div>
     <div class="prod-info">
-      <h3 class="prod-nombre">${esc(p.titulo || p.nombre)}</h3>
-      <div class="chips">${specs}</div>
+      <h3 class="prod-nombre"><a href="${esc(linkProducto(p))}" data-stop>${esc(nombre)}</a></h3>
+      <div class="prod-detalle">${detalle.join(' · ')}</div>
       <div class="precio">${usd(p.precioUSD)}</div>
-      <a class="btn-ver" href="${esc(linkProducto(p))}" data-stop>Ver producto</a>
     </div>
   </article>`;
 }
@@ -618,15 +617,13 @@ window.limpiarFiltros = () => {
 };
 window.irPagina = n => { PAGINA = n; pintarProductos(); document.getElementById('vista-tienda').querySelector('.tienda').scrollIntoView({ behavior: 'smooth' }); };
 
-window.toggleMenu = () => document.getElementById('menu').classList.toggle('abierto');
-const cerrarMenu = () => document.getElementById('menu').classList.remove('abierto');
-window.toggleFiltros = () => document.getElementById('filtros').classList.toggle('abierto');
+/** Abre o cierra los filtros (en el celular son un panel que sube desde abajo). */
+const verFiltros = abrir => { document.getElementById('filtros').classList.toggle('abierto', abrir); document.body.classList.toggle('con-filtros', abrir); };
+window.toggleFiltros = () => verFiltros(!document.getElementById('filtros').classList.contains('abierto'));
 window.cerrarTeclado = () => document.getElementById('q').blur();
-window.irAContacto = ev => { ev.preventDefault(); cerrarMenu(); document.getElementById('contacto').scrollIntoView({ behavior: 'smooth' }); };
 
 /** Arma la vista que pide la URL. */
 function desdeUrl(){
-  cerrarMenu();
   const p = /^#p=(.+)$/.exec(location.hash);
   if (p) { paginaProducto(decodeURIComponent(p[1])); return; }
   if (location.hash === '#carrito') { paginaCarrito(); return; }
@@ -640,7 +637,7 @@ function desdeUrl(){
   RUBRO = cat ? rubroDe(cat) : rub || null;
   PAGINA = 1;
   if (!cat && !rub) document.getElementById('q').value = '';
-  document.getElementById('filtros').classList.remove('abierto');
+  verFiltros(false);
   metaDeProducto(null);
   mostrarTienda();
   pintarFiltros();
@@ -682,10 +679,9 @@ function tarjetaGrupo(lista){
   return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
     <div class="prod-foto">${sello(p)}${fotoTarjeta(p)}</div>
     <div class="prod-info">
-      <h3 class="prod-nombre">${esc(p.nombre)}</h3>
-      <div class="chips">${gbs.length ? `<span class="chip">${esc(gbs.join(' · '))}</span>` : ''}${colores.length > 1 ? `<span class="chip">${colores.length} colores</span>` : ''}</div>
+      <h3 class="prod-nombre"><a href="${esc(linkProducto(p))}" data-stop>${esc(p.nombre)}</a></h3>
+      <div class="prod-detalle">${[gbs.map(esc).join(' · '), colores.length > 1 ? `${colores.length} colores` : ''].filter(Boolean).join(' · ')}</div>
       <div class="precio"><span class="desde">desde</span>${usd(desde)}</div>
-      <a class="btn-ver" href="${esc(linkProducto(p))}" data-stop>Ver opciones</a>
     </div>
   </article>`;
 }
@@ -754,19 +750,13 @@ const pasaPrecio = p => (!PRECIO_MIN || p.precioUSD >= Number(PRECIO_MIN)) && (!
 
 // ── Las pantallas ────────────────────────────────────────────
 
-/** Los rubros de la cabecera y las burbujas de la portada. */
+/**
+ * La tira de categorías de abajo de la cabecera: "Todo" y un link por sección. En la tira
+ * "Celulares Samsung" es "Samsung": el nombre entero queda en la portada y los filtros.
+ */
 function pintarNavegacion(){
-  const rs = rubros();
-  document.getElementById('nav-rubros').innerHTML = rs.slice(0, 4).map(r =>
-    `<a class="nav-link" href="#r=${slug(r.nombre)}">${esc(r.nombre)}</a>`).join('');
-  // La burbuja lleva la foto de algún producto del rubro; si ninguno tiene, un ícono.
-  document.getElementById('burbujas').innerHTML = rs.map(r => {
-    const icono = ICONOS[r.nombre] || '📦';
-    const conFoto = delRubro(r.nombre).find(p => fotosDe(p).length);
-    return `<a class="burbuja" href="#r=${slug(r.nombre)}"><div class="c">${conFoto
-      ? `<img src="${esc(fotosDe(conFoto)[0])}" alt="" loading="lazy" ${on('error', 'fotoFallo', '$this', icono)}>`
-      : icono}</div><span>${esc(r.nombre)}</span></a>`;
-  }).join('');
+  document.getElementById('nav-rubros').innerHTML = '<a class="rubro" href="#" data-rubro="">Todo</a>'
+    + rubros().map(r => `<a class="rubro" href="#r=${slug(r.nombre)}" data-rubro="${esc(r.nombre)}">${esc(r.nombre.replace(/^Celulares (?=\S)/, ''))}</a>`).join('');
 }
 
 function pintarMiga(q){
@@ -811,7 +801,11 @@ function pintarFiltros(){
       <select aria-label="Ordenar" ${on('change', 'setFiltro', 'orden', '$value')}>${[['relevancia', 'Más relevantes'], ['menor', 'Menor precio'], ['mayor', 'Mayor precio']].map(([v, t]) =>
         `<option value="${v}"${ORDEN === v ? ' selected' : ''}>${t}</option>`).join('')}</select>
     </div>`;
-  document.querySelectorAll('#nav-rubros a').forEach(a => a.classList.toggle('on', a.textContent === RUBRO));
+  document.querySelectorAll('#nav-rubros a').forEach(a => {
+    a.classList.toggle('on', a.dataset.rubro === (RUBRO || ''));
+    // La sección abierta queda a la vista en la tira, aunque haya que deslizarla.
+    if (a.classList.contains('on')) a.scrollIntoView({ block: 'nearest', inline: 'center' });
+  });
 }
 
 /** La paginación de una grilla: anterior, los números cercanos y siguiente. */
@@ -853,8 +847,6 @@ function pintarProductos(){
   pintarMiga(q);
   const filtrando = !!(COND || ENTREGA || PRECIO_MIN || PRECIO_MAX || ORDEN !== 'relevancia');
   const portada = !q && !RUBRO && !filtrando;
-  document.getElementById('burbujas').hidden = !portada;
-  document.getElementById('portada').hidden = !portada;
 
   if (!PRODUCTOS.length) {
     salida.innerHTML = vacio('📦', 'Próximamente productos disponibles', 'Por el momento no hay equipos publicados. Escribinos y te contamos qué hay.');
@@ -870,6 +862,7 @@ function pintarProductos(){
     return;
   }
 
+  conteo.textContent = textoConteo(cuenta(PRODUCTOS));
   salida.innerHTML = rubros().map(r => {
     const lista = delRubro(r.nombre);
     return `<section class="seccion">
@@ -922,7 +915,8 @@ function pie(actualizado){
     if(!r.ok) throw new Error('no se pudo cargar');
     const d = campos((await r.json()).fields);
 
-    PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0);
+    // La capacidad se empareja al leer: lo ya publicado puede traer "256gb" y "256GB".
+    PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0).map(p => ({ ...p, gb: capacidadPareja(p.gb) }));
     armarGrupos();
     LOCAL = d.local || {};
     COBRO = d.cobro || {};
@@ -943,10 +937,19 @@ function pie(actualizado){
   }
 })();
 
-document.getElementById('q').addEventListener('input', () => { PAGINA = 1; pintarProductos(); });
+// El buscador vive en la cabecera, así que también se usa desde la página de un producto o
+// del carrito: ahí se vuelve a la tienda sin perder lo escrito.
+document.getElementById('q').addEventListener('input', () => {
+  PAGINA = 1;
+  if (document.getElementById('vista-tienda').hidden) {
+    history.pushState(null, '', location.pathname + location.search + hashVista());
+    metaDeProducto(null);
+    mostrarTienda();
+    pintarFiltros();
+  }
+  pintarProductos();
+});
 window.addEventListener('hashchange', desdeUrl);
-// El menú del celular se cierra tocando afuera.
-document.addEventListener('click', e => { if (!e.target.closest('#cab')) cerrarMenu(); });
 
 // Compatibilidad de los controles HTML al pasar a módulos ES.
 Object.assign(window, { tarjeta, linkWhatsApp, metaDeProducto, formasDePago, textoPedido, pantallaPedido, pedidoDesdeUrl, armarGrupos, tarjetaGrupo, entradas, selectoresVariante, categorias, rubros, pintar, hace, paginaProducto, paginaCarrito, paginaCheckout });

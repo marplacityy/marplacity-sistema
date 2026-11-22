@@ -4,39 +4,68 @@ export const slugFoto = nombre => String(nombre || '').normalize('NFD').replace(
 .replace(/\b\d+\s?(gb|tb)\b/g, ' ') // sin capacidad
 .replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '-');
 /**
- * Los rubros de la tienda y las categorías de cada uno. El menú, las burbujas y las
- * secciones de la portada salen de acá; lo que se elige por producto sigue siendo la
- * categoría. El orden es el del menú. Una categoría creada a mano desde el sistema cae en
- * el rubro que sugiere su nombre (`rubroDe`) y, si no se reconoce, en Otros.
+ * Las secciones de la tienda y las categorías de cada una. La tira de arriba, las
+ * secciones de la portada y los filtros salen de acá; lo que se elige por producto sigue
+ * siendo la categoría. El orden es el de la tienda: lo pidió Juni el 22/11/2026, con
+ * secciones específicas (iPhone nuevos, iPhone usados, iPad con sus Pencil y teclados…)
+ * en lugar de rubros amplios ("Celulares", "Audio"). Una categoría creada a mano desde el
+ * sistema cae en la sección que sugiere su nombre (`rubroDe`) y, si no se reconoce, en
+ * Otros.
  */
 export const RUBROS_CATALOGO = {
-  'Celulares': ['iPhone nuevos', 'iPhone usados', 'Celulares Samsung', 'Celulares Xiaomi', 'Celulares Motorola', 'Otros celulares'],
-  'Notebooks y tablets': ['Notebooks', 'MacBook nuevas', 'iPad nuevos', 'Tablets', 'Monitores'],
-  'Audio': ['AirPods', 'Auriculares', 'Parlantes'],
+  'iPhone nuevos': ['iPhone nuevos'],
+  'iPhone usados': ['iPhone usados'],
+  'iPad': ['iPad nuevos', 'Accesorios iPad'],
+  'Accesorios Apple': ['Accesorios Apple', 'Accesorios iPhone', 'Accesorios de carga'],
+  'Consolas': ['Consolas'],
+  'Notebooks': ['MacBook nuevas', 'Notebooks'],
+  'Celulares Samsung': ['Celulares Samsung'],
+  'Celulares Xiaomi': ['Celulares Xiaomi'],
+  'Celulares Motorola': ['Celulares Motorola'],
+  'Parlantes y auriculares': ['AirPods', 'Auriculares', 'Parlantes'],
   'Smartwatch': ['Apple Watch nuevos', 'Otros smartwatch'],
-  'Accesorios': ['Accesorios iPhone', 'Accesorios iPad', 'Accesorios Apple', 'Accesorios de carga', 'Fundas y protectores', 'Otros accesorios'],
+  'Tablets': ['Tablets'],
+  'Otros celulares': ['Otros celulares'],
   'Electrodomésticos': ['Smart TV', 'Heladeras y freezers', 'Lavarropas', 'Climatización', 'Cocina', 'Pequeños electrodomésticos'],
-  'Otros': ['Otros'],
+  'Otros': ['Monitores', 'Fundas y protectores', 'Otros accesorios', 'Otros'],
 };
 export const CATEGORIAS_CATALOGO = Object.values(RUBROS_CATALOGO).flat();
 
-// Para una categoría que no está en la tabla: los accesorios van primero porque "Fundas
-// Samsung" tiene "Samsung" adentro, y los celulares al final por lo mismo.
+// Para una categoría que no está en la tabla. El orden importa: "Fundas iPhone" tiene
+// "iPhone" adentro y "Smart TV Samsung" tiene "Samsung", así que lo específico va primero.
 const RUBRO_POR_NOMBRE = [
-  [/accesorio|funda|cable|cargador|vidrio|protector|\bcase\b|soporte|adaptador/i, 'Accesorios'],
+  [/pencil|(teclado|keyboard|funda|accesorio)s?.*ipad/i, 'iPad'],
+  [/(accesorio|funda|cable|cargador|vidrio|protector|\bcase\b|soporte|adaptador)s?.*(apple|iphone|magsafe)|magsafe/i, 'Accesorios Apple'],
+  [/accesorio|funda|cable|cargador|vidrio|protector|\bcase\b|soporte|adaptador/i, 'Otros'],
   [/\btv\b|televisor|heladera|freezer|lavarropa|secarropa|lavavajilla|\baires?\b|climatiz|cocina|horno|microondas|electrodom|aspiradora|freidora|cafetera|licuadora|ventilador|calefac|estufa|termotanque|anafe/i, 'Electrodomésticos'],
-  [/parlante|auricular|airpods|audio|sonido|speaker|soundbar/i, 'Audio'],
+  [/consola|playstation|\bps[345]\b|xbox|nintendo|gaming|videojuego|joystick/i, 'Consolas'],
+  [/parlante|auricular|airpods|audio|sonido|speaker|soundbar/i, 'Parlantes y auriculares'],
   [/watch|reloj|smartwatch|\bband\b/i, 'Smartwatch'],
-  [/notebook|laptop|macbook|ipad|tablet|monitor|computaci|\bpc\b|chromebook/i, 'Notebooks y tablets'],
-  [/iphone|celular|smartphone|galaxy|xiaomi|motorola|samsung|tel[eé]fono/i, 'Celulares'],
+  [/ipad/i, 'iPad'],
+  [/tablet|\btab\b/i, 'Tablets'],
+  [/notebook|laptop|macbook|computaci|\bpc\b|chromebook/i, 'Notebooks'],
+  [/iphone.*usad/i, 'iPhone usados'],
+  [/iphone/i, 'iPhone nuevos'],
+  [/samsung|galaxy/i, 'Celulares Samsung'],
+  [/xiaomi|redmi|poco/i, 'Celulares Xiaomi'],
+  [/motorola|\bmoto\b/i, 'Celulares Motorola'],
+  [/celular|smartphone|tel[eé]fono/i, 'Otros celulares'],
 ];
-/** El rubro de una categoría: el de la tabla, o el que sugiere el nombre si la creó Juni. */
+/** La sección de una categoría: la de la tabla, o la que sugiere el nombre si la creó Juni. */
 export function rubroDe(categoria) {
   const c = String(categoria || '');
   for (const r in RUBROS_CATALOGO) if (RUBROS_CATALOGO[r].includes(c)) return r;
   const m = RUBRO_POR_NOMBRE.find(([re]) => re.test(c));
   return m ? m[1] : 'Otros';
 }
+/**
+ * La capacidad escrita siempre igual: "256gb", "256 GB" y "256GB" son la misma. Cada
+ * proveedor la escribe a su manera, y sin esto la tienda las ofrecía como dos opciones.
+ */
+export const capacidadPareja = gb => {
+  const t = String(gb ?? '').trim();
+  return /^\d+(?:[.,]\d+)?\s*(gb|tb)$/i.test(t) ? t.replace(/\s+/g, '').toUpperCase() : t;
+};
 export const esUsado = p => /usad|refurb|reacond|impecab|\d+\s*\/\s*10/i.test(p.estado || '') || p.bateria != null && !/nuev|sellad/i.test(p.estado || '');
 
 /**
@@ -62,7 +91,7 @@ export function borradorDescripcion(d) {
 export function categoriaDe(p) {
   const n = String(p.nombre || '');
   const t = s => s.test(n);
-  if (t(/pencil|teclado|keyboard|smart folio|smart cover|magic keyboard/i) && t(/ipad|pencil/i)) return 'Accesorios iPad';
+  if (t(/pencil|keyboard folio|smart folio|smart cover/i) || t(/teclado|keyboard/i) && t(/ipad/i)) return 'Accesorios iPad';
   if (t(/funda|case|cover|vidrio|templado|glass|protector|magsafe|wallet/i) && t(/iphone|magsafe/i)) return 'Accesorios iPhone';
   if (t(/funda|case|cover|teclado|keyboard/i) && t(/ipad/i)) return 'Accesorios iPad';
   if (t(/funda|\bcase\b|cover|vidrio|templado|glass|protector|hidrogel/i)) return 'Fundas y protectores';
@@ -80,6 +109,7 @@ export function categoriaDe(p) {
   if (t(/aire acondicionado|\bsplit\b|ventilador|calefactor|caloventor|estufa|climatiz|purificador|deshumidificador/i)) return 'Climatización';
   if (t(/cocina|horno|anafe|microondas|campana|termotanque|calef[oó]n/i)) return 'Cocina';
   if (t(/freidora|cafetera|licuadora|batidora|tostadora|\bpava\b|plancha|aspiradora|minipimer|sandwichera|procesadora|jugera|exprimidor|hervidor|secador de pelo|afeitadora|planchita|buclera/i)) return 'Pequeños electrodomésticos';
+  if (t(/playstation|\bps[345]\b|xbox|nintendo|\bswitch\b|joystick|dualsense|consola/i)) return 'Consolas';
   // Computación.
   if (t(/macbook|imac|mac mini|mac studio|\bmac\b/i)) return 'MacBook nuevas';
   if (t(/ipad/i)) return 'iPad nuevos';

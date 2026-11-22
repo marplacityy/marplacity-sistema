@@ -5,7 +5,7 @@
  *
  * Importa funciones puras, sin arrancar Firebase ni depender del formato del HTML.
  */
-import { armarMapaFotos, categoriaDe, slugFoto, rubroDe, borradorDescripcion, CATEGORIAS_CATALOGO, RUBROS_CATALOGO } from './src/shared/catalogo.js';
+import { armarMapaFotos, categoriaDe, slugFoto, rubroDe, borradorDescripcion, capacidadPareja, CATEGORIAS_CATALOGO, RUBROS_CATALOGO } from './src/shared/catalogo.js';
 import assert from 'node:assert/strict';
 
 
@@ -67,6 +67,12 @@ const casos = [
   [{ nombre: 'Funda Galaxy S24 silicona' }, 'Fundas y protectores'],
   [{ nombre: 'Cargador Samsung 25W' }, 'Accesorios de carga'],
   [{ nombre: 'Soporte de auto magnético' }, 'Otros'],
+  // Las consolas tienen su sección, con sus joysticks; los teclados de iPad van con el iPad.
+  [{ nombre: 'PS5 Slim Fisica Core' }, 'Consolas'],
+  [{ nombre: 'Xbox Series S Digital' }, 'Consolas'],
+  [{ nombre: 'Joystick PS5 Ed. Wolverine' }, 'Consolas'],
+  [{ nombre: "Accesorio Magic Keyboard Folio 11'' White (For A16)" }, 'Accesorios iPad'],
+  [{ nombre: 'Apple Pencil Pro' }, 'Accesorios iPad'],
 ];
 for (const [p, esperado] of casos) assert.equal(categoriaDe(p), esperado, `${p.nombre} → ${esperado}`);
 
@@ -74,10 +80,15 @@ for (const [p, esperado] of casos) assert.equal(categoriaDe(p), esperado, `${p.n
 for (const c of CATEGORIAS_CATALOGO) assert.ok(RUBROS_CATALOGO[rubroDe(c)].includes(c), `${c} está en su rubro`);
 assert.equal(new Set(CATEGORIAS_CATALOGO).size, CATEGORIAS_CATALOGO.length, 'sin categorías repetidas entre rubros');
 for (const [c, esperado] of [
-  ['Fundas Samsung', 'Accesorios'], ['Parlantes Bluetooth', 'Audio'], ['Galaxy Watch', 'Smartwatch'],
-  ['Aires acondicionados', 'Electrodomésticos'], ['Tablets Samsung', 'Notebooks y tablets'],
-  ['Celulares Motorola', 'Celulares'], ['Gaming', 'Otros'],
+  ['Fundas Samsung', 'Otros'], ['Fundas iPhone', 'Accesorios Apple'], ['Teclados iPad', 'iPad'], ['Parlantes Bluetooth', 'Parlantes y auriculares'],
+  ['Galaxy Watch', 'Smartwatch'], ['Aires acondicionados', 'Electrodomésticos'], ['Tablets Samsung', 'Tablets'], ['Gaming', 'Consolas'],
+  ['iPhone usados premium', 'iPhone usados'], ['Celulares Motorola', 'Celulares Motorola'], ['Cosas varias', 'Otros'],
+  // Lo que pidió Juni: el iPad con sus Pencil y teclados, y los cargadores con los accesorios de Apple.
+  ['Accesorios iPad', 'iPad'], ['Accesorios de carga', 'Accesorios Apple'], ['AirPods', 'Parlantes y auriculares'], ['MacBook nuevas', 'Notebooks'],
 ]) assert.equal(rubroDe(c), esperado, `${c} → ${esperado}`);
+
+// ── capacidadPareja: cada proveedor la escribe distinto y es la misma ──
+for (const [de, a] of [['256gb', '256GB'], ['256 GB', '256GB'], ['1tb', '1TB'], [' 512GB ', '512GB'], ['', ''], [null, ''], ['8/256GB', '8/256GB']]) assert.equal(capacidadPareja(de), a, `${de} → ${a}`);
 
 // ── slugFoto: el estado entre paréntesis no es parte del modelo ──
 assert.equal(slugFoto('iPhone 13 (Usado Grado A, 100% Ampsentrix)'), 'iphone-13');

@@ -1,4 +1,4 @@
-import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion } from '../../shared/catalogo.js';
+import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion, capacidadPareja } from '../../shared/catalogo.js';
 import { idDeItemLista, migrarIdsDeLista, gruposDuplicados, precioUnificado, ofertaMasBarata, REGLAS_PRECIO } from '../../shared/duplicados.js';
 import { on } from '../../shared/seguridad.js';
 import { configuracion } from '../core/config-publica.js';
@@ -1036,7 +1036,7 @@ export function inicializarCatalogo() {
     id: idDeItemLista(it),
     tipo: 'pedido',
     nombre: String(it.producto || '').trim(),
-    gb: String(it.gb || '').trim(),
+    gb: capacidadPareja(it.gb),
     color: String(it.color || '').trim(),
     bateria: null,
     ciclos: null,
