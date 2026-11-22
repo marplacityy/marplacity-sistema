@@ -253,6 +253,9 @@ input[type=checkbox],input[type=radio]{accent-color:var(--accent);}
 .ff-cands .d .aviso{color:#854F0B;}
 .ff-nota{font-size:12.5px;color:var(--text2);background:var(--surface-hover);border-radius:6px;padding:8px 10px;margin-top:10px;}
 .ff-nota.mal{color:#854F0B;background:#FFF6E5;}
+/* Qué contestó cada buscador, cuando un producto queda sin fotos; y de qué tienda es cada candidata. */
+.ff-nota .ff-fuentes{display:block;margin-top:4px;font-size:11px;opacity:.8;}
+.ff-cands .cat-cand .d .tienda{display:block;color:var(--text2);font-weight:600;}
 .ff-campos{display:grid;grid-template-columns:2fr 1.3fr 110px;gap:10px;margin-top:12px;}
 .ff-campos .field{margin:0;}
 .ff-campos .ff-desc{grid-column:1/-1;}

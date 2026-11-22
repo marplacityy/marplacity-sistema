@@ -15,10 +15,10 @@
  *   GET  /pedido/:id     el estado del pedido, para la pantalla de vuelta del pago
  *   POST /mp/webhook     Mercado Pago avisa que un pago cambió
  *   POST /stripe/webhook Stripe avisa que un pago cambió
- *   POST /fotos          busca en Amazon y sube a Storage las imágenes de un producto (solo el dueño)
- *   POST /fotos/buscar   candidatos de foto para elegir a mano, sin bajar nada (solo el dueño)
+ *   POST /fotos          busca y sube a Storage las imágenes de un producto (solo el dueño)
+ *   POST /fotos/buscar   candidatos de foto de Amazon, MercadoLibre y BestBuy para elegir a mano, sin bajar nada (solo el dueño)
  *   POST /fotos/traer    baja las URLs elegidas o pegadas y las sube a Storage (solo el dueño)
- *   GET  /fotos/leer     una foto de Storage, para que el sistema mida el recuadro del producto (solo el dueño)
+ *   GET  /fotos/leer     una foto de Storage (?archivo=) o de una de las tiendas (?url=), para que el sistema la mida (solo el dueño)
  *   POST /ia/mejorar     título, categoría, descripción y etiquetas SEO de una tanda de productos (solo el dueño)
  *   POST /ia/texto       un texto de la IA que esté cargada, para lo que el sistema necesite (solo el dueño)
  *
@@ -41,7 +41,7 @@
  */
 
 import { leerDoc, escribirDoc } from '../facturador/firestore.js';
-import { fotosParaProducto, candidatosDeFotos, traerFotos, urlPublicaSegura, leerFoto } from './fotos.js';
+import { fotosParaProducto, candidatosDeFotos, traerFotos, urlPublicaSegura, leerFoto, leerFotoDeTienda } from './fotos.js';
 import { mejorarProductos, textoConIA, proveedoresCargados, PROVEEDORES_IA } from './ia.js';
 import { TIENDA_PUBLICA } from '../../../src/shared/sitio.js';
 import { cantidadMaxima, MAX_CANTIDAD_PEDIDO } from '../../../src/shared/catalogo.js';
@@ -318,8 +318,9 @@ async function buscarCandidatos(request, env) {
   const nombre = String(body.nombre || '').trim().slice(0, 120);
   if (!nombre) return json({ error: 'falta el nombre' }, 400);
   try {
-    const r = await candidatosDeFotos(env, { nombre, gb: String(body.gb || '').trim(), color: String(body.color || '').trim(), esAccesorio: body.tipo === 'accesorio' });
-    console.log('candidatos', r.consulta, '->', r.candidatos.length);
+    // `titulo` es el nombre que armó la IA: si viene, la búsqueda sale de ahí (como en Ecommodo).
+    const r = await candidatosDeFotos(env, { nombre, titulo: String(body.titulo || '').trim().slice(0, 160), color: String(body.color || '').trim().slice(0, 60), esAccesorio: body.tipo === 'accesorio' });
+    console.log('candidatos', r.consulta, '->', r.candidatos.length, JSON.stringify(r.fuentes));
     return json(r);
   } catch (e) {
     console.log('candidatos error', nombre, e.message);
@@ -331,7 +332,9 @@ async function buscarCandidatos(request, env) {
 async function leerUnaFoto(request, env, url) {
   const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
   if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
-  const foto = await leerFoto(env, url.searchParams.get('archivo')).catch(() => null);
+  // Una foto propia (de Storage) o una candidata de las tiendas que no deja leerla desde otra página.
+  const externa = url.searchParams.get('url');
+  const foto = await (externa ? leerFotoDeTienda(externa) : leerFoto(env, url.searchParams.get('archivo'))).catch(() => null);
   if (!foto) return json({ error: 'no encontré esa foto' }, 404);
   return new Response(foto.bytes, { headers: { ...CORS, 'Content-Type': foto.tipo, 'Cache-Control': 'private, max-age=300' } });
 }

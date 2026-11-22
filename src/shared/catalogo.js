@@ -76,6 +76,9 @@ const PALABRAS_DE_COLOR = ['black', 'white', 'blue', 'red', 'green', 'pink', 'pu
   'negro', 'blanco', 'azul', 'rojo', 'verde', 'rosa', 'rosado', 'violeta', 'lila', 'gris', 'plata', 'plateado', 'dorado', 'amarillo', 'naranja', 'celeste', 'grafito', 'titanio'];
 const ES_COLOR = new RegExp(`^(?:${PALABRAS_DE_COLOR.join('|')})+$`, 'i');
 
+/** Si una palabra suelta nombra un color ("Black", "SilverBlue", "plateado"). */
+export const esPalabraDeColor = palabra => ES_COLOR.test(String(palabra ?? ''));
+
 /**
  * El nombre del modelo y el color, cada uno en su lugar.
  *

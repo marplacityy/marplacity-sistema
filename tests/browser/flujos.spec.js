@@ -500,6 +500,8 @@ test('las fotos que faltan se buscan, la IA arma la ficha, se revisa y recién a
   await expect(page.locator('.ff-prod .cat-cand')).toHaveCount(4);
   await expect(page.locator('.ff-prod .cat-cand.on')).toHaveCount(2);
   await expect(page.locator('.ff-prod .cat-cand').nth(0)).toContainText('600×600 · fondo blanco');
+  // Cada candidata dice de qué tienda salió.
+  await expect(page.locator('.ff-prod .cat-cand').nth(0).locator('.tienda')).toHaveText('Amazon');
   await expect(page.locator('.ff-prod .cat-cands')).toContainText('otro fondo');
   await expect(page.locator('.ff-prod .cat-cands')).toContainText('repetida');
   // La ficha la escribió la IA: título, descripción y etiquetas, todo editable.
@@ -509,7 +511,8 @@ test('las fotos que faltan se buscan, la IA arma la ficha, se revisa y recién a
   await expect(page.locator('.ff-prod input.etiquetas')).toHaveValue('apple, iphone 14, celular, mar del plata');
   await expect(page.locator('.ff-prod input.seo')).toHaveValue('Apple iPhone 14 en MarplaCity, Mar del Plata.');
   expect(await page.evaluate(() => window.__datosPrueba.leer('catalogo/fotos'))).toBeUndefined();
-  expect(pedidos).toEqual([{ nombre: 'iPhone 14', gb: '', color: '', tipo: 'equipo' }, { ia: 'claude-opus-5-5', sistema: true, pide: true }]);
+  // Primero la IA arma la ficha; la búsqueda de fotos sale con el título que escribió (como en Ecommodo).
+  expect(pedidos).toEqual([{ ia: 'claude-opus-5-5', sistema: true, pide: true }, { nombre: 'iPhone 14', titulo: 'Apple iPhone 14', gb: '', color: '', tipo: 'equipo' }]);
   await page.screenshot({ path: '.runtime/fotos-revision.png' });
 
   // La última edición a mano, y a cargar.

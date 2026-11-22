@@ -5,15 +5,17 @@
  * listo para la tienda, con sus fotos y su ficha. Para los productos de la tienda que no
  * tienen foto (o para los seleccionados):
  *
- *   1. busca las candidatas de cada uno (Worker tienda, `/fotos/buscar`: el script de
- *      Ecommodo, DuckDuckGo y la página de Amazon; SerpApi solo de respaldo). Todavía no
- *      baja nada;
- *   2. mide cada candidata en el navegador y marca las mejores: fondo blanco, la mayor
- *      resolución y sin repetir (`shared/calidad-foto.js`), hasta 5 por producto;
- *   3. la IA mejora el título, elige la categoría y escribe la descripción y las
+ *   1. la IA mejora el título, elige la categoría y escribe la descripción y las
  *      etiquetas SEO de toda la tanda (`shared/mejorar-producto.js`). Se le pregunta a
  *      la IA del sistema; si no contesta, a la que tenga cargada el Worker tienda; y si
  *      tampoco, queda la ficha base, sin IA;
+ *   2. busca las candidatas de cada uno en Amazon, MercadoLibre y BestBuy (Worker tienda,
+ *      `/fotos/buscar`: el script de Ecommodo; SerpApi solo de respaldo). Como en
+ *      Ecommodo, la búsqueda sale del título que armó la IA ("Apple iPhone 16 128GB
+ *      Black"), que es como lo titula una tienda; por eso la IA va primero. Todavía no
+ *      baja nada;
+ *   3. mide cada candidata en el navegador y marca las mejores: fondo blanco, la mayor
+ *      resolución y sin repetir (`shared/calidad-foto.js`), hasta 5 por producto;
  *   4. muestra todo junto para revisar: fotos, título, descripción, categoría, precio y
  *      etiquetas de cada producto se pueden corregir antes de confirmar;
  *   5. recién al confirmar baja las fotos elegidas a Firebase Storage (`/fotos/traer`),
@@ -35,6 +37,7 @@ import { catalogoCandidatos, renderCatalogo, guardarFotos } from './catalogo.js'
 
 const TANDA = 20;        // modelos por vez: son muchas búsquedas seguidas y conviene revisar de a poco
 const MAX_FOTOS = 6;     // lo que acepta /fotos/traer por producto
+const MAX_CANDIDATAS = 16;   // las que se miden y se muestran por producto, de las tres tiendas
 const ESPERA_FOTO = 12_000;
 
 const el = id => document.getElementById(id);
@@ -77,42 +80,62 @@ function cargarImagen(url, conCors) {
   });
 }
 
+/** Cuánto del borde de una imagen ya cargada es blanco, y su huella. */
+function medirPixeles(imagen, ancho, alto) {
+  const lienzo = document.createElement('canvas');
+  lienzo.width = lienzo.height = LADO_MEDICION;
+  const ctx = lienzo.getContext('2d', { willReadFrequently: true });
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, LADO_MEDICION, LADO_MEDICION);
+  ctx.drawImage(imagen, 0, 0, LADO_MEDICION, LADO_MEDICION);
+  const { data } = ctx.getImageData(0, 0, LADO_MEDICION, LADO_MEDICION);
+  return { ancho, alto, blanco: fondoBlanco(data, LADO_MEDICION, LADO_MEDICION), huella: huellaDeFoto(data, LADO_MEDICION, LADO_MEDICION) };
+}
+
 /**
- * El tamaño real de una imagen, cuánto de su borde es blanco y su huella. Amazon deja
- * leer los píxeles desde otra página; si un sitio no lo permite, queda el tamaño y
+ * El tamaño real de una imagen, cuánto de su borde es blanco y su huella. Amazon y
+ * MercadoLibre dejan leer los píxeles desde otra página; BestBuy no, así que esa foto se
+ * pide por el Worker tienda (`/fotos/leer?url=`). Si tampoco se puede, queda el tamaño y
  * `blanco` en null (no se pudo medir: no se elige sola).
  */
 async function medirFoto(url) {
   try {
     const img = await cargarImagen(url, true);
-    const lienzo = document.createElement('canvas');
-    lienzo.width = lienzo.height = LADO_MEDICION;
-    const ctx = lienzo.getContext('2d', { willReadFrequently: true });
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, LADO_MEDICION, LADO_MEDICION);
-    ctx.drawImage(img, 0, 0, LADO_MEDICION, LADO_MEDICION);
-    const { data } = ctx.getImageData(0, 0, LADO_MEDICION, LADO_MEDICION);
-    return { ancho: img.naturalWidth, alto: img.naturalHeight, blanco: fondoBlanco(data, LADO_MEDICION, LADO_MEDICION), huella: huellaDeFoto(data, LADO_MEDICION, LADO_MEDICION) };
-  } catch {
-    try {
-      const img = await cargarImagen(url, false);
-      return { ancho: img.naturalWidth, alto: img.naturalHeight, blanco: null, huella: '' };
-    } catch {
-      return null;   // ni siquiera carga: no sirve
+    return medirPixeles(img, img.naturalWidth, img.naturalHeight);
+  } catch { /* esa tienda no deja leerla desde acá: se prueba por el Worker */ }
+  try {
+    const r = await fetch(`${urlTienda()}/fotos/leer?url=${encodeURIComponent(url)}`, { headers: await workerHeaders() });
+    if (r.ok) {
+      const mapa = await createImageBitmap(await r.blob());
+      return medirPixeles(mapa, mapa.width, mapa.height);
     }
+  } catch { /* sin el Worker queda sin medir */ }
+  try {
+    const img = await cargarImagen(url, false);
+    return { ancho: img.naturalWidth, alto: img.naturalHeight, blanco: null, huella: '' };
+  } catch {
+    return null;   // ni siquiera carga: no sirve
   }
 }
 
-/** Las candidatas de un producto, ya medidas y con las mejores marcadas. */
-async function candidatasDe(p) {
+const NOMBRE_DE_FUENTE = { bing: 'Bing', duckduckgo: 'DuckDuckGo', amazon: 'Amazon', serpapi: 'SerpApi' };
+/** Qué contestó cada buscador ("Bing: 3 fotos · Amazon: no mostró resultados"), para cuando un producto queda sin fotos. */
+const detalleDeFuentes = fuentes => Object.entries(fuentes && typeof fuentes === 'object' ? fuentes : {})
+  .map(([k, v]) => `${NOMBRE_DE_FUENTE[k] || k}: ${typeof v === 'number' ? plural(v, 'foto', 'fotos') : String(v).slice(0, 60)}`).join(' · ');
+
+/**
+ * Las candidatas de un producto, ya medidas y con las mejores marcadas. `titulo` es el
+ * nombre que armó la IA (o el que ya tenía): de ahí sale la búsqueda.
+ */
+async function candidatasDe(p, titulo) {
   const r = await fetch(urlTienda() + '/fotos/buscar', {
     method: 'POST',
     headers: await workerHeaders(),
-    body: JSON.stringify({ nombre: p.nombre, gb: p.gb, color: p.color, tipo: p.tipo }),
+    body: JSON.stringify({ nombre: p.nombre, titulo: titulo || '', gb: p.gb, color: p.color, tipo: p.tipo }),
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(r.status === 404 ? 'el servicio tienda todavía no tiene la búsqueda (falta el deploy)' : d.error || `el Worker respondió ${r.status}`);
-  const crudas = (Array.isArray(d.candidatos) ? d.candidatos : []).filter(x => x && /^(https:|data:image\/)/.test(String(x.url || ''))).slice(0, 12);
+  const crudas = (Array.isArray(d.candidatos) ? d.candidatos : []).filter(x => x && /^(https:|data:image\/)/.test(String(x.url || ''))).slice(0, MAX_CANDIDATAS);
   const medidas = (await Promise.all(crudas.map(async x => {
     const m = await medirFoto(x.url);
     return m && { url: x.url, fuente: String(x.fuente || ''), deOtroColor: !!p.color && x.color === false, ...m };
@@ -120,10 +143,13 @@ async function candidatasDe(p) {
   // Con color cargado solo se eligen solas las fotos cuyo título nombra ese color: mostrar
   // un teléfono azul con el cartel "Red" es peor que no mostrar nada. Las demás quedan a
   // la vista, sin marcar.
-  return [
-    ...elegirFotos(medidas.filter(c => !c.deOtroColor)),
-    ...elegirFotos(medidas.filter(c => c.deOtroColor)).map(c => ({ ...c, elegida: false, nota: c.nota || 'color sin confirmar' })),
-  ];
+  return {
+    candidatas: [
+      ...elegirFotos(medidas.filter(c => !c.deOtroColor)),
+      ...elegirFotos(medidas.filter(c => c.deOtroColor)).map(c => ({ ...c, elegida: false, nota: c.nota || 'color sin confirmar' })),
+    ],
+    detalle: detalleDeFuentes(d.fuentes),
+  };
 }
 
 /**
@@ -169,12 +195,12 @@ function fotosHTML(x, i) {
   }
   if (f.yaTiene) return `<div class="ff-nota">Ya tiene ${plural(f.yaTiene, 'foto', 'fotos')}: no se le buscan más.</div>`;
   if (f.error) return `<div class="ff-nota mal">No pude buscar: ${esc(f.error)}</div>`;
-  if (!f.candidatas.length) return '<div class="ff-nota mal">No encontré fotos que coincidan con el modelo. Después se pueden subir o pegar el link desde la ficha del producto.</div>';
+  if (!f.candidatas.length) return `<div class="ff-nota mal">No encontré fotos de este modelo en Amazon, MercadoLibre ni BestBuy. Después se pueden subir o pegar el link desde la ficha del producto.${f.detalle ? `<span class="ff-fuentes">${esc(f.detalle)}</span>` : ''}</div>`;
   return `<div class="cat-cands ff-cands">${f.candidatas.map((c, j) => `
     <label class="cat-cand${c.elegida ? ' on' : ''}">
       <input type="checkbox" ${c.elegida ? 'checked' : ''} ${on('change', 'ffFoto', i, j, '$checked')}>
       <img src="${esc(c.url)}" loading="lazy" alt="" referrerpolicy="no-referrer">
-      <div class="d">${c.ancho ? `${c.ancho}×${c.alto}` : ''}${c.nota ? ` · <span class="aviso">${esc(c.nota)}</span>` : c.blanco != null ? ' · fondo blanco' : ''}</div>
+      <div class="d">${c.ancho ? `${c.ancho}×${c.alto}` : ''}${c.nota ? ` · <span class="aviso">${esc(c.nota)}</span>` : c.blanco != null ? ' · fondo blanco' : ''}${c.fuente ? `<span class="tienda">${esc(c.fuente)}</span>` : ''}</div>
     </label>`).join('')}</div>`;
 }
 
@@ -245,22 +271,7 @@ async function buscar() {
     });
   }
   T = { productos, fotos: {}, restantes: claves.length - tanda.size, cancelado: false, ia: { nombre: '', error: '' } };
-  const unicos = productos.filter(x => x.comparteCon == null);
-  let cortar = '';
-  for (let i = 0; i < unicos.length; i++) {
-    if (T.cancelado) return false;
-    const x = unicos[i];
-    if (x.p.fotos.length) { T.fotos[x.clave] = { candidatas: [], error: '', yaTiene: x.p.fotos.length }; continue; }
-    espera('Buscando fotos…', `${i + 1} de ${unicos.length} · ${x.nombreCompleto}`, i, unicos.length);
-    if (cortar) { T.fotos[x.clave] = { candidatas: [], error: cortar }; continue; }
-    try {
-      T.fotos[x.clave] = { candidatas: await candidatasDe(x.p), error: '' };
-    } catch (e) {
-      T.fotos[x.clave] = { candidatas: [], error: e.message };
-      // Sin permiso o sin servicio no tiene sentido seguir probando uno por uno.
-      if (/no autorizado|401|403|Failed to fetch|NetworkError|Load failed/i.test(e.message)) cortar = e.message;
-    }
-  }
+  // Primero las fichas: la búsqueda de fotos sale del título que arme la IA.
   if (el('ff-op-ia').checked) {
     for (let i = 0; i < productos.length && !T.ia.error; i += MAX_PRODUCTOS_POR_PEDIDO) {
       if (T.cancelado) return false;
@@ -281,6 +292,22 @@ async function buscar() {
       } catch (e) {
         T.ia.error = String(e.message || e).slice(0, 140);
       }
+    }
+  }
+  const unicos = productos.filter(x => x.comparteCon == null);
+  let cortar = '';
+  for (let i = 0; i < unicos.length; i++) {
+    if (T.cancelado) return false;
+    const x = unicos[i];
+    if (x.p.fotos.length) { T.fotos[x.clave] = { candidatas: [], error: '', yaTiene: x.p.fotos.length }; continue; }
+    espera('Buscando fotos…', `${i + 1} de ${unicos.length} · ${x.nombreCompleto}`, i, unicos.length);
+    if (cortar) { T.fotos[x.clave] = { candidatas: [], error: cortar }; continue; }
+    try {
+      T.fotos[x.clave] = { ...await candidatasDe(x.p, x.titulo), error: '' };
+    } catch (e) {
+      T.fotos[x.clave] = { candidatas: [], error: e.message };
+      // Sin permiso o sin servicio no tiene sentido seguir probando uno por uno.
+      if (/no autorizado|401|403|Failed to fetch|NetworkError|Load failed/i.test(e.message)) cortar = e.message;
     }
   }
   // Lo que la IA no escribió (o si no se la usó): la ficha base, que ya dice la verdad.
