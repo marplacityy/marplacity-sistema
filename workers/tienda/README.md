@@ -18,6 +18,7 @@ URL de producción: https://tienda.fiwind702050.workers.dev/
 | `POST /fotos` | busca en Amazon las fotos de un producto y las sube a `fotos/` de Firebase Storage (`FOTOS_BUCKET`) con el token del dueño. Busca con el script de Ecommodo (`fotos-ecommodo.js`: DuckDuckGo Imágenes y la página de Amazon, sin claves); SerpApi es el respaldo, solo si el script no trae nada y hay `SERPAPI_KEY`. Solo el dueño |
 | `POST /fotos/buscar` | candidatas de foto para revisar, sin bajar nada: `{consulta, motor, candidatos: [{url, titulo, color}]}`. Mismo orden: el script de Ecommodo y, si no trae ninguna que sirva, SerpApi. El sistema las mide en el navegador (fondo blanco, resolución, repetidas) y el dueño confirma. Solo el dueño |
 | `POST /fotos/traer` | baja las URLs elegidas o el link pegado (`{base, desde, urls}`, hosts públicos) y las sube a Firebase Storage con el nombre del producto y el token del dueño. Solo el dueño |
+| `GET /fotos/leer?archivo=` | una foto de `fotos/`, con cabeceras CORS: el sistema la usa para medir dónde está el producto y emparejar las miniaturas de la tienda (el bucket no deja leer los píxeles desde una página). Solo el dueño |
 | `POST /ia/mejorar` | la ficha de una tanda de productos (`{productos, categorias}`, hasta 20): título, categoría, descripción, etiquetas SEO y descripción para Google, con la IA que esté cargada. No guarda nada. Solo el dueño |
 | `POST /ia/texto` | un texto de la IA que esté cargada (`{sistema, mensaje, json, maxTokens}` → `{texto, proveedor}`). Solo el dueño |
 

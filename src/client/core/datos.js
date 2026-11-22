@@ -422,6 +422,7 @@ export async function init() {
       const d = snap.exists() ? snap.data() : null;
       contextoApp.FOTOS = d?.mapa || {};
       contextoApp.FOTOS_CLAS = d?.clasificacion || {};
+      contextoApp.FOTOS_CAJAS = d?.cajas || {};   // dónde está el producto en cada foto: para las miniaturas
       // La base guardada en el doc es para el bot y las tiendas (una URL absoluta). Esta
       // pantalla usa la de la configuración (contextoApp.FOTOS_BASE): si el doc quedó con
       // otra, el catálogo la corrige al guardar.

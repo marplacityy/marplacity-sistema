@@ -4,7 +4,7 @@ import {
   idDeItemLista, idViejoDeItemLista, migrarIdsDeLista, palabrasDeItem, gruposDuplicados,
   precioUnificado, ofertaMasBarata, ofertaMejorEscrita, unificarGrupos,
 } from '../src/shared/duplicados.js';
-import { fondoBlanco, huellaDeFoto, distanciaDeHuellas, elegirFotos } from '../src/shared/calidad-foto.js';
+import { fondoBlanco, huellaDeFoto, distanciaDeHuellas, elegirFotos, cajaDeFoto, ajusteDeMiniatura } from '../src/shared/calidad-foto.js';
 
 const oferta = (origen, producto, gb, color, precioUSD, condicion = '') => {
   const it = { producto, gb, color, condicion };
@@ -317,4 +317,38 @@ test('las candidatas de foto son del modelo pedido, no de otra variante ni de un
   // Un producto que trae su estuche no es un accesorio, y "3nd Generation" es el 3.
   assert.equal(candidatasDeResultados([{ title: 'Apple AirPods Pro (3nd Generation) with MagSafe Charging Case', thumbnail: I('a.jpg') }], { nombre: 'AirPods Pro 3', color: '' }).length, 1);
   assert.deepEqual(candidatasDeResultados(null, { nombre: 'x' }), []);
+});
+
+test('el recuadro del producto es lo que no es fondo blanco', () => {
+  // Un teléfono parado en el medio de una foto cuadrada, con mucho margen.
+  const conMargen = imagen(96, (x, y) => (x >= 24 && x < 72 && y >= 12 && y < 84 ? NEGRO : BLANCO));
+  assert.deepEqual(cajaDeFoto(conMargen, 96, 96), [0.25, 0.125, 0.75, 0.875]);
+  // Un par de puntos sueltos (ruido del JPG) no agrandan el recuadro.
+  const conRuido = imagen(96, (x, y) => (x >= 24 && x < 72 && y >= 12 && y < 84 || x === 2 && y === 3 ? NEGRO : BLANCO));
+  assert.deepEqual(cajaDeFoto(conRuido, 96, 96), [0.25, 0.125, 0.75, 0.875]);
+  // Sin fondo blanco, o toda blanca: el cuadro entero.
+  assert.deepEqual(cajaDeFoto(imagen(32, () => [90, 140, 200]), 32, 32), [0, 0, 1, 1]);
+  assert.deepEqual(cajaDeFoto(imagen(32, () => BLANCO), 32, 32), [0, 0, 1, 1]);
+});
+
+test('la miniatura se agranda lo justo para que el producto ocupe la tarjeta', () => {
+  // El teléfono ocupa el 73% del alto de una foto cuadrada: hay que agrandar 1/0,73.
+  assert.deepEqual(ajusteDeMiniatura([0.208, 0.135, 0.792, 0.865, 1]), { k: 1.37, dx: -0, dy: -0 });
+  // Corrido hacia arriba y a la izquierda: además se centra.
+  assert.deepEqual(ajusteDeMiniatura([0.1, 0.1, 0.6, 0.7, 1]), { k: 1.67, dx: 0.15, dy: 0.1 });
+  // Una foto vertical ya recortada al ras, o que casi llena el cuadro: no se toca.
+  assert.equal(ajusteDeMiniatura([0, 0, 1, 1, 0.81]), null);
+  assert.equal(ajusteDeMiniatura([0.115, 0.01, 0.885, 0.99, 1]), null);
+  // En una foto apaisada manda el ancho: el alto ya sobra.
+  assert.deepEqual(ajusteDeMiniatura([0.25, 0.1, 0.75, 0.9, 2]), { k: 2, dx: -0, dy: -0 });
+  // Un producto diminuto no se agranda sin límite, y un dato roto no rompe nada.
+  assert.equal(ajusteDeMiniatura([0.45, 0.45, 0.55, 0.55, 1]).k, 2.5);
+  for (const roto of [null, [], [0, 0, 1, 1], [0.5, 0, 0.2, 1, 1], ['a', 0, 1, 1, 1], [0, 0, 1, 1, 0], [0, 0, 1.4, 1, 1]]) assert.equal(ajusteDeMiniatura(roto), null);
+});
+
+test('el Worker solo entrega archivos de la carpeta de fotos', async () => {
+  const { esArchivoDeFoto, leerFoto } = await import('../server/services/tienda/fotos.js');
+  assert.ok(esArchivoDeFoto('iphone-15-pro-max-blue-tit.jpg') && esArchivoDeFoto('x-2.webp'));
+  for (const malo of ['../secreto.jpg', 'a/b.jpg', 'foto.gif', 'https://otro.com/x.jpg', 'Foto.JPG', '', null]) assert.equal(esArchivoDeFoto(malo), false, String(malo));
+  assert.equal(await leerFoto({}, '../config.json'), null);   // ni siquiera sale a buscarlo
 });

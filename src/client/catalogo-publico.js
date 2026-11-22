@@ -1,4 +1,5 @@
 import { esc, on } from '../shared/seguridad.js';
+import { ajusteDeMiniatura } from '../shared/calidad-foto.js';
 import { RUBROS_CATALOGO, rubroDe, cantidadMaxima, capacidadPareja } from '../shared/catalogo.js';
 import { activarEventos } from './core/eventos.js';
 activarEventos();
@@ -52,9 +53,14 @@ const fotosDe = p => Array.isArray(p.fotos) ? p.fotos : (p.foto ? [p.foto] : [])
 /** La foto de la tarjeta: la primera, o la inicial del modelo si no hay. */
 function fotoTarjeta(p){
   const foto = fotosDe(p)[0];
+  // Cada foto trae su propio margen blanco. El sistema publica dónde está el producto
+  // dentro de la foto y acá se agranda la miniatura lo justo para que todos se vean del
+  // mismo tamaño. Solo en la tarjeta: en la página del producto la foto va entera.
+  const a = ajusteDeMiniatura(p.fotoCaja);
+  const ajuste = a ? ` style="--k:${a.k};--dx:${a.dx};--dy:${a.dy}"` : '';
   // Si el archivo no carga, se cambia por la inicial: nunca una imagen rota.
   return foto
-    ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy" ${on('error', 'fotoFallo', '$this', inicial(p.nombre))}>`
+    ? `<img src="${esc(foto)}" alt="${esc(p.nombre)}" loading="lazy"${ajuste} ${on('error', 'fotoFallo', '$this', inicial(p.nombre))}>`
     : `<span class="sin-foto">${esc(inicial(p.nombre))}</span>`;
 }
 

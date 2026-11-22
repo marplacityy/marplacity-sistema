@@ -97,3 +97,57 @@ export function elegirFotos(candidatas, { max = FOTOS_POR_PRODUCTO, minLado = 50
   return lista.sort((a, b) => peso(a) - peso(b) || Math.min(lado(b), 1500) - Math.min(lado(a), 1500) || a.orden - b.orden)
     .map(({ orden, ...c }) => c);
 }
+
+// ── Miniaturas parejas ───────────────────────────────────────
+//
+// Cada foto trae su propio margen blanco: en una el teléfono ocupa casi todo el cuadro y
+// en otra la mitad, y en la tienda quedan unos grandes y otros chicos. El sistema mide
+// una vez dónde está el producto dentro de la foto (`cajaDeFoto`) y la tienda agranda la
+// miniatura lo justo para que todos ocupen lo mismo (`ajusteDeMiniatura`). La foto no se
+// toca: en la página del producto se ve entera, como es.
+
+/**
+ * Dónde está el producto dentro de la foto: `[x0, y0, x1, y1]` de 0 a 1, el recuadro de
+ * todo lo que no es fondo blanco. Una fila o columna cuenta si tiene algo más que un par
+ * de puntos sueltos (el ruido del JPG). Si la foto no tiene fondo blanco devuelve el
+ * cuadro entero.
+ */
+export function cajaDeFoto(rgba, ancho, alto) {
+  const filas = new Uint16Array(alto), columnas = new Uint16Array(ancho);
+  for (let y = 0; y < alto; y++) {
+    for (let x = 0; x < ancho; x++) {
+      const i = (y * ancho + x) * 4;
+      if (rgba[i] < BLANCO || rgba[i + 1] < BLANCO || rgba[i + 2] < BLANCO) { filas[y]++; columnas[x]++; }
+    }
+  }
+  const extremos = (cuentas, minimo) => {
+    let desde = 0, hasta = cuentas.length - 1;
+    while (desde < cuentas.length && cuentas[desde] < minimo) desde++;
+    while (hasta > desde && cuentas[hasta] < minimo) hasta--;
+    return desde >= cuentas.length ? null : [desde, hasta + 1];
+  };
+  const fx = extremos(columnas, Math.max(2, Math.round(alto * 0.02)));
+  const fy = extremos(filas, Math.max(2, Math.round(ancho * 0.02)));
+  if (!fx || !fy) return [0, 0, 1, 1];
+  const r = n => Math.round(n * 1000) / 1000;
+  return [r(fx[0] / ancho), r(fy[0] / alto), r(fx[1] / ancho), r(fy[1] / alto)];
+}
+
+/**
+ * Cuánto agrandar y correr la miniatura para que el producto ocupe todo el espacio de la
+ * tarjeta, a partir de `[x0, y0, x1, y1, proporción]` (proporción = ancho / alto de la
+ * foto). Devuelve `{ k, dx, dy }`: la escala y el corrimiento del centro, en fracciones
+ * del espacio de la foto; o null si no hay nada que ajustar (ya lo ocupa, o el dato no
+ * sirve). `max` evita agrandar de más una foto donde el producto es un punto.
+ */
+export function ajusteDeMiniatura(caja, { max = 2.5 } = {}) {
+  if (!Array.isArray(caja) || caja.length < 5 || !caja.every(n => Number.isFinite(Number(n)))) return null;
+  const [x0, y0, x1, y1, a] = caja.map(Number);
+  if (!(a > 0) || !(x1 > x0) || !(y1 > y0) || x0 < 0 || y0 < 0 || x1 > 1 || y1 > 1) return null;
+  // La foto se muestra entera dentro de un cuadrado: qué parte de su lado ocupa cada dimensión.
+  const ladoX = a >= 1 ? 1 : a, ladoY = a >= 1 ? 1 / a : 1;
+  const k = Math.min(1 / ((x1 - x0) * ladoX), 1 / ((y1 - y0) * ladoY), max);
+  if (!(k >= 1.04)) return null;
+  const r = (n, d) => Math.round(n * d) / d;
+  return { k: r(k, 100), dx: r(-((x0 + x1) / 2 - 0.5) * ladoX, 1000), dy: r(-((y0 + y1) / 2 - 0.5) * ladoY, 1000) };
+}

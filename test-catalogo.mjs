@@ -73,6 +73,9 @@ const casos = [
   [{ nombre: 'Joystick PS5 Ed. Wolverine' }, 'Consolas'],
   [{ nombre: "Accesorio Magic Keyboard Folio 11'' White (For A16)" }, 'Accesorios iPad'],
   [{ nombre: 'Apple Pencil Pro' }, 'Accesorios iPad'],
+  [{ nombre: 'Xiaomi Redmi Pad 2 11" 4GB RAM' }, 'Tablets'],
+  [{ nombre: 'Xiaomi Poco Pad X1 11.2" 8GB RAM WiFi (BR)' }, 'Tablets'],
+  [{ nombre: 'Xiaomi Redmi Note 14 256GB' }, 'Celulares Xiaomi'],
 ];
 for (const [p, esperado] of casos) assert.equal(categoriaDe(p), esperado, `${p.nombre} → ${esperado}`);
 

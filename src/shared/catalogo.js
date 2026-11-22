@@ -113,7 +113,7 @@ export function categoriaDe(p) {
   // Computación.
   if (t(/macbook|imac|mac mini|mac studio|\bmac\b/i)) return 'MacBook nuevas';
   if (t(/ipad/i)) return 'iPad nuevos';
-  if (t(/tablet|galaxy tab|\btab\b/i)) return 'Tablets';
+  if (t(/tablet|galaxy tab|\btab\b|\bpad\b/i)) return 'Tablets';   // "Redmi Pad", "Poco Pad": el iPad ya salió arriba
   if (t(/monitor/i)) return 'Monitores';
   if (t(/iphone/i)) return esUsado(p) ? 'iPhone usados' : 'iPhone nuevos';
   // Carga va después de los equipos: "AirPods Max (USB-C)" no es un cable.

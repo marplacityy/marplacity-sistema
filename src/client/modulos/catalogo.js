@@ -1,5 +1,6 @@
 import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion, capacidadPareja } from '../../shared/catalogo.js';
 import { idDeItemLista, migrarIdsDeLista, gruposDuplicados, precioUnificado, ofertaMasBarata, REGLAS_PRECIO } from '../../shared/duplicados.js';
+import { cajaDeFoto, ajusteDeMiniatura } from '../../shared/calidad-foto.js';
 import { on } from '../../shared/seguridad.js';
 import { configuracion } from '../core/config-publica.js';
 /** modulos/catalogo: lógica preservada de la aplicación original. */
@@ -194,9 +195,13 @@ export function catalogoCandidatos() {
   const ajustes = contextoApp.cfg.catalogoAjustes || {};
   const todas = contextoApp.todasLasCategorias();
   const metas = contextoApp.cfg.catalogoMeta || {};
+  const cajas = contextoApp.FOTOS_CAJAS || {};
   return items.map(p => {
     const aj = ajustes[p.id] || {};
     const meta = metas[p.id] || {};
+    // Dónde está el producto dentro de su foto principal: la tienda lo usa para que todas
+    // las miniaturas se vean del mismo tamaño. Solo va si hay algo que ajustar.
+    const caja = p.fotos.length ? cajas[fotoPrincipalDe(p)] : null;
     // La entrega: "pedido" o "inmediato". Por defecto sale de dónde está cargado (las
     // listas son a pedido, el resto inmediato); lo que se tocó a mano manda.
     const entregaBase = p.tipo === 'pedido' ? 'pedido' : 'inmediato';
@@ -216,6 +221,7 @@ export function catalogoCandidatos() {
       condicion: esUsado(p) ? 'usado' : 'nuevo',
       categoria: aj.categoria && todas.includes(aj.categoria) ? aj.categoria : categoriaDe(p),
       descripcion: String(notas[p.id] || '').trim(),
+      ...(caja && ajusteDeMiniatura(caja) ? { fotoCaja: caja } : {}),
       // Lo que Juni escribió para la tienda: título propio, meta description y palabras clave.
       ...(meta.titulo ? {
         titulo: meta.titulo
@@ -789,6 +795,66 @@ export function renderFotosCatalogo() {
            ${contextoApp.selectClave(a, '')}
          </div>`).join('')}</div>` : ''}`;
 }
+/** El archivo de la foto principal de un producto (la primera de su modelo y color). */
+const fotoPrincipalDe = p => (contextoApp.FOTOS[contextoApp.claveFotoDe(p)] || [])[0] || '';
+
+/**
+ * Mide dónde está el producto dentro de cada foto: `{ archivo: [x0, y0, x1, y1, proporción] }`.
+ *
+ * Las fotos se piden al Worker tienda (`/fotos/leer`) y no a Storage, porque el bucket no
+ * deja que una página lea los píxeles de sus imágenes. Si el Worker no contesta o todavía
+ * no tiene esa ruta, se corta sin más: la tienda muestra las miniaturas como siempre.
+ */
+async function medirCajas(archivos) {
+  const cajas = {};
+  const base = (configuracion.api.tiendaRemota || contextoApp.TIENDA_URL) + '/fotos/leer?archivo=';
+  const headers = await workerHeaders();
+  let cortar = false;
+  const medir = async archivo => {
+    if (cortar) return;
+    try {
+      const r = await fetch(base + encodeURIComponent(archivo), { headers });
+      if (!r.ok) {
+        // "No encontré esa foto" es de este archivo; cualquier otra falla es del servicio.
+        const d = await r.json().catch(() => ({}));
+        if (!/esa foto/.test(String(d.error || ''))) cortar = true;
+        return;
+      }
+      const bmp = await createImageBitmap(await r.blob());
+      const k = Math.min(1, 96 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bmp.width * k));
+      c.height = Math.max(1, Math.round(bmp.height * k));
+      const ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(bmp, 0, 0, c.width, c.height);
+      cajas[archivo] = [...cajaDeFoto(ctx.getImageData(0, 0, c.width, c.height).data, c.width, c.height), Math.round(bmp.width / bmp.height * 1000) / 1000];
+    } catch (e) {
+      if (/Failed to fetch|NetworkError|Load failed/i.test(String(e.message))) cortar = true;
+    }
+  };
+  // De a seis: son fotos chicas y el Worker las entrega rápido.
+  for (let i = 0; i < archivos.length && !cortar; i += 6) await Promise.all(archivos.slice(i, i + 6).map(medir));
+  return cajas;
+}
+
+/**
+ * Antes de publicar: mide la foto principal de los productos que van a la tienda y todavía
+ * no se midieron, y guarda el resultado en el doc de fotos. Cada foto se mide una sola vez.
+ */
+async function asegurarCajasDeFotos() {
+  const medidas = contextoApp.FOTOS_CAJAS || {};
+  const faltan = [...new Set(catalogoCandidatos().filter(p => p._sale && p.fotos.length).map(fotoPrincipalDe).filter(a => a && !(a in medidas)))];
+  if (!faltan.length) return 0;
+  const nuevas = await medirCajas(faltan);
+  const n = Object.keys(nuevas).length;
+  if (!n) return 0;
+  contextoApp.FOTOS_CAJAS = { ...medidas, ...nuevas };
+  await setDoc(contextoApp.fotosDoc, contextoApp.withUser({ cajas: nuevas }), { merge: true });
+  return n;
+}
+
 /** Los archivos de imagen que hay de verdad en `fotos/` de Firebase Storage. */
 export async function archivosDeFotos() {
   return listarFotos();
@@ -804,6 +870,7 @@ export async function guardarFotos(archivos) {
   await setDoc(contextoApp.fotosDoc, contextoApp.withUser({
     mapa,
     clasificacion,
+    cajas: Object.fromEntries(Object.entries(contextoApp.FOTOS_CAJAS || {}).filter(([a]) => vivos.has(a))),
     base: contextoApp.FOTOS_BASE,
     actualizado: new Date().toISOString()
   }), {
@@ -973,6 +1040,7 @@ export function inicializarCatalogo() {
   // Qué decidió la IA (o Juni a mano) de cada archivo: { 'IMG_0412.jpg': { clave, vista, confianza, manual } }.
   // `clave` en null es "mirada y no identificada". Manda sobre el nombre del archivo.
   contextoApp.FOTOS_CLAS = {};
+  contextoApp.FOTOS_CAJAS = {};   // { 'iphone-15-black.jpg': [x0, y0, x1, y1, proporción] }: dónde está el producto en la foto
   contextoApp.fotoAbierta = null; // la clave cuyo detalle está desplegado en la grilla
   contextoApp.fotosDoc = doc(contextoApp.db, 'catalogo', 'fotos');
   contextoApp.catalogoDoc = doc(contextoApp.db, 'catalogo', 'publico');
@@ -1866,10 +1934,19 @@ Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
       showToast('Todavía no pude confirmar las listas con el servidor (¿sin conexión?): probá de nuevo en unos segundos', true);
       return;
     }
-    const salen = catalogoCandidatos().filter(p => p._sale).map(productoPublicado);
-    if (!salen.length && !confirm('No hay ningún equipo para publicar.\n\nLa página va a quedar vacía. ¿Seguro?')) return;
     const btn = document.getElementById('btn-cat-publicar');
+    if (btn.disabled) return;   // ya hay una publicación en curso
     btn.disabled = true;
+    // Las miniaturas de la tienda se ven todas del mismo tamaño: se mide la foto principal
+    // de lo que todavía no se midió. Si no se puede, se publica igual.
+    btn.textContent = 'Midiendo fotos…';
+    try { await asegurarCajasDeFotos(); } catch (e) { console.warn('miniaturas sin medir:', e.message); }
+    const salen = catalogoCandidatos().filter(p => p._sale).map(productoPublicado);
+    if (!salen.length && !confirm('No hay ningún equipo para publicar.\n\nLa página va a quedar vacía. ¿Seguro?')) {
+      btn.disabled = false;
+      btn.textContent = '🌐 Publicar';
+      return;
+    }
     btn.textContent = 'Publicando…';
     setSyncDot('syncing');
     try {

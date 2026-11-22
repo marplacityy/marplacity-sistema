@@ -18,6 +18,7 @@
  *   POST /fotos          busca en Amazon y sube a Storage las imágenes de un producto (solo el dueño)
  *   POST /fotos/buscar   candidatos de foto para elegir a mano, sin bajar nada (solo el dueño)
  *   POST /fotos/traer    baja las URLs elegidas o pegadas y las sube a Storage (solo el dueño)
+ *   GET  /fotos/leer     una foto de Storage, para que el sistema mida el recuadro del producto (solo el dueño)
  *   POST /ia/mejorar     título, categoría, descripción y etiquetas SEO de una tanda de productos (solo el dueño)
  *   POST /ia/texto       un texto de la IA que esté cargada, para lo que el sistema necesite (solo el dueño)
  *
@@ -40,7 +41,7 @@
  */
 
 import { leerDoc, escribirDoc } from '../facturador/firestore.js';
-import { fotosParaProducto, candidatosDeFotos, traerFotos, urlPublicaSegura } from './fotos.js';
+import { fotosParaProducto, candidatosDeFotos, traerFotos, urlPublicaSegura, leerFoto } from './fotos.js';
 import { mejorarProductos, textoConIA, proveedoresCargados, PROVEEDORES_IA } from './ia.js';
 import { TIENDA_PUBLICA } from '../../../src/shared/sitio.js';
 import { cantidadMaxima, MAX_CANTIDAD_PEDIDO } from '../../../src/shared/catalogo.js';
@@ -86,6 +87,7 @@ export default {
       if (request.method === 'POST' && url.pathname === '/fotos') return await buscarFotos(request, env);
       if (request.method === 'POST' && url.pathname === '/fotos/buscar') return await buscarCandidatos(request, env);
       if (request.method === 'POST' && url.pathname === '/fotos/traer') return await traerElegidas(request, env);
+      if (request.method === 'GET' && url.pathname === '/fotos/leer') return await leerUnaFoto(request, env, url);
       if (request.method === 'POST' && url.pathname === '/ia/mejorar') return await iaMejorar(request, env);
       if (request.method === 'POST' && url.pathname === '/ia/texto') return await iaTexto(request, env);
     } catch (e) {
@@ -323,6 +325,15 @@ async function buscarCandidatos(request, env) {
     console.log('candidatos error', nombre, e.message);
     return json({ error: e.message }, 502);
   }
+}
+
+/** Una foto de `fotos/`, con permiso para que la página del sistema lea sus píxeles. */
+async function leerUnaFoto(request, env, url) {
+  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
+  if (!uid || uid !== env.OWNER_UID) return json({ error: 'no autorizado' }, 401);
+  const foto = await leerFoto(env, url.searchParams.get('archivo')).catch(() => null);
+  if (!foto) return json({ error: 'no encontré esa foto' }, 404);
+  return new Response(foto.bytes, { headers: { ...CORS, 'Content-Type': foto.tipo, 'Cache-Control': 'private, max-age=300' } });
 }
 
 /** Lo común de los pedidos a la IA: solo el dueño, y el cuerpo en JSON. */

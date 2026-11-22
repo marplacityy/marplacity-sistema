@@ -311,6 +311,23 @@ export async function bajarImagen(url, { externa = false } = {}) {
 
 const TIPOS = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 
+/** El nombre de un archivo de `fotos/`, como los arma el sistema (el mismo patrón que storage.rules). */
+export const esArchivoDeFoto = nombre => /^[a-z0-9][a-z0-9-]{0,118}[.](jpe?g|png|webp)$/.test(String(nombre || ''));
+
+/**
+ * Una foto de `fotos/`, tal cual está en Storage. El bucket no deja que una página lea los
+ * píxeles de sus imágenes (no manda cabeceras CORS); el sistema las pide por acá para
+ * medir el recuadro del producto. Devuelve `{ bytes, tipo }` o null si no existe.
+ */
+export async function leerFoto(env, archivo) {
+  if (!esArchivoDeFoto(archivo)) return null;
+  const r = await fetch(`https://storage.googleapis.com/${env.FOTOS_BUCKET || FOTOS_BUCKET}/${FOTOS_CARPETA}/${archivo}`, { signal: AbortSignal.timeout(15_000) });
+  if (!r.ok) return null;
+  const tipo = r.headers.get('content-type') || '';
+  if (!tipo.startsWith('image/') || Number(r.headers.get('content-length')) > MAX_IMAGEN) { await r.body?.cancel(); return null; }
+  return { bytes: await r.arrayBuffer(), tipo };
+}
+
 /** La URL de subida de la API REST de Storage para un archivo de `fotos/`. Exportado para el test. */
 export function urlSubidaStorage(bucket, archivo) {
   return `https://firebasestorage.googleapis.com/v0/b/${bucket}/o?uploadType=media&name=${encodeURIComponent(`${FOTOS_CARPETA}/${archivo}`)}`;
