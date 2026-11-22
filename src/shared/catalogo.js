@@ -66,6 +66,43 @@ export const capacidadPareja = gb => {
   const t = String(gb ?? '').trim();
   return /^\d+(?:[.,]\d+)?\s*(gb|tb)$/i.test(t) ? t.replace(/\s+/g, '').toUpperCase() : t;
 };
+// Las palabras con las que se nombra un color, solas o combinadas ("Deep Blue", "Night
+// Sky", "Natural Titanium", "SilverBlue"). No hace falta que estén todos los colores del
+// mundo: lo que no se reconoce queda en el nombre, como estaba.
+const PALABRAS_DE_COLOR = ['black', 'white', 'blue', 'red', 'green', 'pink', 'purple', 'violet', 'gray', 'grey', 'silver', 'gold', 'yellow', 'orange',
+  'teal', 'ultramarine', 'midnight', 'starlight', 'graphite', 'titanium', 'natural', 'desert', 'sage', 'lavender', 'lavander', 'mist', 'deep', 'sky',
+  'night', 'star', 'space', 'jet', 'burgundy', 'glacier', 'indigo', 'blush', 'citrus', 'sierra', 'alpine', 'pacific', 'coral', 'mint', 'cream', 'navy',
+  'bronze', 'olive', 'sand', 'light', 'dark', 'rose', 'lilac', 'beige', 'brown', 'cyan', 'turquoise', 'lime', 'peach', 'cosmic', 'phantom',
+  'negro', 'blanco', 'azul', 'rojo', 'verde', 'rosa', 'rosado', 'violeta', 'lila', 'gris', 'plata', 'plateado', 'dorado', 'amarillo', 'naranja', 'celeste', 'grafito', 'titanio'];
+const ES_COLOR = new RegExp(`^(?:${PALABRAS_DE_COLOR.join('|')})+$`, 'i');
+
+/**
+ * El nombre del modelo y el color, cada uno en su lugar.
+ *
+ * Hay proveedores que escriben el color adentro del nombre ("iPhone 15 Black // SIM +
+ * eSIM", "Samsung S26 Ultra 12+ Sky Blue") y dejan vacío el campo del color. La tienda
+ * junta en una sola tarjeta las variantes de un modelo —con la capacidad y el color para
+ * elegir adentro— solo si el nombre es el mismo, así que esos salían de a uno por color.
+ *
+ * Se saca el color del FINAL del nombre (lo que venga después de una barra doble es una
+ * aclaración y pasa a ir entre paréntesis): "iPhone 15 Black // SIM + eSIM" queda como
+ * "iPhone 15 (SIM + eSIM)" y color "Black". Si el campo del color ya venía cargado, vale
+ * ese; del nombre solo se saca si repite el mismo.
+ */
+export function separarColor(producto, color) {
+  let aclaracion = '';
+  const palabras = String(producto ?? '').replace(/\s+/g, ' ').trim()
+    .replace(/\s*\/\/\s*(.+)$/, (_, resto) => { aclaracion = resto.trim(); return ''; })
+    .split(' ').filter(Boolean);
+  const cola = [];
+  while (palabras.length > 1 && ES_COLOR.test(palabras[palabras.length - 1])) cola.unshift(palabras.pop());
+  let elColor = String(color ?? '').replace(/\s+/g, ' ').trim();
+  const delNombre = cola.join(' ');
+  if (delNombre && !elColor) elColor = delNombre;
+  else if (delNombre && elColor.toLowerCase() !== delNombre.toLowerCase()) palabras.push(...cola);   // dicen cosas distintas: el nombre no se toca
+  return { nombre: palabras.join(' ') + (aclaracion ? ` (${aclaracion})` : ''), color: elColor };
+}
+
 export const esUsado = p => /usad|refurb|reacond|impecab|\d+\s*\/\s*10/i.test(p.estado || '') || p.bateria != null && !/nuev|sellad/i.test(p.estado || '');
 
 /**

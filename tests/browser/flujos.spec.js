@@ -409,10 +409,13 @@ test('los repetidos entre listas se unifican: uno solo, precio promedio y la lis
   await page.locator('#dup-listo .btn-secondary').click();
 
   cfg = await page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba'));
-  expect(cfg.catalogoUnificados[ids.agus256]).toMatchObject({ regla: 'promedio', nombre: 'iPhone 18 Pro Max', gb: '256GB', color: 'Black' });
-  expect(cfg.catalogoIncluidos).toContain(ids.agus256);
-  expect(cfg.catalogoIncluidos).not.toContain(ids.ema256);
-  expect(cfg.catalogoNotas[ids.agus256]).toBe('Sellado, con garantía.');
+  // El color sale del nombre ("iPhone 18 Pro Max Black" → modelo y color), así que las dos
+  // ofertas quedan escritas igual y el producto conserva el id de la primera lista.
+  expect(cfg.catalogoUnificados[ids.ema256]).toMatchObject({ regla: 'promedio', nombre: 'iPhone 18 Pro Max', gb: '256GB', color: 'Black' });
+  expect(cfg.catalogoUnificados[ids.ema256].ids).toEqual(expect.arrayContaining([ids.ema256, ids.agus256]));
+  expect(cfg.catalogoIncluidos).toContain(ids.ema256);
+  expect(cfg.catalogoIncluidos).not.toContain(ids.agus256);
+  expect(cfg.catalogoNotas[ids.ema256]).toBe('Sellado, con garantía.');
   await expect(page.locator('#btn-cat-duplicados')).toHaveText('🔎 Buscar duplicados');
 
   // En modo lista se ve la columna Fuente: la más barata, y que también lo tiene la otra.
@@ -431,16 +434,17 @@ test('los repetidos entre listas se unifican: uno solo, precio promedio y la lis
   // Lo que se publica no lleva nada de los proveedores.
   await page.evaluate(() => window.publicarCatalogo());
   const publicado = await page.evaluate(() => window.__datosPrueba.leer('catalogo/publico'));
-  const unificado = publicado.productos.find(p => p.id === ids.agus256);
+  const unificado = publicado.productos.find(p => p.id === ids.ema256);
   expect(unificado).toMatchObject({ nombre: 'iPhone 18 Pro Max', gb: '256GB', color: 'Black', precioUSD: 1505, descripcion: 'Sellado, con garantía.' });
   expect(JSON.stringify(publicado)).not.toMatch(/ema|agus|_ofertas|_fuentes/);
-  expect(publicado.productos.map(p => p.id)).toContain(ids.ema512);
+  // La otra capacidad va con el color en su campo, no en el nombre: la tienda la junta con su modelo.
+  expect(publicado.productos.find(p => p.id === ids.ema512)).toMatchObject({ nombre: 'iPhone 18 Pro Max', gb: '512GB', color: 'Black' });
 
   // Cuando alguien lo compra, Pedidos dice a quién pedírselo.
   await page.evaluate(id => window.__datosPrueba.cargar('pedidos/pedido-1', {
     estado: 'pagado', creado: new Date().toISOString(), pago: 'efectivo', montoUSD: 1505, entrega: 'retiro',
     cliente: { nombre: 'Ana', whatsapp: '2235550000' }, items: [{ id, nombre: 'iPhone 18 Pro Max', gb: '256GB', color: 'Black', tipo: 'pedido', cantidad: 1 }],
-  }), ids.agus256);
+  }), ids.ema256);
   await ir(page, 'pedidos');
   await expect(page.locator('.ped-prov')).toContainText('Pedíselo a ema');
   await expect(page.locator('.ped-prov')).toContainText('1.490');
@@ -448,7 +452,7 @@ test('los repetidos entre listas se unifican: uno solo, precio promedio y la lis
 
   // Separar deshace la unificación.
   await ir(page, 'catalogo');
-  await page.evaluate(id => window.separarUnificado(id), ids.agus256);
+  await page.evaluate(id => window.separarUnificado(id), ids.ema256);
   await expect.poll(() => page.evaluate(() => Object.keys(window.__datosPrueba.leer('config/usuario-prueba').catalogoUnificados).length)).toBe(0);
   await expect(page.locator('#btn-cat-duplicados')).toHaveText('🔎 Buscar duplicados (1)');
   expect(errores).toEqual([]);

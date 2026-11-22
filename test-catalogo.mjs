@@ -6,6 +6,7 @@
  * Importa funciones puras, sin arrancar Firebase ni depender del formato del HTML.
  */
 import { rangoDeModelo, compararPesos } from './src/shared/orden-tienda.js';
+import { separarColor } from './src/shared/catalogo.js';
 import { armarMapaFotos, categoriaDe, slugFoto, rubroDe, borradorDescripcion, capacidadPareja, CATEGORIAS_CATALOGO, RUBROS_CATALOGO } from './src/shared/catalogo.js';
 import assert from 'node:assert/strict';
 
@@ -95,6 +96,30 @@ for (const [c, esperado] of [
   // Lo que pidió Juni: el iPad con sus Pencil y teclados, y los cargadores con los accesorios de Apple.
   ['Accesorios iPad', 'iPad'], ['Accesorios de carga', 'Accesorios Apple'], ['AirPods', 'Parlantes y auriculares'], ['MacBook nuevas', 'Notebooks'],
 ]) assert.equal(rubroDe(c), esperado, `${c} → ${esperado}`);
+
+// ── separarColor: el color sale del nombre, para que la tienda junte las variantes ──
+for (const [producto, color, nombre, sale] of [
+  ['iPhone 15 Black // SIM + eSIM', '', 'iPhone 15 (SIM + eSIM)', 'Black'],
+  ['iPhone 15 Blue // SIM + eSIM', '', 'iPhone 15 (SIM + eSIM)', 'Blue'],
+  ['iPhone 17 Mist Blue // SIM + eSIM', '', 'iPhone 17 (SIM + eSIM)', 'Mist Blue'],
+  ['iPhone 17 Pro Max Deep Blue', '', 'iPhone 17 Pro Max', 'Deep Blue'],
+  ['iPhone 18 Pro Silver', '', 'iPhone 18 Pro', 'Silver'],
+  ['iPhone DUO Night Sky', '', 'iPhone DUO', 'Night Sky'],
+  ['Samsung S25 Ultra 12+ SilverBlue', '', 'Samsung S25 Ultra 12+', 'SilverBlue'],
+  ["MacBook Neo 13'' RAM 256gb Citrus", '', "MacBook Neo 13'' RAM 256gb", 'Citrus'],
+  ['Airpods Max 2 Midnight', '', 'Airpods Max 2', 'Midnight'],
+  // El color ya venía en su campo: el nombre queda como está, salvo que lo repita.
+  ['iPhone 18 Pro Max', 'Black', 'iPhone 18 Pro Max', 'Black'],
+  ['AirPods Max 2 Midnight', 'Midnight', 'AirPods Max 2', 'Midnight'],
+  ['Funda Silicona Black', 'Rojo', 'Funda Silicona Black', 'Rojo'],
+  // Lo que no termina en un color no se toca: ni modelos, ni códigos, ni aclaraciones.
+  ['iPhone 18 Pro Max con SIM', 'Glacier', 'iPhone 18 Pro Max con SIM', 'Glacier'],
+  ['Watch S12 46mm Black SB M/L - MJEL4LS', '', 'Watch S12 46mm Black SB M/L - MJEL4LS', ''],
+  ["Accesorio Magic Keyboard Folio 11'' White (For A16)", '', "Accesorio Magic Keyboard Folio 11'' White (For A16)", ''],
+  ['iPad A16 Silver + CELL', '', 'iPad A16 Silver + CELL', ''],
+  ['Apple Pencil Pro', '', 'Apple Pencil Pro', ''], ['Airpods 4 Noise Cancelling', '', 'Airpods 4 Noise Cancelling', ''],
+  ['Black', '', 'Black', ''], ['', '', '', ''], [null, null, '', ''],
+]) assert.deepEqual(separarColor(producto, color), { nombre, color: sale }, String(producto));
 
 // ── capacidadPareja: cada proveedor la escribe distinto y es la misma ──
 for (const [de, a] of [['256gb', '256GB'], ['256 GB', '256GB'], ['1tb', '1TB'], [' 512GB ', '512GB'], ['', ''], [null, ''], ['8/256GB', '8/256GB']]) assert.equal(capacidadPareja(de), a, `${de} → ${a}`);

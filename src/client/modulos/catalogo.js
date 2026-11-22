@@ -1,4 +1,4 @@
-import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion, capacidadPareja } from '../../shared/catalogo.js';
+import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion, capacidadPareja, separarColor } from '../../shared/catalogo.js';
 import { idDeItemLista, migrarIdsDeLista, gruposDuplicados, precioUnificado, ofertaMasBarata, REGLAS_PRECIO } from '../../shared/duplicados.js';
 import { cajaDeFoto, ajusteDeMiniatura } from '../../shared/calidad-foto.js';
 import { on } from '../../shared/seguridad.js';
@@ -1100,18 +1100,24 @@ export function inicializarCatalogo() {
    * nombre y no de un doc, porque cada guardado de la lista es un doc nuevo y el cliente
    * que compartió el link ayer tiene que seguir cayendo en el mismo producto hoy.
    */
-  contextoApp.pedidoPublico = (it, lista) => ({
-    id: idDeItemLista(it),
-    tipo: 'pedido',
-    nombre: String(it.producto || '').trim(),
-    gb: capacidadPareja(it.gb),
-    color: String(it.color || '').trim(),
-    bateria: null,
-    ciclos: null,
-    estado: it.condicion === 'nuevo' ? 'Nuevo' : it.condicion === 'usado' ? 'Usado' : '',
-    precioUSD: contextoApp.enUSD(it.precioPublico, lista.moneda),
-    fotos: fotosDe(it.producto, it.color)
-  });
+  contextoApp.pedidoPublico = (it, lista) => {
+    // El color va en su campo aunque el proveedor lo haya escrito en el nombre: así la
+    // tienda junta todos los colores de un modelo en una sola tarjeta. El id no cambia:
+    // sale de la lista tal cual vino.
+    const { nombre, color } = separarColor(it.producto, it.color);
+    return {
+      id: idDeItemLista(it),
+      tipo: 'pedido',
+      nombre,
+      gb: capacidadPareja(it.gb),
+      color,
+      bateria: null,
+      ciclos: null,
+      estado: it.condicion === 'nuevo' ? 'Nuevo' : it.condicion === 'usado' ? 'Usado' : '',
+      precioUSD: contextoApp.enUSD(it.precioPublico, lista.moneda),
+      fotos: fotosDe(nombre, color)
+    };
+  };
   /**
    * La categoría de la página, deducida del nombre y del estado. Las categorías las pidió
    * Juni el 06/09/2026; el orden de las secciones de la portada es este por defecto y se
