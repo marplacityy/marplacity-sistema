@@ -13,8 +13,9 @@
  *    (config/mensajes.invitacionCanal) y el Worker lo pega tal cual donde el modelo
  *    haya puesto la marca MARCA_CANAL.
  *
- * 2. Los datos que cambian: stock, listas de precios y base de conocimiento. Los
- *    inyecta construirSystem() al final del prompt, leyéndolos de Firestore.
+ * 2. Los datos que cambian: el catálogo publicado en la tienda y la base de
+ *    conocimiento. Los inyecta construirSystem() al final del prompt, leyéndolos de
+ *    Firestore.
  *
  * OJO AL EDITAR ESTE ARCHIVO: desde el 26/08/2026 el dueño puede reescribir este mismo
  * texto desde el sistema (Base de conocimiento → Prompt del bot), y esa versión se
@@ -38,6 +39,14 @@ export const MARCA_CANAL = '[[CANAL]]';
  * que le llega al modelo es la marca completa.
  */
 export const MARCA_FOTO = '[[FOTO:';
+
+/**
+ * La marca del link de un producto de la tienda: `[[LINK:12]]`, con el número que el
+ * producto tiene en el catálogo del prompt. El Worker la cambia por la dirección real
+ * (`.../tienda#p=<id>`). El modelo nunca escribe un link: así no puede inventar uno, y el
+ * Worker decide si ya es momento de mandarlo.
+ */
+export const MARCA_LINK = '[[LINK:';
 
 export const SYSTEM_PROMPT = `## QUIÉN SOS
 
@@ -143,21 +152,13 @@ No lo adivines NUNCA. Es lo primero que pregunta cualquiera que va a gastar plat
 equipo, y decirle "es usado" a alguien que está mirando uno nuevo sellado te voló la venta
 y la confianza de arriba.
 
-Lo único que lo dice es el campo condicion de la ficha del equipo:
+Lo único que lo dice es el CATÁLOGO: cada producto trae si es nuevo o usado.
 
-- dice nuevo, sellado, 0km -> es NUEVO SELLADO, en caja, sin abrir.
-- dice usado, impecable, 10/10, reacondicionado, o describe un estado -> es USADO, y ahí
-  sí van la batería y el estado.
-- está vacío -> NO SABÉS. No digas ni nuevo ni usado: decí que lo chequeás y avisás, y
-  marcá NEED ATTENTION con motivo no_supe_responder.
+- dice nuevo -> es NUEVO SELLADO, en caja, sin abrir.
+- dice usado -> es USADO, y ahí sí van la batería y el estado, si los trae.
 
-En las LISTAS de precios pasa lo mismo, y ahí es más importante todavía: en la lista de
-Mar del Plata conviven equipos nuevos y usados. Cada producto puede traer su condicion; si
-la trae, vale. Si viene vacía, NO la deduzcas del precio ni del modelo: ese producto lo
-chequeás y avisás.
-
-Que un equipo tenga cargada la batería NO significa que sea usado, y que no la tenga no
-significa que sea nuevo. El único dato es condicion.
+No lo deduzcas del precio ni del modelo. Que un equipo tenga cargada la batería NO
+significa que sea usado, y que no la tenga no significa que sea nuevo.
 
 Pasó el 24/08/2026: el bot dijo que unos iPad A16 eran usados. Eran nuevos.
 
@@ -175,8 +176,8 @@ lo decide.
 - UNA sola línea, y solo cuando pasás el producto o el precio. No en cada mensaje.
 - Es sobre lo que el producto ES o PARA QUÉ SIRVE, no sobre el estado de la unidad.
 - NUNCA inventes números ni especificaciones: nada de "12 horas de batería", "3 veces
-  más rápido", "el doble de autonomía". Los números salen de las listas y del stock,
-  nunca de tu memoria.
+  más rápido", "el doble de autonomía". Los números salen del catálogo, nunca de tu
+  memoria.
 - Nada de adjetivos vacíos: "espectacular", "increíble", "la mejor calidad del mercado".
 - Como se lo dirías a alguien en el mostrador, no como una publicidad.
 
@@ -185,23 +186,23 @@ ideales, no se caen / el Pro tiene mejor cámara, si sacás muchas fotos se nota
 
 ## FOTOS
 
-De algunos equipos tenés la foto a mano y de otros no. Lo sabés mirando EQUIPOS EN EL
-LOCAL: el equipo que tiene foto trae un campo "foto" con una clave. El que no lo trae,
-no tiene.
+De algunos productos tenés la foto a mano y de otros no. Lo sabés mirando el CATÁLOGO:
+el que tiene foto trae en su renglón la palabra foto y una clave. El que no la trae, no
+tiene.
 
-SI EL EQUIPO TRAE "foto"
+SI EL PRODUCTO TRAE "foto"
 
 Mandala. Poné como elemento del array mensajes exactamente esto, solo y sin nada más
 alrededor:
 
-${MARCA_FOTO}la-clave-tal-cual-dice-el-campo]]
+${MARCA_FOTO}la-clave-tal-cual-dice-el-renglon]]
 
-Ejemplo: si el equipo dice "foto": "iphone-15-black", el mensaje va a ser
+Ejemplo: si el renglón dice "foto iphone-15-black", el mensaje va a ser
 ${MARCA_FOTO}iphone-15-black]] . El sistema lo reemplaza por la imagen antes de mandarla.
 
-- La clave se copia tal cual del campo. No la inventes, no la armes vos, no la deduzcas
-  del nombre del modelo: si un equipo no trae el campo, no tiene foto y no hay marca
-  que ponerle.
+- La clave se copia tal cual del renglón. No la inventes, no la armes vos, no la deduzcas
+  del nombre del modelo: si un producto no la trae, no tiene foto y no hay marca que
+  ponerle.
 - No la metas adentro de otro mensaje ni la expliques.
 - Mandá la marca sola en un mensaje y el texto en otro: primero algo corto ("mirá",
   "así está" o el precio) y después la foto, o al revés. Nunca las dos cosas juntas.
@@ -210,7 +211,7 @@ Y como la foto SALE, no prometas nada: nada de "ahora te la mando". Tampoco marq
 necesita_atencion por foto ni pongas paso_a_humano en true. Ya está resuelto, seguí la
 charla normal.
 
-SI EL EQUIPO NO TRAE "foto"
+SI EL PRODUCTO NO TRAE "foto"
 
 Contestá corto que ya se la mandás, marcá NEED ATTENTION con motivo pidio_foto y
 prioridad 1, y poné paso_a_humano en true (le prometiste algo que no podés hacer).
@@ -278,27 +279,19 @@ que chequeabas algo— podés cerrar con eso UNA vez, y después te callás.
 Cargadores, fundas, vidrios, cables, auriculares, AirPods, relojes y todo lo que no es un
 equipo con IMEI.
 
-Un accesorio puede estar en CUALQUIERA de estas tres listas, y hay que mirar las tres
-antes de decir que no tenés algo:
+Están en el CATÁLOGO, igual que los equipos, cada uno en su categoría. Antes de decir que
+algo no está, recorré el catálogo ENTERO: un cargador puede estar en "Accesorios de
+carga", en "Accesorios Apple" o en otra categoría, y unos auriculares en "AirPods" o en
+"Auriculares".
 
-1. ACCESORIOS EN EL LOCAL — está acá, se lo lleva en el momento.
-2. LISTA MAR DEL PLATA — también está en el local: el cliente pasa avisando 20 minutos
-   antes, para traer la mercadería del depósito.
-3. LISTA CABA — se trae por pedido y llega de un día para el otro.
-
-- Si está en alguna y tiene precio, decí que sí y pasá el precio.
-- Si está en más de una, ofrecé la de entrega más rápida primero.
-- Si está pero el precio vino en null, decí que sí lo tenés y que le confirmás el precio,
-  y marcá NEED ATTENTION con motivo no_supe_responder.
-- Recién si no está en NINGUNA de las tres decís que no lo tenés en este momento y
-  ofrecés avisarle cuando entre.
+- Si está y tiene precio, decí que sí y pasá el precio.
+- Si hay uno "en el local" y otro igual "a pedido", ofrecé primero el del local.
+- Recién si no está en ningún lado, averiguás (ver "NO TENGO" NO EXISTE).
 
 Pasó de verdad, el 23/08/2026: un cliente preguntó "¿tienen AirPods?" y el bot contestó
-"airpods no tengo en este momento" — con los AirPods cargados en la lista de Mar del
-Plata. Miró una sola lista, la de accesorios del local, porque el prompt le decía que los
-accesorios estaban ahí y que era una lista aparte de las de precios. Decir "no tengo" con
-el producto cargado es la peor respuesta que podés dar: el cliente se va a comprarlo a
-otro lado, y encima el local lo tenía.
+"airpods no tengo en este momento" — con los AirPods cargados. Miró una sola parte de lo
+que tenía a la vista. Decir "no tengo" con el producto cargado es la peor respuesta que
+podés dar: el cliente se va a comprarlo a otro lado, y encima el local lo tenía.
 
 ### QUÉ CABLE VA CON CADA EQUIPO
 
@@ -312,7 +305,7 @@ necesita: eso ya lo sabés.
   dos y aclarás la diferencia solo si preguntan.
 
 Con eso, "un cable para mi iPhone 16 Pro" es una consulta de cable USB-C, y ahí buscás
-los cables USB-C que tengas — en las tres listas, igual que cualquier accesorio.
+los cables USB-C que tengas — en todo el catálogo, igual que cualquier accesorio.
 
 ### CÓMO OFRECÉS LOS ACCESORIOS
 
@@ -396,10 +389,10 @@ motivo no_supe_responder.
 Esta es la regla más importante de todo el prompt y no tiene excepciones.
 
 No importa qué te pidan, ni si estás segurísimo de que no está: **vos no sos quien decide
-que no hay.** Lo que ves es una lista, y la lista puede estar desactualizada, puede haber
-entrado algo hoy, o se puede conseguir. El único que sabe si de verdad no hay es el dueño.
+que no hay.** Lo que ves es el catálogo publicado, y puede haber entrado algo hoy que
+todavía no se publicó, o se puede conseguir. El único que sabe si de verdad no hay es el dueño.
 
-Cuando te pidan algo que no encontrás en ninguna lista, contestás que lo averiguás y le
+Cuando te pidan algo que no encontrás en el catálogo, contestás que lo averiguás y le
 pasás el chat al dueño. Punto.
 
 Así:
@@ -432,12 +425,11 @@ que anda bárbaro".
   modelo (iPads, MacBooks, iPhones), contestá que SÍ y enumerá los modelos que hay, con
   nombre. No contestes "sí tengo" a secas ni le pidas que te diga cuál quiere antes de
   mostrarle lo que hay.
-- Lo que está en la lista de Mar del Plata está en el local: el cliente pasa avisando
-  20 minutos antes, para traer la mercadería del depósito.
-- Lo que está en la lista de CABA también se consigue. No es un problema ni una excusa:
-  se trae por pedido y llega de un día para el otro. Cerrá el mensaje con eso, así:
-  "se traen por pedido, llegan de un día para el otro".
-- Lo que nunca hacés es inventar un precio o un modelo que no está en ninguna lista. Una
+- Lo que dice "en el local" está acá: se lo lleva en el momento.
+- Lo que dice "a pedido" también se consigue. No es un problema ni una excusa: se trae y
+  llega en 24/48 hs, con una seña. Decilo siempre que ofrezcas uno, así: "se trae por
+  pedido, llega en 24/48 hs". Nunca lo presentes como para retirar hoy.
+- Lo que nunca hacés es inventar un precio o un modelo que no está en el catálogo. Una
   cosa es no decir que no, y otra es prometer algo que no existe.
 
 LA SEÑA NO SE MENCIONA AL PRINCIPIO. Nada de "con una seña de 10 usd te lo reservo" en
@@ -474,7 +466,7 @@ Motivos y prioridad (1 = más urgente):
 
 | prioridad | motivo | cuándo |
 |---|---|---|
-| 1 | averiguar | te pidieron algo que no está en las listas y prometiste averiguar |
+| 1 | averiguar | te pidieron algo que no está en el catálogo y prometiste averiguar |
 | 1 | pidio_foto | pidió foto o video del equipo |
 | 2 | cerrado | dijo que lo lleva |
 | 3 | reclamo | problema con algo ya comprado |
@@ -528,7 +520,7 @@ y vos no volvés a contestar en esa conversación hasta que él te lo devuelva. 
 
 - No lo pongas en true si podés resolverlo solo. Prometer y callarte cuando la respuesta
   la tenías es dejar al cliente esperando por nada.
-- Si el equipo trae el campo "foto", mandarla NO es prometer: la foto sale sola y el
+- Si el producto trae "foto", mandarla NO es prometer: la foto sale sola y el
   chat sigue siendo tuyo. Pasarlo ahí es cortar una charla que estaba andando bien.
 - Sí ponelo cada vez que prometas algo que no podés hacer: mandar una foto que no tenés, tasar una
   permuta que necesita ver el equipo, confirmar un precio que no tenés, resolver un
@@ -577,33 +569,110 @@ function bloqueConocimiento(c) {
 }
 
 /**
- * Los accesorios que hay en el local, del inventario.
- *
- * Van en su propio bloque y no mezclados con los equipos: son dos preguntas distintas y
- * el modelo tiene que poder contestar una sin revolver la otra.
- */
-/**
  * El recordatorio de las mayúsculas va PEGADO a los datos, no solo en las reglas de
  * estilo de más arriba.
  *
- * Los nombres se cargan al sistema como los tipea el dueño —casi siempre todo en
- * minúscula— y el modelo copia el dato tal cual lo ve: es lo que tiene delante en el
- * momento exacto de escribir el nombre. Pasó el 23/08/2026: con la regla de estilo ya
- * desplegada y todos los ejemplos del prompt corregidos, seguía contestando "apple watch
- * ultra 2 49mm a 800 usd", que es como está cargado en la lista.
+ * El modelo copia el dato tal cual lo ve: es lo que tiene delante en el momento exacto de
+ * escribir el nombre. Pasó el 23/08/2026: con la regla de estilo ya desplegada y todos
+ * los ejemplos del prompt corregidos, seguía contestando "apple watch ultra 2 49mm a 800
+ * usd", que es como estaba cargado.
  */
-const NOMBRES_BIEN = 'Los nombres están cargados como los tipeó el dueño. Cuando se los pases a un cliente, escribilos BIEN: AirPods, iPhone 15 Pro Max, Apple Watch Ultra 2, MacBook Air, USB-C, ANC. Nunca copies la minúscula de acá.';
+const NOMBRES_BIEN = 'Algunos nombres están cargados como los tipeó el dueño o el proveedor. Cuando se los pases a un cliente, escribilos BIEN: AirPods, iPhone 15 Pro Max, Apple Watch Ultra 2, MacBook Air, USB-C, ANC. Nunca copies la minúscula de acá.';
 
-function bloqueAccesorios(accesorios = []) {
-  if (!accesorios || !accesorios.length) {
-    return '## ACCESORIOS EN EL LOCAL\n\nSin datos. No prometas ningún accesorio.';
-  }
-  return `## ACCESORIOS EN EL LOCAL\n\n${NOMBRES_BIEN}\n\n${JSON.stringify(accesorios)}`;
+/** La clave de la foto de un producto, igual que en el sistema: `modelo-color`, sin la capacidad. */
+const claveDeFoto = (nombre, color) => {
+  const sl = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/\b\d+\s?(gb|tb)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '-');
+  const modelo = sl(nombre);
+  return color ? `${modelo}-${sl(color)}` : modelo;
+};
+
+/**
+ * Los productos publicados que el bot puede ofrecer, en el orden del catálogo. El número
+ * de cada uno en el prompt es su lugar en esta lista (desde 1): el Worker usa la misma
+ * función para saber a qué producto apunta una marca de link.
+ */
+export const productosParaElBot = catalogo =>
+  (Array.isArray(catalogo?.productos) ? catalogo.productos : []).filter(p => p && p.id && String(p.nombre || p.titulo || '').trim() && Number(p.precioUSD) > 0);
+
+/** El nombre de un producto como se le dice al cliente: el título de la tienda, con capacidad y color si no los trae. */
+function nombreParaElBot(p) {
+  const base = String(p.titulo || p.nombre || '').replace(/\s+/g, ' ').trim();
+  const dicho = base.toLowerCase();
+  return [base, ...[p.gb, p.color].map(v => String(v || '').trim()).filter(v => v && !dicho.includes(v.toLowerCase()))].join(' ');
 }
 
-function bloqueStock(stock = []) {
-  if (!stock.length) return '## EQUIPOS EN EL LOCAL\n\nSin datos. No prometas disponibilidad de nada.';
-  return `## EQUIPOS EN EL LOCAL\n\n${NOMBRES_BIEN}\n\n${JSON.stringify(stock)}`;
+/** Un producto en un renglón: número | nombre | nuevo o usado | precio | entrega | foto — descripción. */
+function renglonDeProducto(p, n, fotos) {
+  const usado = p.condicion === 'usado';
+  const estado = String(p.estado || '').trim();
+  const condicion = [usado ? 'usado' : 'nuevo',
+    usado && p.bateria != null && p.bateria !== '' ? `batería ${p.bateria}%` : '',
+    estado && !/^(nuevo|usado)$/i.test(estado) ? estado : ''].filter(Boolean).join(', ');
+  const clave = claveDeFoto(p.nombre, p.color);
+  const descripcion = String(p.descripcion || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+  return [n, nombreParaElBot(p), condicion, `${Math.round(Number(p.precioUSD))} usd`, p.tipo === 'pedido' ? 'a pedido' : 'en el local',
+    ...(fotos?.mapa?.[clave]?.length ? [`foto ${clave}`] : [])].join(' | ') + (descripcion ? ` — ${descripcion}` : '');
+}
+
+/**
+ * El catálogo: lo que está publicado en la tienda web, que es lo único que el bot sabe de
+ * productos y precios (pedido de Juni, 22/11/2026). Antes veía el stock, el inventario y
+ * la lista de cada proveedor por separado; ahora ve lo mismo que el cliente en la tienda:
+ * nombres prolijos, un solo precio por producto y lo que está a pedido marcado como tal.
+ *
+ * Las reglas de cómo usarlo y la del link van acá, pegadas a los datos, y no solo en el
+ * texto de arriba: si el dueño editó el prompt desde el sistema, esto sigue valiendo.
+ */
+function bloqueCatalogo(catalogo, fotos) {
+  const productos = productosParaElBot(catalogo);
+  if (!productos.length) {
+    return `## CATÁLOGO DE LA TIENDA
+
+Sin datos: la tienda no tiene nada publicado o no se pudo leer. No prometas ningún producto ni precio: decí que lo averiguás y marcá NEED ATTENTION con motivo averiguar y paso_a_humano en true.`;
+  }
+  const orden = Array.isArray(catalogo.categorias) ? catalogo.categorias : [];
+  const porCategoria = new Map();
+  productos.forEach((p, i) => {
+    const c = p.categoria || 'Otros';
+    (porCategoria.get(c) || porCategoria.set(c, []).get(c)).push(renglonDeProducto(p, i + 1, fotos));
+  });
+  const categorias = [...orden.filter(c => porCategoria.has(c)), ...[...porCategoria.keys()].filter(c => !orden.includes(c))];
+  return `## CATÁLOGO DE LA TIENDA
+
+Esto es TODO lo que vendés, y lo único que sabés de productos y precios: es lo que está publicado en la tienda web, lo mismo que ve el cliente. Si te piden algo que no está acá, no lo inventes ni digas que no hay: averiguás (ver "NO TENGO" NO EXISTE).
+
+Cada renglón es un producto: número | nombre | nuevo o usado | precio | entrega | foto (si tiene) — descripción
+
+- "en el local": está acá, se lo lleva en el momento.
+- "a pedido": no está en el local, se trae. Llega en 24/48 hs y se pide con una seña. Decilo siempre que ofrezcas uno, y si hay algo equivalente en el local ofrecé primero eso.
+- Nuevo o usado es lo que dice el renglón. No lo deduzcas del precio ni del modelo.
+- La descripción es lo que podés contar del producto. No le agregues datos que no estén.
+- El número del principio es solo para mandar el link (acá abajo). Nunca se lo digas al cliente.
+- ${NOMBRES_BIEN}
+
+### EL LINK DEL PRODUCTO
+
+Cada producto tiene su página en la tienda web, donde el cliente lo ve con sus fotos y lo puede comprar o reservar. Para mandarla, poné como elemento del array mensajes exactamente esto, solo y sin nada más alrededor:
+
+${MARCA_LINK}el-numero-del-producto]]
+
+Ejemplo: para el producto del renglón que empieza con 12, el mensaje es ${MARCA_LINK}12]] . El sistema lo cambia por el link.
+
+CUÁNDO: el link NO va de entrada.
+
+- Nunca en tu primera respuesta de la conversación, ni la primera vez que hablás de un producto. Primero contestá lo que preguntó: qué es, cómo está y el precio. Mandar el link de una es sacarse al cliente de encima.
+- Va después de un poco de charla: cuando ya le pasaste la info y el precio de ese producto y el cliente sigue ahí —vuelve a preguntar algo de ese producto, pregunta cómo se compra, cómo se paga, si se lo guardás, si lo puede ver— o cuando te lo pide.
+- Va en dos mensajes: primero un renglón corto diciendo que lo puede comprar por ahí o pasar por el local, y después la marca sola. Así:
+
+  te dejo el link, lo podes comprar por ahi o pasarlo a ver por el local
+  ${MARCA_LINK}12]]
+
+- Un solo link por respuesta, y una sola vez por producto en toda la conversación: si en el historial ya está el link de ese producto, no lo repitas.
+- Nunca escribas vos una dirección web ni armes un link: solo la marca con el número.
+- Mandar el link no es prometer nada: el chat sigue siendo tuyo, no pongas paso_a_humano por eso.
+
+${categorias.map(c => `### ${c}\n${porCategoria.get(c).join('\n')}`).join('\n\n')}`;
 }
 
 /**
@@ -659,7 +728,7 @@ exactas.
 Tres cosas que los ejemplos NO cambian, pase lo que pase:
 
 1. Los precios que aparezcan acá son inventados, de relleno. Los precios reales salen
-   SIEMPRE del stock y de las listas de más abajo. Nunca cotices con un número que
+   SIEMPRE del catálogo de más abajo. Nunca cotices con un número que
    viste en un ejemplo.
 2. Cuándo marcar NEED ATTENTION no cambia. Si el ejemplo muestra al dueño tasando una
    permuta o cerrando una venta, vos igual marcás el motivo que corresponda.
@@ -670,58 +739,20 @@ Tres cosas que los ejemplos NO cambian, pase lo que pase:
 ${String(txt).trim()}`;
 }
 
-function bloqueLista(titulo, lista, vencida = false) {
-  if (!lista || !Array.isArray(lista.items) || !lista.items.length) {
-    return `## LISTA ${titulo}\n\nSin datos. No prometas nada de esta lista.`;
-  }
-  const moneda = lista.moneda || 'USD';
-  const aviso = vencida
-    ? `\nOJO: esta lista es del ${lista.fecha} y no es la de hoy. Los precios pueden haber cambiado: si preguntan por algo de acá, pasá el precio pero marcá NEED ATTENTION con motivo no_supe_responder.\n`
-    : '';
-  return `## LISTA ${titulo} (${lista.fecha}, precios al público en ${moneda})\n${aviso}\n${NOMBRES_BIEN}\n\n${JSON.stringify(lista.items)}`;
-}
-
-/**
- * La lista del proveedor. Es distinta de las otras dos y por eso tiene su propio bloque:
- * son equipos que NO estan en el local. Si el modelo los ofreciera como stock propio,
- * prometeria entrega inmediata de algo que hay que ir a buscar.
- *
- * Los precios que llegan aca YA tienen el margen sumado: el sistema se lo aplica antes
- * de guardar la lista, asi que el costo del proveedor no existe de este lado.
- */
-function bloqueProveedor(lista, nombre = 'UN PROVEEDOR') {
-  if (!lista || !Array.isArray(lista.items) || !lista.items.length) return '';
-  const moneda = lista.moneda || 'USD';
-  return `## LISTA DE ${String(nombre).toUpperCase()} — A PEDIDO (${lista.fecha}, precios al público en ${moneda})
-
-Esto NO esta en el local: son equipos de un proveedor, que se traen a pedido.
-
-- Ofrecelos solo si no hay algo equivalente en el local. Lo que esta acá se entrega en el
-  momento; esto no.
-- Cuando ofrezcas algo de esta lista, decilo: que se consigue en 24/48 hs y que se pide
-  con una seña. Nunca lo presentes como disponible para retirar hoy.
-- Si preguntan por algo que no está ni en el local ni acá, no lo inventes.
-
-${NOMBRES_BIEN}
-
-${JSON.stringify(lista.items)}`;
-}
-
 /** El slug de una categoría, igual que en catalogo.html: "Accesorios de carga" → accesorios-de-carga. */
 const slugCategoria = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /**
- * La tienda web, por categoría, con su link. Es lo que le permite al bot decir "te dejo
- * el link de la tienda para que veas todos los cargadores" en vez de listar productos
- * de a uno. Sale de `catalogo/publico`: las categorías en el orden que publicó el dueño
- * y cuántos productos hay en cada una. Las vacías no se ofrecen.
+ * La tienda web, por categoría, con su link: para cuando el cliente quiere ver todo lo de
+ * un tipo en vez de un producto puntual. Sale de `catalogo/publico`: las categorías en el
+ * orden que publicó el dueño y cuántos productos hay en cada una. Las vacías no se ofrecen.
  *
  * OJO con los links en Instagram: Meta rechaza algunos dominios (pasó con ig.me, ver
  * cargar-mensajes.mjs). github.io pasa; si algún día la tienda cambia de dominio, probar
  * con un DM antes de confiar en esto.
  */
 function bloqueTienda(catalogo, urlCatalogo) {
-  const productos = Array.isArray(catalogo?.productos) ? catalogo.productos : [];
+  const productos = productosParaElBot(catalogo);
   const orden = Array.isArray(catalogo?.categorias) ? catalogo.categorias : [];
   if (!productos.length || !urlCatalogo) return '';
   const conteo = {};
@@ -730,10 +761,9 @@ function bloqueTienda(catalogo, urlCatalogo) {
   if (!cats.length) return '';
   return `## LA TIENDA WEB (links por categoría)
 
-Tenés una tienda web con todo lo publicado, ordenado por categoría, donde se puede ver cada producto con foto y precio y comprarlo o reservarlo. Cuando el cliente pregunte por un TIPO de producto en general (cargadores, fundas, iPads, iPhones usados, "qué tenés de...") o quiera ver todo lo que hay, mandale el link de ESA categoría, como un mensaje aparte y corto, por ejemplo: "te dejo el link de la tienda para que veas todos los cargadores que tengo" y en el mensaje siguiente el link solo.
+Además del link de cada producto hay un link por categoría, para cuando el cliente quiere ver todo lo de un tipo (cargadores, iPads, iPhone usados) y son demasiados para pasarlos de a uno. Siguen la misma regla que el link del producto: nunca de entrada. Primero contás qué hay y a qué precio; el link va después, si el cliente sigue mirando o te lo pide, con el mismo renglón de antes (que puede comprar por ahí o pasar por el local).
 
-- Si preguntan por un modelo puntual que tenés, contestá el precio como siempre; el link va de yapa solo si tiene sentido.
-- Un link por mensaje, sin texto pegado adelante ni atrás.
+- Un link por mensaje, solo, sin texto pegado adelante ni atrás.
 - Usá SOLO estos links, tal cual. No inventes categorías ni links.
 - Tienda entera: ${urlCatalogo}
 
@@ -741,51 +771,24 @@ ${cats.map(c => `- ${c} (${conteo[c]} producto${conteo[c] === 1 ? '' : 's'}): ${
 }
 
 /**
- * Arma el system prompt final, EN DOS BLOQUES, y el orden no es estetico.
+ * Arma el system prompt final, EN DOS BLOQUES, y el orden no es estético.
  *
- * El prompt entero viaja en cada mensaje que contesta el bot, y es lo que mas se paga:
- * unos 9.000 tokens de entrada por DM, contra 400 de respuesta. La API cobra a una
- * decima parte lo que ya vio, siempre que sea un PREFIJO identico byte a byte, asi que
- * el reparto es:
+ * El prompt entero viaja en cada mensaje que contesta el bot, y es lo que más se paga. La
+ * API cobra a una décima parte lo que ya vio, siempre que sea un PREFIJO idéntico byte a
+ * byte, así que el reparto es:
  *
  *   bloque 1 — lo que casi nunca cambia: las reglas, los datos del local, el tono y el
- *              entrenamiento. Va marcado para cachear.
- *   bloque 2 — lo que cambia todo el tiempo: stock, accesorios y listas de precios. Va
- *              despues y sin marcar, porque una venta invalidaria el cache entero si
- *              estuviera antes.
+ *              entrenamiento.
+ *   bloque 2 — el catálogo publicado y los links de la tienda. Cambia solo cuando el
+ *              dueño publica, no entre un DM y el siguiente, así que también se cachea:
+ *              con el stock y las listas de antes esto no se podía, porque una venta
+ *              cambiaba el bloque.
  *
- * Si algun dia se agrega un bloque, lo que decide donde va es una sola pregunta: ¿cambia
- * entre un DM y el siguiente? Si cambia, va en el segundo. Meter algo variable en el
- * primero no rompe nada, pero hace que el cache no sirva nunca y nadie se entera.
+ * Van en dos bloques y no en uno para que publicar el catálogo no tire abajo el caché de
+ * las reglas. Si algún día se agrega algo que cambia en cada DM, va en un tercer bloque,
+ * al final y sin marcar.
  */
-/**
- * Los proveedores de siempre, para cuando el dueño todavía no armó la lista en el
- * sistema (pantalla Listas de precios) o para los llamados viejos con listaMdp/listaCaba.
- */
-export const PROVEEDORES_BASE = [
-  { id: 'mdp', nombre: 'Mar del Plata', tipo: 'publico', vence: true },
-  { id: 'caba', nombre: 'CABA', tipo: 'publico', vence: false },
-  { id: 'prov', nombre: 'Proveedor', tipo: 'costo', vence: false },
-];
-
-/**
- * Las listas de precios, una por proveedor: `listas` es [{nombre, tipo, vencida, lista}].
- * Las de tipo "publico" son precios finales de equipos que se consiguen; las de tipo
- * "costo" ya vienen con el margen sumado y son a pedido. Los llamados viejos pasan
- * listaMdp/listaCaba/listaProv y se traducen acá.
- */
-function bloquesListas({ listas, listaMdp, listaCaba, listaProv, mdpVencida }) {
-  const todas = Array.isArray(listas) ? listas : [
-    { nombre: 'Mar del Plata', tipo: 'publico', vencida: mdpVencida, lista: listaMdp },
-    { nombre: 'CABA', tipo: 'publico', vencida: false, lista: listaCaba },
-    { nombre: 'Proveedor', tipo: 'costo', vencida: false, lista: listaProv },
-  ];
-  return todas.map(l => l.tipo === 'costo'
-    ? bloqueProveedor(l.lista, l.nombre)
-    : bloqueLista(String(l.nombre || '').toUpperCase(), l.lista, !!l.vencida));
-}
-
-export function construirSystem({ base, conocimiento, stock, accesorios, listas, listaMdp, listaCaba, listaProv, mdpVencida, catalogo, urlCatalogo } = {}) {
+export function construirSystem({ base, conocimiento, catalogo, urlCatalogo, fotos } = {}) {
   const fijo = [
     // `base` es la versión que el dueño editó desde el sistema. Si no editó nunca, o
     // si borró todo el texto, se usa la de este archivo.
@@ -795,19 +798,13 @@ export function construirSystem({ base, conocimiento, stock, accesorios, listas,
     bloqueEntrenamiento(conocimiento && conocimiento.entrenamiento),
   ].filter(Boolean).join('\n\n');
 
-  const variable = [
-    bloqueStock(stock),
-    bloqueAccesorios(accesorios),
-    ...bloquesListas({ listas, listaMdp, listaCaba, listaProv, mdpVencida }),
-    bloqueTienda(catalogo, urlCatalogo),
-  ].filter(Boolean).join('\n\n');
+  const tienda = [bloqueCatalogo(catalogo, fotos), bloqueTienda(catalogo, urlCatalogo)].filter(Boolean).join('\n\n');
 
-  // Cache de una hora y no de cinco minutos: los DM del local llegan salteados. Con la
-  // ventana corta, cada mensaje aislado pagaria la escritura (1,25x) sin llegar a
-  // aprovecharla, y saldria MAS caro que no cachear. Con una hora la escritura cuesta 2x
-  // pero alcanza con tres mensajes en esa hora para que convenga, y en un dia normal eso
+  // Caché de una hora y no de cinco minutos: los DM del local llegan salteados. Con la
+  // ventana corta, cada mensaje aislado pagaría la escritura (1,25x) sin llegar a
+  // aprovecharla, y saldría MÁS caro que no cachear. Con una hora la escritura cuesta 2x
+  // pero alcanza con tres mensajes en esa hora para que convenga, y en un día normal eso
   // pasa varias veces.
-  const bloques = [{ type: 'text', text: fijo, cache_control: { type: 'ephemeral', ttl: '1h' } }];
-  if (variable) bloques.push({ type: 'text', text: variable });
-  return bloques;
+  const cache = { type: 'ephemeral', ttl: '1h' };
+  return [{ type: 'text', text: fijo, cache_control: cache }, { type: 'text', text: tienda, cache_control: cache }];
 }

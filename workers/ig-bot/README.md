@@ -8,7 +8,7 @@ de MarplaCity.
 1. Recibe los webhooks de mensajes directos que le manda Meta.
 2. Verifica la firma HMAC del pedido, para asegurarse de que viene de Meta y no
    de cualquiera que conozca la URL.
-3. Consulta el stock y las listas de precios en Firestore.
+3. Lee lo publicado en la tienda web (`catalogo/publico`): es lo único que sabe de productos y precios. Desde el 22/11/2026 ya no consulta el stock, el inventario ni las listas de los proveedores; las secciones de más abajo que hablan de esas listas quedan como historia de por qué se hizo cada cosa.
 4. Le pide a la IA que redacte la respuesta. El modelo devuelve **un solo JSON** con
    los campos de NEED ATTENTION, el equipo consultado y un array `mensajes`.
 5. Manda cada elemento de `mensajes` como un DM aparte, en orden y con una pausa

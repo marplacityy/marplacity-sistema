@@ -24,7 +24,7 @@
  *                                  respuestas. Va en wrangler.toml, para que quede en el repo.
  */
 
-import { construirSystem, MARCA_CANAL, PROVEEDORES_BASE } from './prompt.js';
+import { construirSystem, productosParaElBot, MARCA_CANAL } from './prompt.js';
 import { TIENDA_PUBLICA } from '../../../src/shared/sitio.js';
 
 // La tienda web publica. Es la misma direccion que usa el sistema (LINK_CATALOGO).
@@ -882,219 +882,6 @@ async function mandarAutomatico(env, igUserId, mensajes, opciones = {}) {
   return mandarMensajes(env, igUserId, mensajes);
 }
 
-/**
- * Los accesorios: cargadores, fundas, vidrios, cables. Viven en `inventario`, aparte de
- * `stock`, que son los equipos con IMEI.
- *
- * Hasta el 23/08/2026 el bot ni siquiera podia leer esta coleccion, asi que contestaba
- * "cargadores originales no tengo" con los cargadores cargados en el sistema.
- *
- * Solo lo que tiene unidades, y NUNCA el costo: igual que en stock, de aca sale el
- * precio de venta y nada mas.
- */
-async function accesoriosDisponibles(env, idToken) {
-  const proj = env.FIREBASE_PROJECT;
-  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
-
-  const q = {
-    structuredQuery: {
-      from: [{ collectionId: 'inventario' }],
-      where: {
-        compositeFilter: {
-          op: 'AND',
-          filters: [
-            { fieldFilter: { field: { fieldPath: 'userId' }, op: 'EQUAL', value: { stringValue: env.OWNER_UID } } },
-            { fieldFilter: { field: { fieldPath: 'qty' }, op: 'GREATER_THAN', value: { integerValue: '0' } } },
-          ],
-        },
-      },
-      // Sin orderBy explicito: con un filtro de rango, Firestore ordena solo por ese
-      // campo y le alcanza el indice (userId + qty) que ya existe. Pedir qty DESC
-      // exigia un indice con esa direccion — que es lo que faltaba y hacia que el bot
-      // dijera "no tengo cables" con los cables cargados (23/08/2026).
-      //
-      // El limite es alto a proposito: asi el orden no decide que se pierde. Un local
-      // no tiene 200 accesorios distintos con stock.
-      limit: 200,
-    },
-  };
-
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-      body: JSON.stringify(q),
-    });
-    if (!r.ok) { console.log('accesorios no disponibles', r.status, (await r.text()).slice(0, 300)); return []; }
-
-    const d = await r.json();
-    return (Array.isArray(d) ? d : [])
-      .filter(x => x.document)
-      .map(x => {
-        const f = campos(x.document.fields);
-        return {
-          producto: f.nombre,
-          categoria: f.categoria || null,
-          // `sugerido` es el precio de venta al publico. En 0 significa sin cargar: va
-          // null para que el modelo no lo lea como "sale cero".
-          precio: Number(f.sugerido) > 0 ? Number(f.sugerido) : null,
-          moneda: f.moneda || 'USD',
-        };
-      })
-      .filter(a => a.producto);
-  } catch (e) {
-    console.log('error trayendo accesorios', e.message);
-    return [];
-  }
-}
-
-// ── Traer los equipos disponibles para que la IA sepa qué hay ─
-//
-// Son DOS colecciones y las dos se venden igual en el mostrador:
-//
-//   stock   equipos propios del local
-//   consig  equipos en consignación, de un proveedor
-//
-// Para el cliente no hay ninguna diferencia —es un celular que está en el local, a un
-// precio— así que van juntos en el mismo bloque. Hasta el 23/08/2026 el bot solo veía
-// `stock`: la mitad de los equipos que el local tenía para vender no existían para él.
-//
-// De los dos se sacan solo campos de venta: nombre, gb, color, batería, ciclos, condición
-// (nuevo o usado) y PRECIO
-// DE VENTA. Nunca el costo, ni el proveedor de la consignación — no queremos que la IA
-// los mencione ni por error.
-
-/**
- * Los equipos de las dos colecciones, en una sola lista.
- */
-async function equiposDisponibles(env, idToken) {
-  const [propios, consignados] = await Promise.all([
-    stockDisponible(env, idToken),
-    consigDisponible(env, idToken),
-  ]);
-  return [...propios, ...consignados];
-}
-
-async function stockDisponible(env, idToken) {
-  const proj = env.FIREBASE_PROJECT;
-  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
-
-  const q = {
-    structuredQuery: {
-      from: [{ collectionId: 'stock' }],
-      where: {
-        compositeFilter: {
-          op: 'AND',
-          filters: [
-            { fieldFilter: { field: { fieldPath: 'userId' }, op: 'EQUAL', value: { stringValue: env.OWNER_UID } } },
-            { fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: 'en_stock' } } },
-          ],
-        },
-      },
-      limit: 60,
-    },
-  };
-
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-      body: JSON.stringify(q),
-    });
-    if (!r.ok) { console.log('stock no disponible', r.status, (await r.text()).slice(0, 300)); return []; }
-
-    const d = await r.json();
-    return (d || [])
-      .filter(x => x.document)
-      .map(x => {
-        const f = x.document.fields || {};
-        const v = k => f[k]?.stringValue ?? f[k]?.doubleValue ?? f[k]?.integerValue ?? null;
-        return {
-          equipo: v('nombre'),
-          gb: v('gb'),
-          color: v('color'),
-          bateria: v('bateria'),
-          ciclos: v('ciclos'),
-          // Nuevo sellado o usado. Sin esto el modelo lo deducía —mal— de la batería.
-          condicion: v('estadoProducto'),
-          precio: v('precioVentaUSD'),   // precio de venta, NUNCA el costo
-          // No es un campo para el modelo: se usa acá abajo y se saca antes de pasarlo.
-          refurb: f.refurb?.booleanValue === true,
-        };
-      })
-      // En refurbishment = está en el taller, no se puede vender hoy. Se filtra acá y no
-      // en la consulta porque un `refurb != true` de Firestore deja afuera también a los
-      // documentos que no tienen el campo, que son casi todos. Es el mismo criterio con
-      // el que el sistema arma la lista de precios que se le pasa a un cliente.
-      .filter(x => x.equipo && !x.refurb)
-      .map(({ refurb, ...equipo }) => equipo);
-  } catch (e) {
-    console.log('error trayendo stock', e.message);
-    return [];
-  }
-}
-
-/**
- * Los equipos en consignación disponibles.
- *
- * Misma forma que `stockDisponible`, con dos diferencias del doc: el nombre está en
- * `producto` (no en `nombre`) y el precio de venta puede estar en `precioVentaUSD` o en
- * `precioUSD`, según cómo se cargó. El mismo criterio que usa el sistema para armar la
- * lista de precios que se le manda a un cliente.
- *
- * El proveedor NO se pasa: es información nuestra, no del cliente.
- */
-async function consigDisponible(env, idToken) {
-  const proj = env.FIREBASE_PROJECT;
-  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
-
-  const q = {
-    structuredQuery: {
-      from: [{ collectionId: 'consig' }],
-      where: {
-        compositeFilter: {
-          op: 'AND',
-          filters: [
-            { fieldFilter: { field: { fieldPath: 'userId' }, op: 'EQUAL', value: { stringValue: env.OWNER_UID } } },
-            { fieldFilter: { field: { fieldPath: 'status' }, op: 'EQUAL', value: { stringValue: 'en_stock' } } },
-          ],
-        },
-      },
-      limit: 60,
-    },
-  };
-
-  try {
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-      body: JSON.stringify(q),
-    });
-    if (!r.ok) { console.log('consignacion no disponible', r.status, (await r.text()).slice(0, 300)); return []; }
-
-    const d = await r.json();
-    return (d || [])
-      .filter(x => x.document)
-      .map(x => {
-        const f = x.document.fields || {};
-        const v = k => f[k]?.stringValue ?? f[k]?.doubleValue ?? f[k]?.integerValue ?? null;
-        return {
-          equipo: v('producto'),
-          gb: v('gb'),
-          color: v('color'),
-          bateria: v('bateria'),
-          ciclos: v('ciclos'),
-          condicion: v('estadoProducto'),
-          precio: v('precioVentaUSD') ?? v('precioUSD'),
-        };
-      })
-      .filter(x => x.equipo);
-  } catch (e) {
-    console.log('error trayendo consignacion', e.message);
-    return [];
-  }
-}
-
 // ── Leer documentos y colecciones de Firestore (REST) ─────────
 
 // Los valores de la REST API vienen envueltos por tipo ({stringValue: "x"}).
@@ -1129,77 +916,6 @@ async function leerDoc(env, idToken, path) {
     console.log('error leyendo', path, e.message);
     return null;
   }
-}
-
-/**
- * La lista vigente de un origen: la más reciente. Igual criterio que el sistema, así el
- * bot cotiza con lo mismo que ve el dueño en pantalla.
- *
- * "Más reciente" es (`fecha`, `createdAt`), no solo `fecha`, y el detalle importa: cada
- * vez que se agregan productos desde el sistema se guarda un doc NUEVO con la lista
- * completa y la fecha del día, así que un día cualquiera hay VARIOS docs con la misma
- * fecha. Ordenando solo por fecha, cuál de todos gana lo termina decidiendo el id del
- * documento: le puede tocar el de la mañana y quedarse sin lo que se cargó a la tarde.
- *
- * Pasó el 23/08/2026: se cargaron AirPods en la lista de Mar del Plata, el sistema los
- * mostraba en pantalla, y el bot le contestaba a un cliente "airpods no tengo en este
- * momento" — estaba leyendo otro doc del mismo día. El sistema ya desempataba por
- * `createdAt` (ver `kbUltimaLista`); el Worker se había quedado atrás.
- *
- * Si la consulta ordenada falla o no devuelve nada, cae a la de antes. Los docs
- * anteriores a que existiera `createdAt` no tienen ese campo, y Firestore deja afuera de
- * una consulta ordenada todo doc al que le falte el campo del orden: sin ese respaldo,
- * una lista vieja dejaría al bot sin precios en vez de darle los de ayer. Vale lo mismo
- * para el rato en que el índice nuevo se está construyendo.
- */
-async function ultimaLista(env, idToken, origen) {
-  const proj = env.FIREBASE_PROJECT;
-  const url = `https://firestore.googleapis.com/v1/projects/${proj}/databases/(default)/documents:runQuery`;
-
-  const consulta = orderBy => ({
-    structuredQuery: {
-      from: [{ collectionId: 'listas_precios' }],
-      where: {
-        compositeFilter: {
-          op: 'AND',
-          filters: [
-            { fieldFilter: { field: { fieldPath: 'userId' }, op: 'EQUAL', value: { stringValue: env.OWNER_UID } } },
-            { fieldFilter: { field: { fieldPath: 'origen' }, op: 'EQUAL', value: { stringValue: origen } } },
-          ],
-        },
-      },
-      orderBy,
-      limit: 1,
-    },
-  });
-
-  const porFecha    = [{ field: { fieldPath: 'fecha' }, direction: 'DESCENDING' }];
-  const porCreacion = [...porFecha, { field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }];
-
-  const traer = async (orderBy, cual) => {
-    try {
-      const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-        body: JSON.stringify(consulta(orderBy)),
-      });
-      // Firestore manda el link para crear el indice que falta adentro del cuerpo, asi
-      // que sin el texto un 400 no se distingue de una query mal armada.
-      if (!r.ok) { console.log('lista', origen, cual, 'no disponible', r.status, (await r.text()).slice(0, 300)); return null; }
-      const d = await r.json();
-      const doc = (d || []).find(x => x.document);
-      return doc ? campos(doc.document.fields) : null;
-    } catch (e) {
-      console.log('error trayendo lista', origen, cual, e.message);
-      return null;
-    }
-  };
-
-  const lista = await traer(porCreacion, '(fecha + createdAt)');
-  if (lista) return lista;
-
-  console.log('lista', origen, ': sin resultado por createdAt, voy con el orden viejo');
-  return traer(porFecha, '(solo fecha)');
 }
 
 /**
@@ -1268,43 +984,30 @@ async function pensarRespuesta(texto, adjuntos, env, historial, { producto = nul
   const idToken = await tokenDelBot(env);
   if (!idToken) return { ...SIN_RESPUESTA };
 
-  // Todo lo que el prompt necesita, en paralelo: sin esto el modelo no sabe qué hay
-  // ni a qué precio, y las secciones de stock y listas del prompt quedan vacías.
-  // El conocimiento va primero: trae la lista de proveedores (pantalla Listas de precios),
-  // y recién con eso se sabe qué listas pedir. Si el dueño nunca la armó, las de siempre.
-  const conocimiento = await leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`);
-  const proveedores = Array.isArray(conocimiento?.proveedores) && conocimiento.proveedores.length ? conocimiento.proveedores : PROVEEDORES_BASE;
-  const [stock, accesorios, mensajesFijos, promptDoc, fotosDoc, catalogoDoc, ...docsListas] = await Promise.all([
-    equiposDisponibles(env, idToken),
-    accesoriosDisponibles(env, idToken),
+  // Todo lo que el prompt necesita, en paralelo. Los productos y los precios salen de UN
+  // solo lugar: lo publicado en la tienda web (catalogo/publico), que es lo mismo que ve
+  // el cliente. Hasta el 22/11/2026 el bot leía el stock, la consignación, el inventario
+  // y la lista de cada proveedor, y cotizaba con el precio de una lista aunque la tienda
+  // mostrara otro.
+  const [conocimiento, mensajesFijos, promptDoc, fotosDoc, catalogoDoc] = await Promise.all([
+    leerDoc(env, idToken, `conocimiento/${env.OWNER_UID}`),
     leerDoc(env, idToken, 'config/mensajes'),
     leerDoc(env, idToken, 'config/prompt'),
-    // Que fotos hay y donde. Es la misma fuente que usa el catalogo web: una sola.
+    // Qué fotos hay y dónde. Es la misma fuente que usa la tienda: una sola.
     leerDoc(env, idToken, 'catalogo/fotos'),
-    // Lo publicado en la tienda web, para ofrecer el link de cada categoria.
     leerDoc(env, idToken, 'catalogo/publico'),
-    ...proveedores.map(p => ultimaLista(env, idToken, p.id)),
   ]);
-
-  // Una lista "que vence" es la del día: si es de una fecha anterior, el prompt se lo
-  // avisa al modelo para que no prometa un precio viejo como si fuera el de hoy.
-  const hoy = fechaAR(Date.now());
-  const listas = proveedores.map((p, i) => ({
-    nombre: p.nombre || p.id, tipo: p.tipo === 'costo' ? 'costo' : 'publico',
-    vencida: !!(p.vence && docsListas[i] && docsListas[i].fecha !== hoy), lista: docsListas[i],
-  }));
 
   // Las reglas del bot: las que el dueño escribió desde el sistema si las hay, y si no
   // las del archivo prompt.js. Se lee en cada mensaje a propósito: cambiar una regla
   // tiene que ser guardar en el sistema, sin deploy de por medio.
-  // Al equipo que tiene foto se le agrega su clave, para que el modelo pueda mandarla.
-  const conFoto = (stock || []).map(e => {
-    const clave = claveDeFoto(e.equipo, e.color);
-    return (fotosDoc?.mapa || {})[clave] ? { ...e, foto: clave } : e;
-  });
-
-  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, stock: conFoto, accesorios, listas,
-    catalogo: catalogoDoc, urlCatalogo: URL_CATALOGO });
+  const sistema = construirSystem({ base: promptDoc?.texto, conocimiento, catalogo: catalogoDoc, urlCatalogo: URL_CATALOGO, fotos: fotosDoc });
+  // El link de un producto no va de entrada: recién cuando el bot (o Juni) ya contestó
+  // algo en esta charla. El prompt lo pide con más matices; esto es el piso que no se cruza.
+  const tienda = {
+    productos: productosParaElBot(catalogoDoc), url: URL_CATALOGO,
+    permitirLink: (Array.isArray(historial) ? historial : []).some(h => h && h.de !== 'cliente' && String(h.texto || '').trim()),
+  };
   console.log('prompt:', promptDoc?.texto ? 'editado desde el sistema' : 'el de prompt.js');
   const textoCanal = mensajesFijos?.invitacionCanal || null;
 
@@ -1361,7 +1064,7 @@ async function pensarRespuesta(texto, adjuntos, env, historial, { producto = nul
         throw e2;
       }
     }
-    const r2 = normalizar(out, textoCanal, fotosDoc);
+    const r2 = normalizar(out, textoCanal, fotosDoc, tienda);
 
     console.log('IA ->', r2.necesitaAtencion ? `atencion: ${r2.motivo} (prioridad ${r2.prioridad})` : 'sin atencion', '|', r2.mensajes.length, 'mensaje(s)');
     return r2;
@@ -1568,17 +1271,6 @@ const ESQUEMA_RESPUESTA = {
   additionalProperties: false,
 };
 
-/**
- * La clave de la foto de un equipo: `modelo-color`, o `modelo` si no tiene color. Tiene
- * que dar exactamente lo mismo que el sistema, porque las dos puntas leen el mismo mapa.
- */
-const claveDeFoto = (nombre, color) => {
-  const sl = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-    .replace(/\b\d+\s?(gb|tb)\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, '-');
-  const modelo = sl(nombre);
-  return color ? `${modelo}-${sl(color)}` : modelo;
-};
-
 const MOTIVOS = ['averiguar', 'pidio_foto', 'cerrado', 'reclamo', 'permuta', 'reparacion', 'otro_medio_de_pago', 'visto', 'no_supe_responder'];
 
 /**
@@ -1612,8 +1304,8 @@ const MAX_MENSAJES = 4;
  * si un campo falta o no es de los válidos, la conversación se marca para revisar en
  * vez de guardarse con datos que después rompen la bandeja o la query del cron.
  */
-export function normalizar(out, textoCanal, fotos) {
-  const mensajes = expandirCanal(out.mensajes, textoCanal, fotos).slice(0, MAX_MENSAJES);
+export function normalizar(out, textoCanal, fotos, tienda) {
+  const mensajes = expandirCanal(out.mensajes, textoCanal, fotos, tienda).slice(0, MAX_MENSAJES);
 
   // Sube a la bandeja si el modelo lo pide. Si el campo no vino —con el esquema puesto no
   // deberia pasar— se toma como que si: ante la duda, que lo mire una persona.
@@ -1660,11 +1352,20 @@ export function normalizar(out, textoCanal, fotos) {
  * reemplaza carácter por carácter. Si el texto no está cargado, la marca se cae del
  * array en vez de mandarse literal al cliente.
  */
-export function expandirCanal(mensajes, textoCanal, fotos) {
+export function expandirCanal(mensajes, textoCanal, fotos, tienda) {
   if (!Array.isArray(mensajes)) return [];
   const mapa = fotos?.mapa || {};
   const base = fotos?.base || '';
-  return mensajes
+  const productos = Array.isArray(tienda?.productos) ? tienda.productos : [];
+  const urlTienda = String(tienda?.url || '');
+  let links = 0, linkCaido = false;
+  // ¿Puede salir un link ahora? No en la primera respuesta de la charla, y uno solo por vez.
+  const dejarPasarLink = () => {
+    if (!tienda?.permitirLink || links > 0) { linkCaido = true; return false; }
+    links++;
+    return true;
+  };
+  const salida = mensajes
     .flatMap(m => {
       const s = String(m ?? '').trim();
 
@@ -1679,11 +1380,25 @@ export function expandirCanal(mensajes, textoCanal, fotos) {
         return archivos.slice(0, 2).map(a => base + a);
       }
 
+      // [[LINK:12]] → la página del producto 12 del catálogo. Un número que no existe se
+      // descarta: mejor sin link que con uno roto o de otro producto.
+      const link = /^\[\[LINK:\s*#?(\d{1,4})\s*\]\]$/i.exec(s);
+      if (link) {
+        const p = productos[Number(link[1]) - 1];
+        if (!p || !urlTienda) { console.log('no hay producto', link[1], 'en el catálogo — se descarta el link'); linkCaido = true; return []; }
+        if (!dejarPasarLink()) { console.log('link de', p.id, 'frenado: todavía no es momento'); return []; }
+        return [`${urlTienda}#p=${encodeURIComponent(p.id)}`];
+      }
+      // Un link de la tienda escrito por el modelo (los de categoría) sigue la misma regla.
+      if (urlTienda && s.includes(urlTienda) && !dejarPasarLink()) return [];
+
       if (s !== MARCA_CANAL) return [s];
       if (!textoCanal) { console.log('falta config/mensajes.invitacionCanal: se descarta la marca'); return []; }
       return [textoCanal];
     })
     .filter(Boolean);
+  // Si un link no salió, tampoco sale el renglón que lo anunciaba ("te dejo el link…").
+  return linkCaido ? salida.filter(m => /^https?:\/\//i.test(m) || !/\blink\b/i.test(m)) : salida;
 }
 
 // ── Login del bot en Firebase Auth ────────────────────────────

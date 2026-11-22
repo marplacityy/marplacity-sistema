@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento, sinLasQueNoSalieron, proveedorIA, claveIA, turnosParaDeepSeek } from './worker-ig.js';
-import { construirSystem as _construirSystem } from './prompt.js';
+import { construirSystem as _construirSystem, productosParaElBot } from './prompt.js';
 // construirSystem devuelve bloques (por el cache del prompt); los tests miran el texto.
 const construirSystem = o => _construirSystem(o).map(b => b.text).join('\n\n');
 
@@ -134,27 +134,57 @@ ok(tarde === 0, 'ninguno queda de madrugada ni se atrasa', String(tarde));
 ok(pasado === 0, 'ninguno pasa las 24 h de Meta', String(pasado));
 ok(adelantoMax <= 9, 'lo mas que se adelanta son 9 h', String(adelantoMax));
 
-console.log('\n── la tienda en el prompt ──');
+console.log('\n── el catálogo publicado en el prompt ──');
 {
   const cat = { categorias: ['iPhone usados', 'Accesorios de carga', 'Notebooks'], productos: [
-    { categoria: 'Accesorios de carga' }, { categoria: 'Accesorios de carga' }, { categoria: 'iPhone usados' }, { categoria: 'Fundas raras' },
+    { id: 'stock_a', tipo: 'equipo', nombre: 'iPhone 13', titulo: 'Apple iPhone 13 128GB Midnight', gb: '128GB', color: 'Midnight', condicion: 'usado', bateria: 91, estado: '9/10', precioUSD: 400, categoria: 'iPhone usados', descripcion: 'Es un iPhone 13 usado de 128GB.\nEstá en el local.' },
+    { id: 'lista_cargador-20w', tipo: 'pedido', nombre: 'Cargador 20W', gb: '', color: '', condicion: 'nuevo', estado: 'Nuevo', precioUSD: 55, categoria: 'Accesorios de carga' },
+    { id: 'inv_cable', tipo: 'accesorio', nombre: 'Cable USB-C', gb: '', color: 'Blanco', condicion: 'nuevo', precioUSD: 12.4, categoria: 'Accesorios de carga' },
+    { id: 'inv_funda', tipo: 'accesorio', nombre: 'Funda rara', condicion: 'nuevo', precioUSD: 9, categoria: 'Fundas raras' },
+    { id: 'sin_precio', nombre: 'Sin precio', precioUSD: 0, categoria: 'Notebooks' },
+    null,
   ] };
-  const s = construirSystem({ conocimiento: null, stock: [], listaMdp: null, listaCaba: null, catalogo: cat, urlCatalogo: 'https://x/catalogo.html' });
-  ok(s.includes('https://x/catalogo.html#c=accesorios-de-carga'), 'cada categoria con su link');
-  ok(s.indexOf('iPhone usados') < s.indexOf('Accesorios de carga'), 'en el orden publicado');
-  ok(!s.includes('#c=notebooks'), 'las vacias no se ofrecen');
-  ok(s.includes('#c=fundas-raras'), 'las que no estan en el orden van igual');
-  ok(!construirSystem({ conocimiento: null, stock: [], listaMdp: null, listaCaba: null }).includes('TIENDA WEB'), 'sin catalogo no hay bloque');
+  const fotos = { mapa: { 'iphone-13-midnight': ['iphone-13-midnight.jpg'] } };
+  const s = construirSystem({ conocimiento: null, catalogo: cat, urlCatalogo: 'https://x/tienda', fotos });
+  ok(s.includes('## CATÁLOGO DE LA TIENDA'), 'el catálogo publicado entra al prompt');
+  ok(s.includes('1 | Apple iPhone 13 128GB Midnight | usado, batería 91%, 9/10 | 400 usd | en el local | foto iphone-13-midnight — Es un iPhone 13 usado de 128GB. Está en el local.'),
+    'un renglón por producto: número, título de la tienda, condición, precio, entrega, foto y descripción', s.split('\n').find(l => l.startsWith('1 | ')));
+  ok(s.includes('2 | Cargador 20W | nuevo | 55 usd | a pedido'), 'lo que se trae va como "a pedido", sin repetir "Nuevo" como estado');
+  ok(s.includes('3 | Cable USB-C Blanco | nuevo | 12 usd | en el local'), 'sin título propio se arma con nombre y color');
+  ok(!s.includes('Sin precio') && !s.includes('sin_precio'), 'lo que no tiene precio no se ofrece');
+  ok(!s.includes('stock_a') && !s.includes('lista_cargador-20w'), 'los ids no viajan en el prompt: el link va por número');
+  ok(s.indexOf('### iPhone usados') < s.indexOf('### Accesorios de carga') && s.indexOf('### Accesorios de carga') < s.indexOf('### Fundas raras'), 'por categoría, en el orden publicado');
+  ok(s.includes('EL LINK DEL PRODUCTO') && s.includes('[[LINK:12]]') && s.includes('Nunca en tu primera respuesta'), 'la regla del link va pegada al catálogo');
+  ok(s.includes('lo podes comprar por ahi o pasarlo a ver por el local'), 'el link se anuncia: comprar por ahí o pasar por el local');
+  ok(!s.includes('EQUIPOS EN EL LOCAL') && !s.includes('## LISTA '), 'ya no hay stock ni listas de proveedores en el prompt');
 
-  // Proveedores a medida (pantalla Listas de precios): un bloque por lista, con su nombre y su tipo.
-  const conProv = construirSystem({ conocimiento: null, stock: [], listas: [
-    { nombre: 'Cava', tipo: 'costo', vencida: false, lista: { fecha: '2026-10-12', moneda: 'USD', items: [{ producto: 'iPhone 15', gb: '128GB', precioPublico: 700 }] } },
-    { nombre: 'Lista CABA', tipo: 'publico', vencida: true, lista: { fecha: '2026-10-01', moneda: 'USD', items: [{ producto: 'iPhone 13', gb: '128GB', precioPublico: 400 }] } },
-  ] });
-  ok(conProv.includes('LISTA DE CAVA — A PEDIDO'), 'el proveedor de costo va como lista a pedido con su nombre');
-  ok(conProv.includes('LISTA LISTA CABA (2026-10-01'), 'la lista pública lleva su nombre');
-  ok(conProv.includes('esta lista es del 2026-10-01 y no es la de hoy'), 'la vencida avisa');
-  ok(!conProv.includes('## LISTA MAR DEL PLATA') && !conProv.includes('## LISTA CABA'), 'sin los proveedores de siempre no aparecen sus bloques');
+  // Los links por categoría siguen estando, con la misma regla.
+  ok(s.includes('https://x/tienda#c=accesorios-de-carga'), 'cada categoría con su link');
+  ok(!s.includes('#c=notebooks'), 'las vacías no se ofrecen');
+  ok(s.includes('#c=fundas-raras'), 'las que no están en el orden van igual');
+  ok(!construirSystem({ conocimiento: null }).includes('TIENDA WEB'), 'sin catálogo no hay links de tienda');
+
+  // Dos bloques, los dos cacheables: las reglas y el catálogo.
+  const bloques = _construirSystem({ conocimiento: null, catalogo: cat, urlCatalogo: 'https://x/tienda' });
+  ok(bloques.length === 2 && bloques.every(b => b.cache_control), 'reglas y catálogo van en dos bloques con caché');
+  ok(!bloques[0].text.includes('CATÁLOGO DE LA TIENDA\n\nEsto es TODO'), 'publicar no invalida el bloque de las reglas');
+  ok(productosParaElBot(cat).map(p => p.id).join() === 'stock_a,lista_cargador-20w,inv_cable,inv_funda', 'el número de cada producto es su lugar en esta lista');
+
+  // ── El link: [[LINK:n]] ──
+  const tienda = { productos: productosParaElBot(cat), url: 'https://x/tienda', permitirLink: true };
+  const sale = expandirCanal(['te dejo el link, lo podes comprar por ahi o pasar por el local', '[[LINK:2]]'], CANAL, null, tienda);
+  ok(JSON.stringify(sale) === JSON.stringify(['te dejo el link, lo podes comprar por ahi o pasar por el local', 'https://x/tienda#p=lista_cargador-20w']), 'la marca se cambia por la página del producto', JSON.stringify(sale));
+  const primera = expandirCanal(['tengo el 13 en 400 usd', 'te dejo el link', '[[LINK:1]]'], CANAL, null, { ...tienda, permitirLink: false });
+  ok(JSON.stringify(primera) === JSON.stringify(['tengo el 13 en 400 usd']), 'en la primera respuesta el link no sale, ni el renglón que lo anuncia', JSON.stringify(primera));
+  const inventado = expandirCanal(['mira', '[[LINK:99]]'], CANAL, null, tienda);
+  ok(JSON.stringify(inventado) === JSON.stringify(['mira']), 'un número que no está en el catálogo se descarta', JSON.stringify(inventado));
+  const dos = expandirCanal(['[[LINK:1]]', '[[LINK:2]]'], CANAL, null, tienda);
+  ok(dos.length === 1 && dos[0].endsWith('#p=stock_a'), 'un solo link por respuesta', JSON.stringify(dos));
+  const categoria = expandirCanal(['tengo varios cargadores', 'https://x/tienda#c=accesorios-de-carga'], CANAL, null, { ...tienda, permitirLink: false });
+  ok(JSON.stringify(categoria) === JSON.stringify(['tengo varios cargadores']), 'el link de una categoría tampoco va de entrada', JSON.stringify(categoria));
+  ok(JSON.stringify(expandirCanal(['[[LINK:1]]'], CANAL, null, undefined)) === '[]', 'sin tienda la marca no llega escrita al cliente');
+  const conLink = normalizar({ necesita_atencion: false, mensajes: ['te dejo el link, lo podes comprar por ahi o pasar por el local', '[[LINK:1]]'] }, CANAL, null, tienda);
+  ok(conLink.pasoAHumano === false && conLink.mensajes[1] === 'https://x/tienda#p=stock_a', 'mandar el link no pausa el chat', JSON.stringify(conLink));
 }
 
 console.log('\n── construirSystem con los docs vacios ──');
@@ -162,13 +192,13 @@ console.log('\n── construirSystem con los docs vacios ──');
 // parametro no atrapa null. Con la base de conocimiento sin cargar, que es el estado
 // inicial de cualquier instalacion, el bot se caia en cada DM.
 {
-  const vacio = { conocimiento: null, stock: [], listaMdp: null, listaCaba: null };
+  const vacio = { conocimiento: null, catalogo: null };
   let sistema = null, exploto = null;
   try { sistema = construirSystem(vacio); } catch (e) { exploto = e.message; }
   ok(!exploto, 'con conocimiento en null no rompe', exploto);
   ok(sistema && sistema.includes('Avellaneda 1239'), 'cae a la direccion por defecto');
   ok(sistema && sistema.includes('NO SABÉS'), 'lo que no esta cargado se declara como no sabido');
-  ok(sistema && sistema.includes('Sin datos'), 'las listas vacias no prometen precios');
+  ok(sistema && sistema.includes('Sin datos') && sistema.includes('No prometas ningún producto ni precio'), 'sin catálogo publicado no promete nada');
 
   // El tono que escribe el dueño desde el sistema
   const conTono = construirSystem({ ...vacio, conocimiento: { tono: 'tuteo, no vos. mensajes mas largos.' } });
@@ -182,15 +212,8 @@ console.log('\n── construirSystem con los docs vacios ──');
   const conEjemplos = construirSystem({ ...vacio, conocimiento: { entrenamiento: 'cliente: cuanto el 13?\nvos: 400 usd' } });
   ok(conEjemplos.includes('EJEMPLOS Y SITUACIONES'), 'el entrenamiento entra al prompt');
   ok(conEjemplos.includes('inventados'), 'avisa que los precios de los ejemplos son de mentira');
-  ok(conEjemplos.indexOf('EJEMPLOS Y SITUACIONES') < conEjemplos.indexOf('## EQUIPOS EN EL LOCAL'), 'va ANTES del stock real, que es el que manda');
+  ok(conEjemplos.indexOf('EJEMPLOS Y SITUACIONES') < conEjemplos.indexOf('## CATÁLOGO DE LA TIENDA'), 'va ANTES del catálogo real, que es el que manda');
   ok(!construirSystem({ ...vacio, conocimiento: { entrenamiento: ' ' } }).includes('EJEMPLOS Y SITUACIONES'), 'vacio no agrega el bloque');
-
-  // Accesorios: el bot decia "no tengo cargadores" con los cargadores cargados en el
-  // sistema, porque `inventario` no entraba al prompt (ni tenia permiso de leerla).
-  const conAcc = construirSystem({ ...vacio, accesorios: [{producto:'Cargador Apple 20W', categoria:'Cargadores', precio:25, moneda:'USD'}] });
-  ok(conAcc.includes('Cargador Apple 20W'), 'los accesorios entran al prompt');
-  ok(conAcc.indexOf('ACCESORIOS EN EL LOCAL') !== conAcc.indexOf('EQUIPOS EN EL LOCAL'), 'van en un bloque aparte de los equipos');
-  ok(sistema.includes('No prometas ningún accesorio'), 'sin accesorios cargados lo dice, no se los inventa');
 
   let sinNada = null;
   try { sinNada = construirSystem(); } catch (e) { sinNada = null; }

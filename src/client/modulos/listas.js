@@ -45,7 +45,7 @@ function seccionHTML(p) {
     ${costo ? `
     <div class="card">
       <div class="card-title">Tu margen sobre el costo</div>
-      <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Cuánto le sumás al costo según cuánto te cueste. Se aplica al pegar la lista, así que lo que se guarda —y lo que ven la tienda y el bot— ya es el precio final al cliente. Es el mismo margen para todos los proveedores de costo.</p>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:12px;">Cuánto le sumás al costo según cuánto te cueste. Se aplica al pegar la lista, así que lo que se guarda —y lo que ve la tienda— ya es el precio final al cliente. Es el mismo margen para todos los proveedores de costo.</p>
       <div style="overflow-x:auto;"><table class="tkh-table">
         <thead><tr><th>Si el costo es…</th><th style="width:150px;text-align:right;">le sumo (u$s)</th><th style="width:40px;"></th></tr></thead>
         <tbody id="kb-${id}-tramos"></tbody>
