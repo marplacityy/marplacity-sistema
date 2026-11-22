@@ -540,3 +540,49 @@ test('las fotos que faltan se buscan, la IA arma la ficha, se revisa y recién a
   await expect(page.locator('#btn-cat-fotos-faltan')).toHaveText('📷 Buscar fotos que faltan');
   expect(errores).toEqual([]);
 });
+
+test('el dólar y el recargo de Mercado Pago de la tienda se cambian en Catálogo web y llegan a la tienda sin republicar', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await page.evaluate(async () => {
+    const d = window.__datosPrueba;
+    await d.cargar('config/usuario-prueba', { ...d.leer('config/usuario-prueba'), tc: '1400', catalogoIncluidos: ['consig_consig-1'], catalogoIdsV2: true });
+    await d.cargar('catalogo/publico', { productos: [] });
+  });
+  await ir(page, 'catalogo');
+  await page.evaluate(() => window.publicarCatalogo());
+  // Lo publicado lleva las reglas de siempre mientras nadie las toque.
+  await expect.poll(() => page.evaluate(() => window.__datosPrueba.leer('catalogo/publico')?.cobro)).toEqual({ tc: 1400, recargoTarjetaPct: 5, recargoMpPct: 8, mpMaxUSD: 200 });
+
+  await page.locator('#cat-tab-cobro').click();
+  await expect(page.locator('#cat-vista-cobro')).toBeVisible();
+  await expect(page.locator('#cat-cobro-tc')).toHaveValue('1400');
+  await expect(page.locator('#cat-cobro-mp')).toHaveValue('8');
+  await page.locator('#cat-cobro-tc').fill('1500');
+  await page.locator('#cat-cobro-mp').fill('10');
+  await page.locator('#cat-cobro-mpmax').fill('300');
+  await expect(page.locator('#cat-cobro-ejemplo')).toContainText('$ 165.000 con Mercado Pago');
+  await page.screenshot({ path: '.runtime/catalogo-cobro.png' });
+  // Un recargo imposible no se guarda.
+  await page.locator('#cat-cobro-tarjeta').fill('250');
+  await page.locator('#btn-cat-cobro').click();
+  await expect(page.locator('#toast')).toContainText('0 a 100');
+  await page.locator('#cat-cobro-tarjeta').fill('6');
+  await page.locator('#btn-cat-cobro').click();
+  await expect(page.locator('#toast')).toContainText('la tienda ya cobra con estos valores');
+
+  // Sin tocar Publicar: la tienda ya tiene el dólar y los recargos nuevos, y los productos siguen ahí.
+  const publicado = await page.evaluate(() => window.__datosPrueba.leer('catalogo/publico'));
+  expect(publicado.cobro).toEqual({ tc: 1500, recargoTarjetaPct: 6, recargoMpPct: 10, mpMaxUSD: 300 });
+  expect(publicado.productos).toHaveLength(1);
+  const cfg = await page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba'));
+  expect(cfg).toMatchObject({ tc: '1500', cobroMpPct: 10, cobroTarjetaPct: 6, cobroMpMaxUSD: 300 });
+
+  // Y el dólar cambiado desde Configuración también llega solo.
+  await ir(page, 'config');
+  await expect(page.locator('#cfg-tc')).toHaveValue('1500');
+  await page.locator('#cfg-tc').fill('1550');
+  await page.evaluate(() => window.guardarConfig());
+  await expect.poll(() => page.evaluate(() => window.__datosPrueba.leer('catalogo/publico').cobro.tc)).toBe(1550);
+  expect(errores).toEqual([]);
+});

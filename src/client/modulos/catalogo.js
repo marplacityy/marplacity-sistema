@@ -338,6 +338,34 @@ const canon = v => Array.isArray(v) ? '[' + v.map(canon).join(',') + ']'
  */
 const productoPublicado = p => Object.fromEntries(Object.entries(p).filter(([k]) => !k.startsWith('_')));
 /** Lo que hay hoy en la tienda, si el catálogo publicado es de esta cuenta. */
+/**
+ * Las reglas de cobro de la tienda, como viajan en lo publicado (`cobro`). El dólar es el
+ * tipo de cambio habitual de Configuración. Los recargos y el tope de Mercado Pago se
+ * cambian en Catálogo web → Cobro (`cfg.cobroMpPct`, `cfg.cobroTarjetaPct`,
+ * `cfg.cobroMpMaxUSD`); mientras nadie los toque valen los de siempre (RECARGO_*).
+ */
+export function reglasDeCobro() {
+  const cfg = contextoApp.cfg || {};
+  const o = (valor, base) => { const n = parseFloat(valor); return Number.isFinite(n) && n >= 0 ? n : base; };
+  return {
+    tc: parseFloat(cfg.tc) || 0,
+    recargoTarjetaPct: o(cfg.cobroTarjetaPct, contextoApp.RECARGO_TARJETA_PCT),
+    recargoMpPct: o(cfg.cobroMpPct, contextoApp.RECARGO_MP_PCT),
+    mpMaxUSD: o(cfg.cobroMpMaxUSD, contextoApp.MP_MAX_USD),
+  };
+}
+
+/**
+ * Lleva las reglas de cobro a la tienda ya publicada, sin volver a publicar el catálogo:
+ * la página y el Worker que cobra leen `cobro` de ese documento. Devuelve false si
+ * todavía no hay nada publicado (ahí viajan con la primera publicación).
+ */
+export async function publicarCobro() {
+  if (!contextoApp.catPublicado || !contextoApp.puedeAdministrarLocal) return false;
+  await updateDoc(contextoApp.catalogoDoc, { cobro: reglasDeCobro() });
+  return true;
+}
+
 const productosEnTienda = () => contextoApp.puedeAdministrarLocal && Array.isArray(contextoApp.catPublicado?.productos) ? contextoApp.catPublicado.productos.filter(Boolean) : [];
 /**
  * Qué pasa con un producto en la tienda, comparando con lo último publicado:
@@ -1302,12 +1330,55 @@ export function inicializarCatalogo() {
   contextoApp.catFuente = '';   // la fuente elegida en Fuentes, o todas
   window.catTab = function (v) {
     contextoApp.catVista = v;
-    ['productos', 'categorias', 'fotos'].forEach(t => {
+    ['productos', 'categorias', 'fotos', 'cobro'].forEach(t => {
       document.getElementById('cat-vista-' + t).style.display = t === v || t === 'productos' && v === 'tienda' ? '' : 'none';
     });
-    ['productos', 'tienda', 'categorias', 'fotos'].forEach(t => document.getElementById('cat-tab-' + t).classList.toggle('on', t === v));
+    ['productos', 'tienda', 'categorias', 'fotos', 'cobro'].forEach(t => document.getElementById('cat-tab-' + t).classList.toggle('on', t === v));
     contextoApp.catSeleccion.clear();
+    if (v === 'cobro') pintarCobro();
     renderCatalogo();
+  };
+
+  // ── Cobro: el dólar y los recargos con los que cobra la tienda ──
+  const campoCobro = id => document.getElementById('cat-cobro-' + id);
+  const numeroCobro = id => { const n = parseFloat(campoCobro(id).value); return Number.isFinite(n) ? n : null; };
+  function pintarCobro() {
+    const c = reglasDeCobro();
+    campoCobro('tc').value = c.tc || '';
+    campoCobro('mp').value = c.recargoMpPct;
+    campoCobro('mpmax').value = c.mpMaxUSD;
+    campoCobro('tarjeta').value = c.recargoTarjetaPct;
+    window.vistaPreviaCobro();
+  }
+  /** El ejemplo de abajo del formulario: cuánto paga un cliente por un producto de u$s 100. */
+  window.vistaPreviaCobro = function () {
+    const tc = numeroCobro('tc') || 0, mp = numeroCobro('mp') || 0, tarjeta = numeroCobro('tarjeta') || 0, max = numeroCobro('mpmax') || 0;
+    const pesos = v => '$ ' + Math.round(v).toLocaleString('es-AR');
+    campoCobro('ejemplo').textContent = !tc ? 'Falta el dólar: sin él la tienda no puede cobrar en pesos.'
+      : `Ejemplo: un producto de u$s 100 se paga ${max >= 100 ? `${pesos(100 * tc * (1 + mp / 100))} con Mercado Pago` : 'solo en dólares o en el local (supera el tope de Mercado Pago)'}`
+        + ` y u$s ${(100 * (1 + tarjeta / 100)).toLocaleString('es-AR')} con tarjeta en dólares.`;
+  };
+  window.guardarCobro = async function () {
+    if (!requiereDuenoDelLocal()) return;
+    const tc = numeroCobro('tc'), mp = numeroCobro('mp'), tarjeta = numeroCobro('tarjeta'), max = numeroCobro('mpmax');
+    if (!(tc > 0)) return showToast('Poné el valor del dólar, en pesos.', true);
+    if ([mp, tarjeta].some(n => n == null || n < 0 || n > 100)) return showToast('Los recargos van de 0 a 100 %.', true);
+    if (max == null || max < 0) return showToast('El tope de Mercado Pago es un monto en dólares (0 para no ofrecerlo).', true);
+    // El dólar es el mismo "Tipo de cambio habitual" de Configuración: un solo valor.
+    const cambios = { tc: String(tc), cobroMpPct: mp, cobroTarjetaPct: tarjeta, cobroMpMaxUSD: max };
+    contextoApp.cfg = { ...contextoApp.cfg, ...cambios };
+    setSyncDot('syncing');
+    try {
+      await setDoc(contextoApp.cfgDoc, contextoApp.withUser(cambios), { merge: true });
+      const enLaTienda = await publicarCobro();
+      const campoConfig = document.getElementById('cfg-tc');
+      if (campoConfig) campoConfig.value = cambios.tc;
+      setSyncDot('ok');
+      showToast(enLaTienda ? 'Guardado ✓ — la tienda ya cobra con estos valores' : 'Guardado ✓ — se aplica cuando publiques la tienda');
+    } catch (e) {
+      setSyncDot('error');
+      showToast('No se pudo guardar: ' + e.message, true);
+    }
   };
   /** Tocar una fuente muestra solo lo suyo; tocarla de nuevo vuelve a todas. */
   window.filtrarFuente = origen => {
@@ -1965,15 +2036,10 @@ Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
           horarios: contextoApp.conoc.horarios || '',
           whatsapp: (contextoApp.cfg.localTel || '').replace(/\D/g, '')
         },
-        // Lo que la página necesita para armar el pedido. El tipo de cambio es el de
-        // Configuración al momento de publicar: si cambia, hay que volver a publicar.
+        // Lo que la página necesita para armar el pedido. El dólar y los recargos también
+        // se actualizan solos al guardarlos (publicarCobro), sin volver a publicar.
         categorias: ordenCategorias(),
-        cobro: {
-          tc: parseFloat(contextoApp.cfg.tc) || 0,
-          recargoTarjetaPct: contextoApp.RECARGO_TARJETA_PCT,
-          recargoMpPct: contextoApp.RECARGO_MP_PCT,
-          mpMaxUSD: contextoApp.MP_MAX_USD
-        }
+        cobro: reglasDeCobro()
       }), {
         merge: false
       });

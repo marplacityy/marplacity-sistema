@@ -18,6 +18,7 @@
         <button class="cat-tab" id="cat-tab-tienda" data-click="catTab" data-args='["tienda"]'>En la tienda</button>
         <button class="cat-tab" id="cat-tab-categorias" data-click="catTab" data-args='["categorias"]'>Categorías</button>
         <button class="cat-tab" id="cat-tab-fotos" data-click="catTab" data-args='["fotos"]'>Fotos</button>
+        <button class="cat-tab" id="cat-tab-cobro" data-click="catTab" data-args='["cobro"]'>Cobro</button>
       </div>
 
       <!-- Productos -->
@@ -77,5 +78,33 @@
           <button class="btn-secondary" style="width:auto;" id="btn-cat-fotos" data-click="sincronizarFotos">🔄 Sincronizar</button>
         </div>
         <div id="cat-fotos"></div>
+      </div>
+
+      <!-- Cobro: el dólar y los recargos con los que cobra la tienda -->
+      <div id="cat-vista-cobro" style="display:none;">
+        <div class="card" style="max-width:560px;">
+          <div class="card-title">Cómo cobra la tienda</div>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">Los precios se publican en dólares. Con estos valores la tienda calcula cuánto es en pesos y el recargo de cada forma de pago. <b>Se aplican apenas guardás</b>, sin volver a publicar.</p>
+          <div class="field">
+            <label>Dólar de la tienda (pesos por dólar)</label>
+            <input type="number" id="cat-cobro-tc" min="0" step="1" placeholder="1410" data-input="vistaPreviaCobro">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Es el mismo "Tipo de cambio habitual" de Configuración: si lo cambiás acá, cambia allá.</div>
+          </div>
+          <div class="field">
+            <label>Recargo por pagar con Mercado Pago (%)</label>
+            <input type="number" id="cat-cobro-mp" min="0" max="100" step="0.5" data-input="vistaPreviaCobro">
+          </div>
+          <div class="field">
+            <label>Mercado Pago solo para compras de hasta (u$s)</label>
+            <input type="number" id="cat-cobro-mpmax" min="0" step="1" data-input="vistaPreviaCobro">
+            <div style="font-size:11px;color:var(--text3);margin-top:4px;">Con 0 la tienda no ofrece Mercado Pago.</div>
+          </div>
+          <div class="field">
+            <label>Recargo por pagar con tarjeta en dólares (%)</label>
+            <input type="number" id="cat-cobro-tarjeta" min="0" max="100" step="0.5" data-input="vistaPreviaCobro">
+          </div>
+          <div id="cat-cobro-ejemplo" style="font-size:12.5px;color:var(--text2);background:var(--surface-hover);border-radius:6px;padding:8px 10px;margin:4px 0 14px;"></div>
+          <button class="btn-add" id="btn-cat-cobro" data-click="guardarCobro">Guardar</button>
+        </div>
       </div>
     </div>

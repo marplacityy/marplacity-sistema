@@ -11,6 +11,7 @@ import { renderInv } from './inventario.js';
 import { renderPosGrid } from './pos.js';
 import { renderClientes } from './clientes.js';
 import { renderConsig, renderPagos } from './consignacion.js';
+import { publicarCobro } from './catalogo.js';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
 export function descargarJSON(nombre, obj) {
@@ -64,6 +65,8 @@ export function inicializarConfiguracion() {
         merge: true
       });
       showToast('Configuración guardada ✓');
+      // El dólar de la tienda es este mismo tipo de cambio: llega a la tienda sin republicar.
+      publicarCobro().catch(e => console.warn('el dólar no llegó a la tienda', e.message));
     } catch (e) {
       showToast('Error al guardar', true);
       setSyncDot('error');
