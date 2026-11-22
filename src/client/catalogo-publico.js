@@ -1,7 +1,7 @@
 import { esc, on } from '../shared/seguridad.js';
 import { ajusteDeMiniatura } from '../shared/calidad-foto.js';
 import { rangoDeModelo, compararPesos } from '../shared/orden-tienda.js';
-import { RUBROS_CATALOGO, rubroDe, cantidadMaxima, capacidadPareja } from '../shared/catalogo.js';
+import { RUBROS_CATALOGO, rubroDe, cantidadMaxima, capacidadPareja, separarColor } from '../shared/catalogo.js';
 import { activarEventos } from './core/eventos.js';
 activarEventos();
 import { cargarConfiguracion } from './core/config-publica.js';
@@ -67,7 +67,12 @@ function fotoTarjeta(p){
 
 const sello = p => p.tipo === 'pedido' ? '<span class="sello">A pedido</span>' : '';
 const linkProducto = p => '#p=' + encodeURIComponent(p.id);
-const nombreCompleto = p => [p.titulo || p.nombre, p.gb, p.color].filter(Boolean).join(' ');
+// El nombre con su capacidad y su color, sin repetir lo que el título ya dice.
+function nombreCompleto(p){
+  const nombre = p.titulo || p.nombre;
+  const yaDicho = String(nombre).toLowerCase();
+  return [nombre, ...[p.gb, p.color].filter(v => v && !yaDicho.includes(String(v).toLowerCase()))].join(' ');
+}
 
 /**
  * La tarjeta de un producto: la foto, el nombre, lo que el nombre no dice (capacidad,
@@ -202,7 +207,7 @@ function paginaProducto(id){
 // los buscadores. Al cerrar vuelven los de la tienda.
 const META_BASE = { title: document.title, desc: document.querySelector('meta[name="description"]')?.content || '' };
 function metaDeProducto(p){
-  const titulo = p ? `${p.titulo || p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} — ${usd(p.precioUSD)} · MarplaCity` : META_BASE.title;
+  const titulo = p ? `${nombreCompleto(p)} — ${usd(p.precioUSD)} · MarplaCity` : META_BASE.title;
   const desc = p ? (p.seoDescripcion || p.descripcion || `${p.titulo || p.nombre} a ${usd(p.precioUSD)} en MarplaCity, Mar del Plata.`).slice(0, 160) : META_BASE.desc;
   document.title = titulo;
   for (const sel of ['meta[name="description"]', 'meta[property="og:description"]']) { const m = document.querySelector(sel); if (m) m.content = desc; }
@@ -676,6 +681,19 @@ function armarGrupos(){
 const grupoDe = p => { const k = claveGrupo(p); return k && GRUPOS.get(k) || null; };
 const numGb = g => parseFloat(String(g).replace(/[^\d.]/g, '')) * (/tb/i.test(g) ? 1024 : 1) || 0;
 
+/**
+ * Cómo se llama un grupo en su tarjeta: el título pulido sin la capacidad ni el color
+ * (eso se elige adentro), si todas las variantes dicen lo mismo; si no, el nombre del modelo.
+ */
+function nombreDeGrupo(lista){
+  const literal = v => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const sinVariante = p => p.titulo
+    ? [p.gb, p.color].filter(Boolean).reduce((t, v) => t.replace(new RegExp('\\s*' + literal(v), 'i'), ''), String(p.titulo)).replace(/\s+/g, ' ').trim()
+    : '';
+  const titulos = new Set(lista.map(sinVariante));
+  return titulos.size === 1 && [...titulos][0] || lista[0].nombre;
+}
+
 /** La tarjeta de un grupo: la foto de la primera variante que tenga, "desde" el precio más bajo. */
 function tarjetaGrupo(lista){
   const p = lista.find(x => fotosDe(x).length) || lista[0];
@@ -686,7 +704,7 @@ function tarjetaGrupo(lista){
   return `<article class="prod" ${on('click', 'abrirFicha', p.id)}>
     <div class="prod-foto">${sello(p)}${fotoTarjeta(p)}</div>
     <div class="prod-info">
-      <h3 class="prod-nombre"><a href="${esc(linkProducto(p))}" data-stop>${esc(p.nombre)}</a></h3>
+      <h3 class="prod-nombre"><a href="${esc(linkProducto(p))}" data-stop>${esc(nombreDeGrupo(lista))}</a></h3>
       <div class="prod-detalle">${[gbs.map(esc).join(' · '), colores.length > 1 ? `${colores.length} colores` : ''].filter(Boolean).join(' · ')}</div>
       <div class="precio"><span class="desde">desde</span>${usd(desde)}</div>
     </div>
@@ -939,8 +957,10 @@ function pie(actualizado){
     if(!r.ok) throw new Error('no se pudo cargar');
     const d = campos((await r.json()).fields);
 
-    // La capacidad se empareja al leer: lo ya publicado puede traer "256gb" y "256GB".
-    PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0).map(p => ({ ...p, gb: capacidadPareja(p.gb) }));
+    // La capacidad y el color se acomodan al leer, no solo al publicar: lo ya publicado
+    // puede traer "256gb" y "256GB", o el color adentro del nombre ("iPhone 15 Black //
+    // SIM + eSIM"), y así cada color salía como un producto aparte.
+    PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0).map(p => ({ ...p, gb: capacidadPareja(p.gb), ...separarColor(p.nombre, p.color) }));
     armarGrupos();
     LOCAL = d.local || {};
     COBRO = d.cobro || {};
