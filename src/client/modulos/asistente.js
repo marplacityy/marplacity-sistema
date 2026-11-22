@@ -3,6 +3,7 @@ import { contextoApp } from '../core/estado.js';
 import { on } from '../../shared/seguridad.js';
 import { esc, showToast } from '../core/interfaz.js';
 import { posCatalog } from './pos.js';
+import { catalogoCandidatos } from './catalogo.js';
 import { buildDataContext, workerHeaders } from './reportes.js';
 import { setSyncDot } from '../core/datos.js';
 import { addDoc, serverTimestamp, writeBatch, doc, increment } from 'firebase/firestore';
@@ -30,6 +31,13 @@ proponer_inventario. Antes, buscá cada producto con buscar: si ya existe en el 
 crear uno repetido. El costo es el unitario de la factura, no el total del renglón. Lo que
 no se lea bien (cantidad, precio), dejalo vacío y avisale; no lo adivines.
 Las categorías de inventario que existen son: ${(contextoApp.icats || []).join(', ')}.
+
+PROVEEDORES
+Si pregunta a quién pedirle un producto, quién lo tiene más barato o en qué lista está,
+usá proveedores_de_producto: decile el proveedor más barato, a cuánto, y la diferencia
+con los demás. Esos precios son los de cada lista de proveedor ya con el margen sumado,
+no el costo. Si hay más de un producto que coincide (otra capacidad u otro color),
+nombralos por separado.
 
 Los importes en dólares se escriben "u$s 500" y en pesos "$ 500.000".`;
 }
@@ -176,6 +184,19 @@ export function inicializarAsistente() {
         texto: {
           type: 'string',
           description: 'Lo que se busca: modelo, color, IMEI o parte del nombre.'
+        }
+      },
+      required: ['texto']
+    }
+  }, {
+    name: 'proveedores_de_producto',
+    description: 'Qué proveedores tienen un producto en sus listas de precios y a cuánto, del más barato al más caro. Usalo cuando el usuario pregunte a quién pedirle un producto, quién lo tiene más barato o en qué lista está ("¿a quién le pido el iPhone 17 negro de 256?"). No sirve para lo que está en el local: para eso está buscar.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        texto: {
+          type: 'string',
+          description: 'Modelo y, si se sabe, capacidad y color: "iphone 17 256 black".'
         }
       },
       required: ['texto']
@@ -332,6 +353,36 @@ export function inicializarAsistente() {
         moneda: p.moneda,
         ...(p.tipo === 'inv' ? { cantidadEnStock: p.qty } : {})
       }));
+      return {
+        encontrados: r.length,
+        resultados: r
+      };
+    },
+    proveedores_de_producto({
+      texto
+    }) {
+      const palabras = String(texto || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+      if (!palabras.length) return {
+        resultados: []
+      };
+      // Se busca en el nombre del producto y en cómo lo escribe cada proveedor.
+      const coincide = p => {
+        const t = [p.nombre, p.gb, p.color, ...p._ofertas.flatMap(o => [o.producto, o.gb, o.color])].map(x => String(x || '').toLowerCase()).join(' ');
+        return palabras.every(w => t.includes(w));
+      };
+      const r = catalogoCandidatos().filter(p => p._ofertas?.length && coincide(p)).slice(0, 25).map(p => {
+        const ofertas = [...p._ofertas].sort((a, b) => (a.precioUSD || Infinity) - (b.precioUSD || Infinity));
+        return {
+          producto: [p.nombre, p.gb, p.color].filter(Boolean).join(' '),
+          precioEnLaTiendaUSD: p.precioUSD || null,
+          estaEnLaTienda: !!p._sale,
+          masBarato: ofertas[0].proveedor,
+          ofertas: ofertas.map(o => ({
+            proveedor: o.proveedor,
+            precioUSD: o.precioUSD || null
+          }))
+        };
+      });
       return {
         encontrados: r.length,
         resultados: r

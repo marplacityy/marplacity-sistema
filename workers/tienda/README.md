@@ -15,9 +15,11 @@ URL de producción: https://tienda.fiwind702050.workers.dev/
 | `GET /pedido/:id` | el estado del pedido, para la pantalla de vuelta del pago |
 | `POST /mp/webhook` | Mercado Pago avisa que un pago cambió |
 | `POST /stripe/webhook` | Stripe avisa que un pago cambió (`checkout.session.*`, `charge.refunded`) |
-| `POST /fotos` | busca en Amazon las fotos de un producto (con SerpApi si hay `SERPAPI_KEY`; sin clave, sin cupo o sin resultados, con la búsqueda de Ecommodo de `fotos-ecommodo.js`: DuckDuckGo Imágenes y la página de Amazon) y las sube a `fotos/` de Firebase Storage (`FOTOS_BUCKET`) con el token del dueño. Solo el dueño, con `X-Firebase-Token`. Ver `fotos.js` |
-| `POST /fotos/buscar` | candidatos de foto para elegir a mano: Amazon y Google Imágenes (grandes), con tamaño y fuente, sin bajar nada. Dos búsquedas de SerpApi. Solo el dueño |
+| `POST /fotos` | busca en Amazon las fotos de un producto y las sube a `fotos/` de Firebase Storage (`FOTOS_BUCKET`) con el token del dueño. Busca con el script de Ecommodo (`fotos-ecommodo.js`: DuckDuckGo Imágenes y la página de Amazon, sin claves); SerpApi es el respaldo, solo si el script no trae nada y hay `SERPAPI_KEY`. Solo el dueño |
+| `POST /fotos/buscar` | candidatas de foto para revisar, sin bajar nada: `{consulta, motor, candidatos: [{url, titulo, color}]}`. Mismo orden: el script de Ecommodo y, si no trae ninguna que sirva, SerpApi. El sistema las mide en el navegador (fondo blanco, resolución, repetidas) y el dueño confirma. Solo el dueño |
 | `POST /fotos/traer` | baja las URLs elegidas o el link pegado (`{base, desde, urls}`, hosts públicos) y las sube a Firebase Storage con el nombre del producto y el token del dueño. Solo el dueño |
+| `POST /ia/mejorar` | la ficha de una tanda de productos (`{productos, categorias}`, hasta 20): título, categoría, descripción, etiquetas SEO y descripción para Google, con la IA que esté cargada. No guarda nada. Solo el dueño |
+| `POST /ia/texto` | un texto de la IA que esté cargada (`{sistema, mensaje, json, maxTokens}` → `{texto, proveedor}`). Solo el dueño |
 
 **El precio no viene de la página.** Se lee de `catalogo/publico` (lo que publicó el
 dueño) y las reglas de cobro (`cobro`: tipo de cambio, recargo de tarjeta, tope de MP)
@@ -61,8 +63,14 @@ Orden la primera vez:
    npx wrangler secret put MP_WEBHOOK_SECRET    # la "clave secreta" de Webhooks de la app de MP
    npx wrangler secret put STRIPE_SECRET_KEY    # sk_test_... primero, sk_live_... después
    npx wrangler secret put STRIPE_WEBHOOK_SECRET # el signing secret (whsec_...) del endpoint
-   npx wrangler secret put SERPAPI_KEY          # serpapi.com, para las fotos desde Amazon
+   npx wrangler secret put SERPAPI_KEY          # serpapi.com: respaldo del buscador de fotos (opcional)
    ```
+
+   La IA es opcional y alcanza con una clave: `DEEPSEEK_KEY`, `OPENAI_KEY`, `GEMINI_KEY` o
+   `ANTHROPIC_KEY`. Si hay más de una, `IA_PROVEEDOR` (Text) dice cuál se prueba primero y las
+   demás quedan de respaldo; `<PROVEEDOR>_MODELO` cambia el modelo. Ver `server/services/tienda/ia.js`.
+   Ojo: `wrangler secret put` no es interactivo dentro de una sesión de agente y guarda la clave
+   vacía; con `printf '%s' 'la-clave' | npx wrangler secret put DEEPSEEK_KEY` anda.
 
    Y en el panel (Settings → Variables), las Text: `OWNER_UID` (el uid del dueño, el mismo
    que tiene ig-bot) y `TIENDA_EMAIL`. Las que ya son públicas van en `wrangler.toml`.

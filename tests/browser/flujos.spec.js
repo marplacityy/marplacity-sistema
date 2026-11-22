@@ -367,3 +367,169 @@ test('importar una lista pegada arma los productos, aunque la IA no responda', a
   expect(conoc.proveedores.map(p => p.nombre)).toContain('Valen');
   expect(errores).toEqual([]);
 });
+
+test('los repetidos entre listas se unifican: uno solo, precio promedio y la lista más barata como fuente', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  const ids = await page.evaluate(async () => {
+    const d = window.__datosPrueba;
+    const item = (producto, gb, color, precioPublico) => ({ producto, gb, color, condicion: '', precioPublico });
+    await d.cargar('conocimiento/usuario-prueba', { proveedores: [{ id: 'ema', nombre: 'ema', tipo: 'costo', vence: false }, { id: 'agus', nombre: 'agus south', tipo: 'costo', vence: false }] });
+    await d.cargar('listas_precios/l-ema', { origen: 'ema', fecha: d.fecha, moneda: 'USD', items: [
+      item('iPhone 18 Pro Max Black', '256gb', '', 1490), item('iPhone 18 Pro Max Black', '512gb', '', 1760), item('iPhone 16 Black // SIM + eSIM', '128gb', '', 855),
+    ] });
+    await d.cargar('listas_precios/l-agus', { origen: 'agus', fecha: d.fecha, moneda: 'USD', items: [item('iPhone 18 Pro Max', '256GB', 'Black', 1515), item('iPhone 16', '128GB', 'Black', 875)] });
+    // Lo mandado a la tienda con el id de antes, que no distinguía capacidades.
+    await d.cargar('config/usuario-prueba', { ...d.leer('config/usuario-prueba'), catalogoIncluidos: ['lista_iphone-18-pro-max-black'], catalogoNotas: { 'lista_iphone-18-pro-max-black': 'Sellado, con garantía.' } });
+    await d.cargar('catalogo/publico', { productos: [] });
+    return { ema256: 'lista_iphone-18-pro-max-black-256gb', ema512: 'lista_iphone-18-pro-max-black-512gb', agus256: 'lista_iphone-18-pro-max-256gb-black' };
+  });
+  await ir(page, 'catalogo');
+  // Cada capacidad pasa a ser su producto, y las tres heredan estar en la tienda.
+  await expect.poll(() => page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba').catalogoIdsV2)).toBe(true);
+  let cfg = await page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba'));
+  expect(cfg.catalogoIncluidos).toEqual(expect.arrayContaining([ids.ema256, ids.ema512, ids.agus256]));
+  expect(cfg.catalogoNotas[ids.ema256]).toBe('Sellado, con garantía.');
+
+  await expect(page.locator('#btn-cat-duplicados')).toHaveText('🔎 Buscar duplicados (1)');
+  await page.locator('#btn-cat-duplicados').click();
+  await expect(page.locator('#duplicados-modal')).toHaveClass(/open/);
+  // El 256 es seguro y viene marcado; el iPhone 16 queda para revisar (uno aclara SIM + eSIM).
+  await expect(page.locator('.dup-grupo')).toHaveCount(2);
+  await expect(page.locator('.dup-grupo.on')).toHaveCount(1);
+  await expect(page.locator('.dup-grupo.on .dup-queda')).toContainText('1.505');
+  await expect(page.locator('.dup-grupo.on .dup-of.mejor')).toContainText('ema');
+  await expect(page.locator('.dup-grupo').nth(1).locator('.dup-nota')).toContainText('SIM');
+  await page.locator('#dup-regla').selectOption('minimo');
+  await expect(page.locator('.dup-grupo.on .dup-queda')).toContainText('1.490');
+  await page.locator('#dup-regla').selectOption('promedio');
+  await expect(page.locator('#btn-dup-unificar')).toContainText('Unificar 1 producto');
+  await page.locator('#btn-dup-unificar').click();
+  await expect(page.locator('#dup-listo')).toBeVisible();
+  await page.locator('#dup-listo .btn-secondary').click();
+
+  cfg = await page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba'));
+  expect(cfg.catalogoUnificados[ids.agus256]).toMatchObject({ regla: 'promedio', nombre: 'iPhone 18 Pro Max', gb: '256GB', color: 'Black' });
+  expect(cfg.catalogoIncluidos).toContain(ids.agus256);
+  expect(cfg.catalogoIncluidos).not.toContain(ids.ema256);
+  expect(cfg.catalogoNotas[ids.agus256]).toBe('Sellado, con garantía.');
+  await expect(page.locator('#btn-cat-duplicados')).toHaveText('🔎 Buscar duplicados');
+
+  // En modo lista se ve la columna Fuente: la más barata, y que también lo tiene la otra.
+  await page.evaluate(() => { if (document.getElementById('cat-modo-btn').textContent.includes('Lista')) window.modoCatalogo(); });
+  await expect(page.locator('.cat-fila-cab')).toContainText('Fuente');
+  const fila = page.locator('.cat-fila', { hasText: '256GB · Black' });
+  await expect(fila).toHaveCount(1);
+  await expect(fila.locator('.col.fuente')).toContainText('Lista ema');
+  await expect(fila.locator('.col.fuente')).toContainText('también agus south');
+  await expect(fila.locator('.col.precio')).toHaveText('u$s 1.505');
+  await page.screenshot({ path: '.runtime/catalogo-fuente.png', fullPage: true });
+  // La fuente de cada lista sigue mostrando el producto unificado.
+  await page.locator('.cat-metric', { hasText: 'Lista agus south' }).click();
+  await expect(page.locator('.cat-fila', { hasText: '256GB · Black' })).toHaveCount(1);
+
+  // Lo que se publica no lleva nada de los proveedores.
+  await page.evaluate(() => window.publicarCatalogo());
+  const publicado = await page.evaluate(() => window.__datosPrueba.leer('catalogo/publico'));
+  const unificado = publicado.productos.find(p => p.id === ids.agus256);
+  expect(unificado).toMatchObject({ nombre: 'iPhone 18 Pro Max', gb: '256GB', color: 'Black', precioUSD: 1505, descripcion: 'Sellado, con garantía.' });
+  expect(JSON.stringify(publicado)).not.toMatch(/ema|agus|_ofertas|_fuentes/);
+  expect(publicado.productos.map(p => p.id)).toContain(ids.ema512);
+
+  // Cuando alguien lo compra, Pedidos dice a quién pedírselo.
+  await page.evaluate(id => window.__datosPrueba.cargar('pedidos/pedido-1', {
+    estado: 'pagado', creado: new Date().toISOString(), pago: 'efectivo', montoUSD: 1505, entrega: 'retiro',
+    cliente: { nombre: 'Ana', whatsapp: '2235550000' }, items: [{ id, nombre: 'iPhone 18 Pro Max', gb: '256GB', color: 'Black', tipo: 'pedido', cantidad: 1 }],
+  }), ids.agus256);
+  await ir(page, 'pedidos');
+  await expect(page.locator('.ped-prov')).toContainText('Pedíselo a ema');
+  await expect(page.locator('.ped-prov')).toContainText('1.490');
+  await expect(page.locator('.ped-prov')).toContainText('agus south u$s 1.515');
+
+  // Separar deshace la unificación.
+  await ir(page, 'catalogo');
+  await page.evaluate(id => window.separarUnificado(id), ids.agus256);
+  await expect.poll(() => page.evaluate(() => Object.keys(window.__datosPrueba.leer('config/usuario-prueba').catalogoUnificados).length)).toBe(0);
+  await expect(page.locator('#btn-cat-duplicados')).toHaveText('🔎 Buscar duplicados (1)');
+  expect(errores).toEqual([]);
+});
+
+test('las fotos que faltan se buscan, la IA arma la ficha, se revisa y recién ahí se carga', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await page.evaluate(async () => {
+    const d = window.__datosPrueba;
+    await d.cargar('config/usuario-prueba', { ...d.leer('config/usuario-prueba'), catalogoIncluidos: ['consig_consig-1'], catalogoIdsV2: true });
+    await d.cargar('catalogo/publico', { productos: [] });
+  });
+  // Cuatro candidatas: dos de fondo blanco distintas, la primera repetida y una foto de uso.
+  // La búsqueda va al Worker de la tienda (en Node, su dirección real): acá se la responde la prueba.
+  const fotos = await page.evaluate(() => {
+    const dibujar = pintar => { const c = document.createElement('canvas'); c.width = c.height = 600; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 600, 600); pintar(x); return c.toDataURL('image/png'); };
+    const frente = dibujar(x => { x.fillStyle = '#111'; x.fillRect(200, 80, 200, 440); });
+    return [frente, dibujar(x => { x.fillStyle = '#6a7'; x.fillRect(0, 0, 600, 600); }), frente, dibujar(x => { x.fillStyle = '#334'; x.fillRect(60, 240, 480, 120); })];
+  });
+  const pedidos = [];
+  await page.route('**/fotos/buscar', route => { pedidos.push(route.request().postDataJSON()); return route.fulfill({ json: { consulta: 'iPhone 14', candidatos: fotos.map(url => ({ url, fuente: 'Amazon' })) } }); });
+  await page.route('**/fotos/traer', route => {
+    const { base, desde, urls } = route.request().postDataJSON();
+    pedidos.push({ base, desde, urls: urls.length });
+    return route.fulfill({ json: { subidos: urls.map((_, i) => `${base}${desde + i > 1 ? '-' + (desde + i) : ''}.png`), fallidas: [] } });
+  });
+  // La IA del sistema contesta como Claude: primero un bloque de razonamiento, después el texto.
+  const ficha = { id: 'consig_consig-1', titulo: 'Apple iPhone 14', categoria: 'iPhone nuevos', descripcion: 'El iPhone 14 está en el local y lo podés ver antes de llevarlo.', etiquetas: ['Apple', 'iphone 14', 'celular', 'mar del plata'], seo: 'Apple iPhone 14 en MarplaCity, Mar del Plata.' };
+  await page.route('**/api/ia', route => {
+    const pedido = route.request().postDataJSON();
+    pedidos.push({ ia: pedido.model, sistema: pedido.system.includes('etiquetas'), pide: pedido.messages[0].content.includes('consig_consig-1') });
+    return route.fulfill({ json: { stop_reason: 'end_turn', content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: '```json\n' + JSON.stringify({ productos: [ficha, { id: 'otro-que-nadie-pidio', titulo: 'No va' }] }) + '\n```' }] } });
+  });
+  await ir(page, 'catalogo');
+  await expect(page.locator('#btn-cat-fotos-faltan')).toHaveText('📷 Buscar fotos que faltan (1)');
+  await page.locator('#btn-cat-fotos-faltan').click();
+  await expect(page.locator('#fotos-faltantes-modal')).toHaveClass(/open/);
+  await expect(page.locator('#ff-intro')).toContainText('1 producto de la tienda no tiene foto');
+  await page.locator('#btn-ff-buscar').click();
+
+  // La revisión: todo a la vista y nada guardado todavía.
+  await expect(page.locator('#ff-paso-3')).toBeVisible();
+  await expect(page.locator('.ff-prod')).toHaveCount(1);
+  await expect(page.locator('.ff-prod .cat-cand')).toHaveCount(4);
+  await expect(page.locator('.ff-prod .cat-cand.on')).toHaveCount(2);
+  await expect(page.locator('.ff-prod .cat-cand').nth(0)).toContainText('600×600 · fondo blanco');
+  await expect(page.locator('.ff-prod .cat-cands')).toContainText('otro fondo');
+  await expect(page.locator('.ff-prod .cat-cands')).toContainText('repetida');
+  // La ficha la escribió la IA: título, descripción y etiquetas, todo editable.
+  await expect(page.locator('#ff-ia')).toContainText('escritos por Claude');
+  await expect(page.locator('.ff-prod input[type=text]').first()).toHaveValue('Apple iPhone 14');
+  await expect(page.locator('.ff-prod textarea')).toHaveValue(/lo podés ver/);
+  await expect(page.locator('.ff-prod input.etiquetas')).toHaveValue('apple, iphone 14, celular, mar del plata');
+  await expect(page.locator('.ff-prod input.seo')).toHaveValue('Apple iPhone 14 en MarplaCity, Mar del Plata.');
+  expect(await page.evaluate(() => window.__datosPrueba.leer('catalogo/fotos'))).toBeUndefined();
+  expect(pedidos).toEqual([{ nombre: 'iPhone 14', gb: '', color: '', tipo: 'equipo' }, { ia: 'claude-opus-5-5', sistema: true, pide: true }]);
+  await page.screenshot({ path: '.runtime/fotos-revision.png' });
+
+  // La última edición a mano, y a cargar.
+  await page.locator('.ff-prod input[type=text]').first().fill('iPhone 14 impecable');
+  await page.locator('.ff-prod input[type=text]').first().dispatchEvent('change');
+  await page.locator('.ff-prod input.precio').fill('480');
+  await page.locator('.ff-prod input.precio').dispatchEvent('change');
+  await page.locator('#btn-ff-cargar').click();
+  await expect(page.locator('#ff-paso-4')).toBeVisible();
+  await expect(page.locator('#ff-final')).toContainText('2 fotos guardadas en 1 producto');
+  await expect(page.locator('#ff-final')).toContainText('La tienda quedó publicada');
+  expect(pedidos[2]).toEqual({ base: 'iphone-14', desde: 1, urls: 2 });
+
+  const cfg = await page.evaluate(() => window.__datosPrueba.leer('config/usuario-prueba'));
+  expect(cfg.catalogoMeta['consig_consig-1']).toEqual({ titulo: 'iPhone 14 impecable', keywords: 'apple, iphone 14, celular, mar del plata', seoDescripcion: 'Apple iPhone 14 en MarplaCity, Mar del Plata.' });
+  expect(cfg.catalogoAjustes['consig_consig-1'].precioUSD).toBe(480);
+  expect(cfg.catalogoNotas['consig_consig-1']).toMatch(/lo podés ver/);
+  const mapa = await page.evaluate(() => window.__datosPrueba.leer('catalogo/fotos'));
+  expect(mapa.mapa['iphone-14']).toEqual(['iphone-14.png', 'iphone-14-2.png']);
+  const publicado = await page.evaluate(() => window.__datosPrueba.leer('catalogo/publico'));
+  expect(publicado.productos).toHaveLength(1);
+  expect(publicado.productos[0]).toMatchObject({ id: 'consig_consig-1', titulo: 'iPhone 14 impecable', precioUSD: 480, keywords: 'apple, iphone 14, celular, mar del plata' });
+  expect(publicado.productos[0].fotos).toHaveLength(2);
+  await page.locator('#ff-paso-4 .btn-save').click();
+  await expect(page.locator('#btn-cat-fotos-faltan')).toHaveText('📷 Buscar fotos que faltan');
+  expect(errores).toEqual([]);
+});

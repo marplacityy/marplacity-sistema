@@ -1,4 +1,5 @@
 import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion } from '../../shared/catalogo.js';
+import { idDeItemLista, migrarIdsDeLista, gruposDuplicados, precioUnificado, ofertaMasBarata, REGLAS_PRECIO } from '../../shared/duplicados.js';
 import { on } from '../../shared/seguridad.js';
 import { configuracion } from '../core/config-publica.js';
 /** modulos/catalogo: lógica preservada de la aplicación original. */
@@ -7,8 +8,9 @@ import { esc, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { listarFotos, subirFoto } from '../core/fotos.js';
 import { FOTOS_BASE } from '../../shared/sitio.js';
-import { updateDoc, doc, setDoc } from 'firebase/firestore';
-import { kbUltimaLista, kbFecha } from './conocimiento.js';
+import { updateDoc, doc, setDoc, getDocFromServer, getDocsFromServer } from 'firebase/firestore';
+import { kbUltimaLista, kbFecha, PROVEEDORES_BASE } from './conocimiento.js';
+import { msDe } from './instagram.js';
 import { workerHeaders, textoDeIA } from './reportes.js';
 export function pintarBadgePedidos() {
   const n = contextoApp.pedidosItems.filter(contextoApp.pedidoAbierto).length;
@@ -30,6 +32,17 @@ export function renderPedidos() {
     });
   };
   const monto = p => p.pago === 'mp' ? contextoApp.fmtARS(p.montoARS || 0) : contextoApp.fmtUSD(p.montoUSD || 0);
+  // A quién pedírselo: la lista que hoy lo tiene más barato. Sale de las listas vigentes,
+  // así que acompaña los cambios de precio aunque el pedido sea de ayer.
+  const porId = new Map(catalogoCandidatos().filter(c => c._ofertas?.length).map(c => [c.id, c]));
+  const pedirA = (l, abierto) => {
+    const c = porId.get(l.id);
+    if (!c) return abierto && String(l.id || '').startsWith('lista_') ? '<div class="ped-prov sin">Ya no está en ninguna lista vigente</div>' : '';
+    const ofertas = [...c._ofertas].sort((a, b) => (a.precioUSD || Infinity) - (b.precioUSD || Infinity));
+    const barata = ofertaMasBarata(ofertas);
+    const otras = ofertas.filter(o => o !== barata).map(o => `${esc(o.proveedor)} ${o.precioUSD ? contextoApp.fmtUSD(o.precioUSD) : '—'}`);
+    return `<div class="ped-prov">📦 Pedíselo a <b>${esc(barata.proveedor)}</b> · ${barata.precioUSD ? contextoApp.fmtUSD(barata.precioUSD) : '—'} en su lista${otras.length ? ` <span class="otras">(${otras.join(' · ')})</span>` : ''}</div>`;
+  };
   document.getElementById('ped-body').innerHTML = lista.map(p => {
     const [txt, cls] = contextoApp.PED_ESTADOS[p.estado] || [p.estado, ''];
     const prod = p.producto || {},
@@ -41,7 +54,7 @@ export function renderPedidos() {
     return `<tr style="${contextoApp.pedidoAbierto(p) ? '' : 'opacity:.6;'}">
       <td style="font-family:'DM Mono',monospace;font-size:11.5px;">${esc(cuando(p.creado))}<div class="sub" style="font-size:10px;color:var(--text3);">${esc(p.id.slice(0, 8))}</div></td>
       <td>${esc(cli.nombre || '—')}<div class="sub" style="font-size:11px;">${wa ? `<a href="https://wa.me/${wa}?text=${msg}" target="_blank" rel="noopener">📱 ${esc(cli.whatsapp)}</a>` : ''}${cli.email ? ' · ' + esc(cli.email) : ''}</div></td>
-      <td>${lineas.map(l => `${l.cantidad > 1 ? `<strong>${esc(l.cantidad)} ×</strong> ` : ''}${esc(l.nombre || '')}<div class="sub" style="font-size:11px;color:var(--text3);">${esc([l.gb, l.color, l.tipo === 'pedido' ? 'a pedido' : ''].filter(Boolean).join(' · '))}</div>`).join('')}</td>
+      <td>${lineas.map(l => `${l.cantidad > 1 ? `<strong>${esc(l.cantidad)} ×</strong> ` : ''}${esc(l.nombre || '')}<div class="sub" style="font-size:11px;color:var(--text3);">${esc([l.gb, l.color, l.tipo === 'pedido' ? 'a pedido' : ''].filter(Boolean).join(' · '))}</div>${pedirA(l, contextoApp.pedidoAbierto(p))}`).join('')}</td>
       <td>${esc(contextoApp.PED_PAGOS[p.pago] || p.pago)}<div class="sub" style="font-family:'DM Mono',monospace;font-size:11.5px;">${monto(p)}</div></td>
       <td>${p.entrega === 'envio' ? 'Envío' : 'Retira'}${p.direccion ? `<div class="sub" style="font-size:11px;color:var(--text3);">${esc(p.direccion)}</div>` : ''}</td>
       <td><span class="badge ${cls}">${esc(txt)}</span></td>
@@ -94,9 +107,47 @@ export function renderCategoriasCatalogo() {
   }).join('');
 }
 /**
+ * Lo que ofrecen las listas vigentes, un renglón por oferta: qué producto es, de qué
+ * proveedor y a cuánto. Es la materia prima de las fuentes, de los duplicados y de "a
+ * quién se lo pido".
+ */
+export function ofertasDeListas() {
+  const ofertas = [];
+  for (const origen of Object.keys(contextoApp.KB_ORIGENES)) {
+    const lista = kbUltimaLista(origen);
+    for (const it of lista && Array.isArray(lista.items) ? lista.items : []) {
+      const p = contextoApp.pedidoPublico(it, lista);
+      if (!p.nombre) continue;
+      ofertas.push({
+        id: p.id, origen, proveedor: contextoApp.KB_ORIGENES[origen],
+        producto: p.nombre, gb: p.gb, color: p.color, condicion: it.condicion || '', precioUSD: p.precioUSD, _p: p,
+      });
+    }
+  }
+  return ofertas;
+}
+
+/**
+ * Los productos repetidos entre listas que todavía no se unificaron: los que nunca se
+ * tocaron y los unificados a los que después se les sumó otra lista.
+ */
+export function duplicadosPendientes() {
+  const unificados = contextoApp.cfg.catalogoUnificados || {};
+  const principalDe = new Map();
+  for (const [principal, g] of Object.entries(unificados)) for (const id of g?.ids || []) principalDe.set(id, principal);
+  return gruposDuplicados(ofertasDeListas()).filter(g => {
+    const principales = new Set(g.ids.map(id => principalDe.get(id) || ''));
+    return principales.size > 1 || principales.has('');
+  });
+}
+
+/** ¿El producto sale de esta fuente? Uno unificado sale de todas las listas que lo ofrecen. */
+export const esDeFuente = (p, fuente) => (p._fuentes || [p._origen]).includes(fuente);
+
+/**
  * Todo lo que califica: equipos en stock, artículos del inventario con cantidad, y los
- * ítems de la última lista de cada origen. Un mismo producto en dos listas entra una sola
- * vez, con el precio de la primera (Mar del Plata, CABA, proveedor, en ese orden).
+ * ítems de la última lista de cada proveedor. Un producto que está en varias listas entra
+ * una sola vez, con todas sus ofertas en `_ofertas` (campos de trabajo: no se publican).
  */
 export function catalogoCandidatos() {
   // A la tienda va solo lo que Juni mandó (cfg.catalogoIncluidos): elegir en Fuentes y
@@ -114,18 +165,31 @@ export function catalogoCandidatos() {
     ...contextoApp.accesorioPublico(p),
     _origen: 'Inventario'
   }))];
-  const vistos = new Set();
-  for (const origen of Object.keys(contextoApp.KB_ORIGENES)) {
-    const lista = kbUltimaLista(origen);
-    for (const it of lista && Array.isArray(lista.items) ? lista.items : []) {
-      const p = contextoApp.pedidoPublico(it, lista);
-      if (!p.nombre || vistos.has(p.id)) continue;
-      vistos.add(p.id);
-      items.push({
-        ...p,
-        _origen: 'Lista ' + contextoApp.KB_ORIGENES[origen]
-      });
-    }
+  // Las listas: un producto puede estar en varias (una oferta por proveedor). Mientras no
+  // se unifica vale el precio de la primera, como siempre; unificado ("Buscar
+  // duplicados"), el precio sale de la regla elegida y la fuente es la más barata.
+  const unificados = contextoApp.cfg.catalogoUnificados || {};
+  const principalDe = new Map();
+  for (const [principal, g] of Object.entries(unificados)) for (const id of g?.ids || []) principalDe.set(id, principal);
+  const porProducto = new Map();
+  for (const o of ofertasDeListas()) {
+    const id = principalDe.get(o.id) || o.id;
+    (porProducto.get(id) || porProducto.set(id, []).get(id)).push(o);
+  }
+  for (const [id, ofertas] of porProducto) {
+    const g = unificados[id];
+    const referente = g ? ofertaMasBarata(ofertas) : ofertas[0];
+    const base = g
+      ? { ...contextoApp.pedidoPublico({ producto: g.nombre, gb: g.gb, color: g.color, condicion: g.condicion }, { moneda: 'USD' }), id }
+      : referente._p;
+    items.push({
+      ...base,
+      precioUSD: g ? precioUnificado(ofertas.map(o => o.precioUSD), g.regla) : referente.precioUSD,
+      _origen: 'Lista ' + referente.proveedor,
+      _fuentes: [...new Set(ofertas.map(o => 'Lista ' + o.proveedor))],
+      _ofertas: ofertas.map(({ _p, ...o }) => o),
+      _unificado: !!g,
+    });
   }
   const ajustes = contextoApp.cfg.catalogoAjustes || {};
   const todas = contextoApp.todasLasCategorias();
@@ -185,6 +249,43 @@ function asegurarIncluidos() {
 }
 
 /**
+ * Una sola vez: pasa lo guardado por el identificador viejo de los productos de lista
+ * (que ignoraba la capacidad) al nuevo. Solo agrega claves; lo viejo queda donde estaba.
+ *
+ * Lee del SERVIDOR la configuración, los proveedores y las listas: lo que hay en pantalla
+ * puede venir del caché del navegador y estar viejo (Firestore no avisa cuando el caché
+ * queda confirmado), y pasar con listas viejas dejaría productos afuera para siempre. Sin
+ * conexión no pasa nada: se vuelve a intentar en el próximo render.
+ */
+let pasandoIds = false, proximoIntento = 0;
+const idsDeListaAlDia = () => !!contextoApp.cfg.catalogoIdsV2;
+function asegurarIdsDeLista() {
+  if (pasandoIds || idsDeListaAlDia() || !contextoApp.puedeAdministrarLocal || Date.now() < proximoIntento) return;
+  pasandoIds = true;
+  (async () => {
+    const [cfgSnap, conocSnap, listasSnap] = await Promise.all([
+      getDocFromServer(contextoApp.cfgDoc), getDocFromServer(contextoApp.conocDoc), getDocsFromServer(contextoApp.myQ(contextoApp.listasCol)),
+    ]);
+    if (!cfgSnap.exists()) return;
+    const cfg = cfgSnap.data();
+    if (cfg.catalogoIdsV2) { contextoApp.cfg.catalogoIdsV2 = true; return; }   // ya lo hizo otra pestaña
+    // Los renglones de la última lista de cada proveedor, en el orden en que se leen.
+    const guardados = conocSnap.exists() ? conocSnap.data().proveedores : null;
+    const proveedores = Array.isArray(guardados) && guardados.length ? guardados.filter(p => p && p.id) : PROVEEDORES_BASE;
+    const listas = listasSnap.docs.map(d => d.data()).sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '') || msDe(b.createdAt) - msDe(a.createdAt));
+    const items = proveedores.flatMap(p => { const l = listas.find(x => x.origen === String(p.id)); return l && Array.isArray(l.items) ? l.items : []; });
+    const paso = migrarIdsDeLista(cfg, items);
+    const cambios = { catalogoIdsV2: true };
+    if (paso) Object.assign(cambios, { catalogoIncluidos: paso.catalogoIncluidos, catalogoAjustes: paso.catalogoAjustes, catalogoNotas: paso.catalogoNotas, catalogoMeta: paso.catalogoMeta });
+    await setDoc(contextoApp.cfgDoc, contextoApp.withUser(cambios), { merge: true });
+    Object.assign(contextoApp.cfg, cambios);
+    if (paso?.separados) showToast(`Las listas ahora muestran cada capacidad por separado: ${paso.separados} producto${paso.separados === 1 ? '' : 's'} más. Revisá y publicá.`);
+  })()
+    .catch(e => { console.warn('ids de lista sin pasar:', e.message); proximoIntento = Date.now() + 15_000; })
+    .finally(() => { pasandoIds = false; if (idsDeListaAlDia() && contextoApp.currentPage === 'catalogo') renderCatalogo(); });
+}
+
+/**
  * El doc de fotos tiene que apuntar a donde viven las fotos ahora (Firebase Storage).
  * Si quedó con una base vieja (GitHub Pages, el VPS), se vuelve a guardar una vez: las
  * tiendas y el bot leen de ahí.
@@ -217,7 +318,7 @@ function catalogoFiltrados() {
   // En la pestaña "En la tienda" solo lo que la tienda muestra hoy; en "Fuentes", la fuente elegida.
   const fuente = contextoApp.catVista === 'tienda' ? '' : contextoApp.catFuente || '';
   const soloTienda = contextoApp.catVista === 'tienda';
-  return catalogoCandidatos().filter(p => (!fuente || p._origen === fuente) && (!soloTienda || EN_TIENDA.includes(estadoPublicacion(p))) && (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${p._origen}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft || ft === 'tienda' && estadoPublicacion(p) === 'tienda' || ft === 'porpublicar' && PENDIENTES.includes(estadoPublicacion(p)) || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
+  return catalogoCandidatos().filter(p => (!fuente || esDeFuente(p, fuente)) && (!soloTienda || EN_TIENDA.includes(estadoPublicacion(p))) && (!q || `${p.nombre} ${p.gb} ${p.color} ${p.estado} ${(p._fuentes || [p._origen]).join(' ')}`.toLowerCase().includes(q)) && (!fc || p.categoria === fc) && (!ft || ft === 'tienda' && estadoPublicacion(p) === 'tienda' || ft === 'porpublicar' && PENDIENTES.includes(estadoPublicacion(p)) || ft === 'inmediato' && p._sale && p._entrega === 'inmediato' || ft === 'pedido' && p._sale && p._entrega === 'pedido' || ft === 'sinprecio' && !p.precioUSD || ft === 'fuera' && p.precioUSD > 0 && !p._sale || ft === 'sinfoto' && p._sale && !p.fotos.length));
 }
 
 /** JSON con las claves ordenadas: Firestore devuelve los mapas ordenados y acá no. */
@@ -262,6 +363,19 @@ const estadoCatalogo = p => ESTADOS_PUB[estadoPublicacion(p)];
 const inicialCatalogo = p => (String(p.nombre).match(/\d+/) || [String(p.nombre).slice(0, 1)])[0].slice(0, 2);
 const subCatalogo = p => [p.gb, p.color, p.condicion === 'usado' ? 'usado' : '', p._entrega === 'pedido' ? 'a pedido' : ''].filter(Boolean).join(' · ');
 
+/**
+ * De dónde sale un producto. Si está en varias listas: unificado, la más barata (a esa se
+ * le pide) y cuántas más lo tienen; sin unificar, el aviso de que está repetido.
+ */
+function fuenteDe(p) {
+  const otras = (p._fuentes || []).filter(f => f !== p._origen).map(f => f.replace(/^Lista /, ''));
+  if (!otras.length) return { texto: p._origen, sub: '', detalle: '', repetido: false };
+  const detalle = (p._ofertas || []).map(o => `${o.proveedor}: ${contextoApp.fmtUSD(o.precioUSD)}`).join(' · ');
+  return p._unificado
+    ? { texto: p._origen, sub: `la más barata · también ${otras.join(', ')}`, detalle, repetido: false }
+    : { texto: p._origen, sub: `repetido en ${otras.join(', ')}`, detalle, repetido: true };
+}
+
 /** La tarjeta de un producto en la grilla: foto, nombre, de dónde sale, precio y estado. */
 function tarjetaCatalogo(p) {
   const foto = p.fotos[0];
@@ -272,7 +386,7 @@ function tarjetaCatalogo(p) {
     <div class="cuerpo">
       <div class="nombre">${esc(p.nombre)}</div>
       <div class="sub">${esc(subCatalogo(p) || ' ')}</div>
-      <div class="sub origen">${esc(p._origen)}</div>
+      <div class="sub origen" title="${esc(fuenteDe(p).detalle)}">${esc(p._origen)}${(p._fuentes || []).length > 1 ? ` <span class="${p._unificado ? 'mas' : 'falta'}">+${p._fuentes.length - 1}</span>` : ''}</div>
       <div class="pie"><span class="precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</span><span class="estado ${cls}">${txt}</span></div>
     </div>
   </div>`;
@@ -286,7 +400,7 @@ function filaCatalogo(p) {
     <input type="checkbox" class="sel-box" ${contextoApp.catSeleccion.has(p.id) ? 'checked' : ''} data-stop ${on('change', 'seleccionarCatalogo', p.id, '$checked')}>
     <div class="foto">${foto ? `<img src="${esc(foto)}" loading="lazy" alt="">` : '—'}</div>
     <div class="nombre">${esc(p.nombre)}<div class="sub">${esc(subCatalogo(p))}</div></div>
-    <div class="col">${esc(p._origen)}</div>
+    <div class="col fuente" title="${esc(fuenteDe(p).detalle)}">${esc(fuenteDe(p).texto)}${fuenteDe(p).sub ? `<div class="sub${fuenteDe(p).repetido ? ' rep' : ''}">${esc(fuenteDe(p).sub)}</div>` : ''}</div>
     <div class="col precio">${p.precioUSD ? contextoApp.fmtUSD(p.precioUSD) : '—'}</div>
     <div class="col">${p.fotos.length ? `📷 ${p.fotos.length}` : '<span class="falta">sin foto</span>'}</div>
     <span class="estado ${cls}">${txt}</span>
@@ -296,6 +410,7 @@ function filaCatalogo(p) {
 /** La descripción que escribe Juni para un producto. Vive en la config, por id. */
 export function renderCatalogo() {
   document.getElementById('cat-link').value = contextoApp.LINK_CATALOGO;
+  asegurarIdsDeLista();
   asegurarIncluidos();
   asegurarBaseFotos();
   const items = catalogoCandidatos();
@@ -357,7 +472,7 @@ export function renderCatalogo() {
     });
     const FUENTES = [['Propio', 'Stock equipos', 'equipos con IMEI'], ['Consignación', 'Consignación', 'equipos de proveedores'], ['Inventario', 'Inventario', 'accesorios y repuestos'], ...listas];
     fuentes.innerHTML = FUENTES.map(([origen, titulo, sub]) => {
-      const lista = items.filter(p => p._origen === origen);
+      const lista = items.filter(p => esDeFuente(p, origen));
       const sinPrecio = lista.filter(p => !p.precioUSD).length;
       return `<div class="metric cat-metric${contextoApp.catFuente === origen ? ' on' : ''}" ${on('click', 'filtrarFuente', origen)}>
         <div class="m-label">${esc(titulo)}</div>
@@ -371,6 +486,13 @@ export function renderCatalogo() {
       </div>`;
     resumen.textContent = (contextoApp.catFuente ? `${visibles.length} de ${FUENTES.find(f => f[0] === contextoApp.catFuente)?.[1] || contextoApp.catFuente}` : `${visibles.length} producto${visibles.length === 1 ? '' : 's'} de todas las fuentes`) + (ft ? ' con este filtro' : '') + ' · marcá los que quieras y tocá "Mandar a la tienda"';
   }
+  // Las dos tareas de la barra: cuántos repetidos quedan por unificar y cuántos sin foto.
+  const repetidos = duplicadosPendientes().filter(g => g.tipo === 'seguro').length;
+  const btnDup = document.getElementById('btn-cat-duplicados');
+  if (btnDup) btnDup.textContent = repetidos ? `🔎 Buscar duplicados (${repetidos})` : '🔎 Buscar duplicados';
+  const sinFotos = salen.filter(p => !p.fotos.length).length;
+  const btnFotos = document.getElementById('btn-cat-fotos-faltan');
+  if (btnFotos) btnFotos.textContent = sinFotos ? `📷 Buscar fotos que faltan (${sinFotos})` : '📷 Buscar fotos que faltan';
   document.getElementById('cat-sel-todos-btn').textContent = contextoApp.catSeleccion.size && contextoApp.catSeleccion.size >= visibles.length ? 'Deseleccionar' : 'Seleccionar todo';
   document.getElementById('cat-bulk').style.display = contextoApp.catSeleccion.size ? 'flex' : 'none';
   document.getElementById('cat-bulk-n').textContent = `${contextoApp.catSeleccion.size} seleccionado${contextoApp.catSeleccion.size === 1 ? '' : 's'}`;
@@ -384,7 +506,10 @@ export function renderCatalogo() {
   const porCat = new Map();
   for (const p of visibles) (porCat.get(p.categoria) || porCat.set(p.categoria, []).get(p.categoria)).push(p);
   const orden = ordenCategorias();
-  grid.innerHTML = [...porCat.keys()].sort((a, b) => orden.indexOf(a) - orden.indexOf(b)).map(c => {
+  const cabecera = modo === 'lista' && visibles.length
+    ? '<div class="cat-fila cat-fila-cab"><span></span><span></span><span>Producto</span><span class="col">Fuente</span><span class="col precio">Precio</span><span class="col">Fotos</span><span class="col-estado">Estado</span></div>'
+    : '';
+  grid.innerHTML = cabecera + [...porCat.keys()].sort((a, b) => orden.indexOf(a) - orden.indexOf(b)).map(c => {
     const lista = porCat.get(c);
     const sinFoto = lista.filter(p => p._sale && !p.fotos.length).length;
     return `<div class="cat-grupo-cab"><span class="rubro">${esc(rubroDe(c))}</span><b>${esc(c)}</b><span class="cnt">${lista.length}</span>${sinFoto ? `<span class="falta">${sinFoto} sin foto</span>` : ''}</div>` +
@@ -531,6 +656,8 @@ export function renderFichaCatalogo() {
     : `<div style="font-size:11.5px;color:var(--text3);margin-top:8px;">Precio y datos se editan en ${p.id.startsWith('consig_') ? 'Consignación' : 'la lista de precios (Base de conocimiento)'}.</div>`}
     </div>
 
+    ${proveedoresHTML(p)}
+
     <details class="cat-sec">
       <summary><div class="cat-sec-t">SEO: cómo sale en Google</div></summary>
       <div class="field"><label>Descripción para buscadores <span style="color:var(--text3);font-weight:400;">(hasta 160 letras)</span></label>
@@ -558,6 +685,35 @@ export function renderFichaCatalogo() {
     const archivos = [...(e.dataTransfer?.files || [])].filter(f => /^image\//.test(f.type));
     if (archivos.length) window.subirFotosDe(p.id, archivos);
   });
+}
+
+/**
+ * Qué proveedores tienen el producto y a cuánto: a quién pedírselo cuando se venda. Solo
+ * para productos de lista. Nada de esto se publica.
+ */
+function proveedoresHTML(p) {
+  const ofertas = [...(p._ofertas || [])].sort((a, b) => (a.precioUSD || Infinity) - (b.precioUSD || Infinity));
+  if (!ofertas.length) return '';
+  const barata = ofertaMasBarata(ofertas);
+  const regla = (contextoApp.cfg.catalogoUnificados || {})[p.id]?.regla || 'promedio';
+  const varias = ofertas.length > 1;
+  return `<div class="cat-sec">
+      <div class="cat-sec-t">Proveedores <span class="n">· ${varias ? `está en ${ofertas.length} listas · no se publica` : 'a quién se lo pedís · no se publica'}</span></div>
+      <div class="cat-provs">${ofertas.map(o => `
+        <div class="cat-prov${o === barata && varias ? ' mejor' : ''}">
+          <b>${esc(o.proveedor)}</b>
+          <span class="como">${esc([o.producto, o.gb, o.color].filter(Boolean).join(' · '))}</span>
+          <span class="precio">${o.precioUSD ? contextoApp.fmtUSD(o.precioUSD) : '—'}</span>
+          ${o === barata && varias ? '<span class="cat-pill on">el más barato: pedíselo a este</span>' : ''}
+        </div>`).join('')}</div>
+      ${!varias ? '' : p._unificado ? `
+      <div class="cat-prov-pie">
+        <span>Unificado. Precio en la tienda:</span>
+        <select ${on('change', 'reglaUnificado', p.id, '$value')}>${Object.entries(REGLAS_PRECIO).map(([k, t]) => `<option value="${k}"${k === regla ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
+        <button class="btn-secondary" style="width:auto;padding:6px 10px;font-size:12.5px;" ${on('click', 'separarUnificado', p.id)}>Separar</button>
+      </div>` : `
+      <div class="cat-prov-pie"><span>Está repetido y vale el precio de ${esc(p._origen)}. Unificalo con <b>Buscar duplicados</b> para que el precio salga de todas las listas.</span></div>`}
+    </div>`;
 }
 
 /** Las fotos encontradas en internet para elegir: miniatura, tamaño, fuente y una casilla. */
@@ -877,7 +1033,7 @@ export function inicializarCatalogo() {
    * que compartió el link ayer tiene que seguir cayendo en el mismo producto hoy.
    */
   contextoApp.pedidoPublico = (it, lista) => ({
-    id: 'lista_' + slugFoto([it.producto, it.gb, it.color, it.condicion].filter(Boolean).join(' ')),
+    id: idDeItemLista(it),
     tipo: 'pedido',
     nombre: String(it.producto || '').trim(),
     gb: String(it.gb || '').trim(),
@@ -1108,6 +1264,37 @@ export function inicializarCatalogo() {
     showToast(propio ? `Precio en la tienda: ${contextoApp.fmtUSD(propio)} ✓ — publicá para que se vea` : 'Vuelve el precio de la fuente');
   };
   window.abrirTiendaPublica = () => window.open(contextoApp.LINK_CATALOGO, '_blank');
+
+  /** La regla de precio de un producto unificado: promedio entre extremos, el más barato o el más caro. */
+  window.reglaUnificado = async function (id, regla) {
+    const g = (contextoApp.cfg.catalogoUnificados || {})[id];
+    if (!g || !REGLAS_PRECIO[regla] || !requiereDuenoDelLocal()) return;
+    const unificados = { ...contextoApp.cfg.catalogoUnificados, [id]: { ...g, regla } };
+    contextoApp.cfg.catalogoUnificados = unificados;
+    try {
+      await updateDoc(contextoApp.cfgDoc, { catalogoUnificados: unificados });
+      showToast('Precio actualizado ✓ — publicá para que se vea en la tienda');
+    } catch (e) { showToast('No se guardó: ' + e.message, true); }
+    renderCatalogo();
+    renderFichaCatalogo();
+  };
+
+  /** Deshacer una unificación: cada lista vuelve a mostrar su producto. En la tienda queda el que estaba. */
+  window.separarUnificado = async function (id) {
+    const g = (contextoApp.cfg.catalogoUnificados || {})[id];
+    if (!g || !requiereDuenoDelLocal()) return;
+    if (!confirm('¿Separar este producto?\n\nCada lista vuelve a mostrar el suyo, con su precio. En la tienda queda uno solo, el de la primera lista; los demás quedan en Fuentes sin publicar.')) return;
+    const unificados = { ...contextoApp.cfg.catalogoUnificados };
+    delete unificados[id];
+    contextoApp.cfg.catalogoUnificados = unificados;
+    try {
+      // updateDoc reemplaza el mapa entero: con setDoc y merge la clave borrada volvería.
+      await updateDoc(contextoApp.cfgDoc, { catalogoUnificados: unificados });
+      showToast('Separado ✓');
+    } catch (e) { showToast('No se guardó: ' + e.message, true); }
+    renderCatalogo();
+    if (catalogoCandidatos().some(p => p.id === id)) renderFichaCatalogo(); else window.cerrarFichaCatalogo();
+  };
 
   /** La clave de foto de un producto (modelo + color), la misma que usa la página. */
   contextoApp.claveFotoDe = p => slugFoto(p.nombre) + (p.color ? '-' + slugFoto(p.color) : '');
@@ -1382,6 +1569,8 @@ export function inicializarCatalogo() {
   }
 
   contextoApp.describirConIA = describirConIA;   // la usa también "Importar nueva lista"
+  /** La descripción base de un producto, sin IA: la usa "Buscar fotos que faltan" cuando la IA no contesta. */
+  contextoApp.borradorDe = p => borradorDescripcion(datosParaDescripcion(p));
 
   /** Escribir la descripción de un producto desde su ficha y guardarla. */
   window.generarDescripcionCatalogo = async function (id) {
@@ -1673,6 +1862,10 @@ Devolvé SOLO un JSON array, sin texto ni backticks, un objeto por archivo:
   };
   window.publicarCatalogo = async function () {
     if (!requiereDuenoDelLocal()) return;
+    if (!idsDeListaAlDia() && ofertasDeListas().length) {
+      showToast('Todavía no pude confirmar las listas con el servidor (¿sin conexión?): probá de nuevo en unos segundos', true);
+      return;
+    }
     const salen = catalogoCandidatos().filter(p => p._sale).map(productoPublicado);
     if (!salen.length && !confirm('No hay ningún equipo para publicar.\n\nLa página va a quedar vacía. ¿Seguro?')) return;
     const btn = document.getElementById('btn-cat-publicar');

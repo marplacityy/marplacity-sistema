@@ -18,6 +18,8 @@
  *   POST /fotos          busca en Amazon y sube a Storage las imágenes de un producto (solo el dueño)
  *   POST /fotos/buscar   candidatos de foto para elegir a mano, sin bajar nada (solo el dueño)
  *   POST /fotos/traer    baja las URLs elegidas o pegadas y las sube a Storage (solo el dueño)
+ *   POST /ia/mejorar     título, categoría, descripción y etiquetas SEO de una tanda de productos (solo el dueño)
+ *   POST /ia/texto       un texto de la IA que esté cargada, para lo que el sistema necesite (solo el dueño)
  *
  * Variables (Settings → Variables del panel de Cloudflare, o `wrangler secret put`):
  *   FIREBASE_PROJECT   (Text)    mis-gastos-21e7b
@@ -30,6 +32,7 @@
  *   STRIPE_SECRET_KEY  (Secret)  clave secreta de Stripe (sk_test_... primero, sk_live_... después)
  *   STRIPE_WEBHOOK_SECRET (Secret) el "signing secret" del endpoint de webhook en Stripe (whsec_...)
  *   SERPAPI_KEY, FOTOS_BUCKET  ver fotos.js
+ *   DEEPSEEK_KEY, OPENAI_KEY, GEMINI_KEY, ANTHROPIC_KEY, IA_PROVEEDOR  ver ia.js (alcanza con una clave)
  *   CATALOGO_URL       (Text)    a dónde vuelve el cliente después de pagar (si falta, TIENDA_PUBLICA)
  *
  * Los precios NUNCA vienen de la página: se leen de `catalogo/publico`, que es lo que
@@ -38,6 +41,7 @@
 
 import { leerDoc, escribirDoc } from '../facturador/firestore.js';
 import { fotosParaProducto, candidatosDeFotos, traerFotos, urlPublicaSegura } from './fotos.js';
+import { mejorarProductos, textoConIA, proveedoresCargados, PROVEEDORES_IA } from './ia.js';
 import { TIENDA_PUBLICA } from '../../../src/shared/sitio.js';
 import { cantidadMaxima, MAX_CANTIDAD_PEDIDO } from '../../../src/shared/catalogo.js';
 
@@ -66,6 +70,8 @@ export default {
           SERPAPI_KEY: !!env.SERPAPI_KEY, FOTOS_BUCKET: !!env.FOTOS_BUCKET,
           CATALOGO_URL: !!env.CATALOGO_URL,
         },
+        // Qué IA hay cargada, en el orden en que se prueban (solo los nombres).
+        ia: proveedoresCargados(env),
       });
     }
 
@@ -80,6 +86,8 @@ export default {
       if (request.method === 'POST' && url.pathname === '/fotos') return await buscarFotos(request, env);
       if (request.method === 'POST' && url.pathname === '/fotos/buscar') return await buscarCandidatos(request, env);
       if (request.method === 'POST' && url.pathname === '/fotos/traer') return await traerElegidas(request, env);
+      if (request.method === 'POST' && url.pathname === '/ia/mejorar') return await iaMejorar(request, env);
+      if (request.method === 'POST' && url.pathname === '/ia/texto') return await iaTexto(request, env);
     } catch (e) {
       console.log('error en tienda', url.pathname, e.name);
       return json({ error: 'No se pudo completar la operación de la tienda.' }, 500);
@@ -314,6 +322,49 @@ async function buscarCandidatos(request, env) {
   } catch (e) {
     console.log('candidatos error', nombre, e.message);
     return json({ error: e.message }, 502);
+  }
+}
+
+/** Lo común de los pedidos a la IA: solo el dueño, y el cuerpo en JSON. */
+async function pedidoDelDueno(request, env) {
+  const uid = await uidDelToken(request.headers.get('X-Firebase-Token'), env);
+  if (!uid || uid !== env.OWNER_UID) return { respuesta: json({ error: 'no autorizado' }, 401) };
+  try { return { body: await request.json() }; } catch { return { respuesta: json({ error: 'json inválido' }, 400) }; }
+}
+
+/** Un error de la IA, con qué proveedor falló y por qué: 503 si no hay ninguna clave cargada. */
+const errorDeIA = e => json({ error: e.message, intentos: e.intentos || [], sinIA: !!e.sinIA }, e.sinIA ? 503 : 502);
+
+/**
+ * La ficha de una tanda de productos: título, categoría, descripción y etiquetas SEO,
+ * con la IA que esté cargada. No guarda nada: el sistema lo muestra para revisar.
+ */
+async function iaMejorar(request, env) {
+  const { body, respuesta } = await pedidoDelDueno(request, env);
+  if (respuesta) return respuesta;
+  if (!Array.isArray(body?.productos) || !body.productos.length) return json({ error: 'faltan los productos' }, 400);
+  try {
+    const r = await mejorarProductos(env, { productos: body.productos, categorias: body.categorias });
+    console.log('ia mejorar', r.proveedor, '->', r.productos.length, 'de', body.productos.length);
+    return json({ ...r, nombre: PROVEEDORES_IA[r.proveedor]?.nombre || '' });
+  } catch (e) {
+    console.log('ia mejorar error', e.message);
+    return errorDeIA(e);
+  }
+}
+
+/** Un texto de la IA que esté cargada: `{ sistema, mensaje, json, maxTokens }` → `{ texto, proveedor }`. */
+async function iaTexto(request, env) {
+  const { body, respuesta } = await pedidoDelDueno(request, env);
+  if (respuesta) return respuesta;
+  const mensaje = String(body?.mensaje || '').slice(0, 60_000);
+  if (!mensaje.trim()) return json({ error: 'falta el mensaje' }, 400);
+  try {
+    const r = await textoConIA(env, { sistema: String(body.sistema || '').slice(0, 20_000), mensaje, json: !!body.json, maxTokens: Math.min(Math.max(Number(body.maxTokens) || 2000, 100), 8000) });
+    return json({ ...r, nombre: PROVEEDORES_IA[r.proveedor].nombre });
+  } catch (e) {
+    console.log('ia texto error', e.message);
+    return errorDeIA(e);
   }
 }
 

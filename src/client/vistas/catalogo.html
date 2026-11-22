@@ -24,6 +24,11 @@
       <div id="cat-vista-productos">
         <!-- De dónde salen los productos: Stock, Consignación, Inventario y las listas de precios. Tocar una fuente muestra lo suyo. -->
         <div id="cat-fuentes" class="metrics" style="margin-bottom:12px;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));"></div>
+        <!-- Las dos tareas sobre todo el catálogo: juntar lo repetido entre listas y completar las fotos. -->
+        <div class="cat-tareas">
+          <button class="btn-secondary" id="btn-cat-duplicados" data-click="abrirDuplicados" title="El mismo producto en varias listas: queda uno solo, al precio que elijas, y se anota qué lista lo tiene más barato">🔎 Buscar duplicados</button>
+          <button class="btn-secondary" id="btn-cat-fotos-faltan" data-click="abrirFotosFaltantes" title="Busca en Amazon las fotos de los productos de la tienda que no tienen, y te las muestra para revisar antes de cargarlas">📷 Buscar fotos que faltan</button>
+        </div>
         <div class="cat-filtros">
           <input type="search" id="cat-q" placeholder="Buscar producto…" data-input="filtrarCatalogo">
           <select id="cat-f-cat" data-change="filtrarCatalogo"></select>

@@ -47,6 +47,8 @@ function seleccion(ref) {
 const snapshotQuery = ref => { const lista = seleccion(ref); return { docs: lista, size: lista.length, empty: !lista.length, forEach: fn => lista.forEach(fn), docChanges: () => lista.map(d => ({ type: 'added', doc: d })) }; };
 export const getDoc = async ref => snapshotDoc(ref.path);
 export const getDocs = async ref => snapshotQuery(ref);
+export const getDocFromServer = getDoc;
+export const getDocsFromServer = getDocs;
 export function onSnapshot(ref, callback) {
   const entrada = { ref, callback, previos: new Set() };
   suscripciones.add(entrada);

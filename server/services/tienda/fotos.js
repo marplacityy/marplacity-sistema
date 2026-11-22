@@ -1,6 +1,10 @@
 /**
- * Fotos de productos desde Amazon, vía SerpApi.
+ * Fotos de productos desde Amazon.
  * ------------------------------------------------
+ * Busca primero con el script de Ecommodo (fotos-ecommodo.js): DuckDuckGo Imágenes y la
+ * página de Amazon, sin claves ni cupo de nadie. SerpApi queda de respaldo, solo para
+ * cuando el script no trae nada (y si hay clave).
+ *
  * Para un producto sin foto, busca en Amazon "nombre capacidad color", se queda con la
  * imagen principal de los primeros resultados que se parezcan (fondo blanco, de
  * fabricante o vendedor oficial, que es lo que se ve en los listados), la baja y la
@@ -19,7 +23,7 @@
  *
  * Variables:
  *   SERPAPI_KEY    (Secret)  clave de serpapi.com (250 búsquedas gratis por mes). Opcional:
- *                            sin ella, o si no trae nada, busca como Ecommodo (fotos-ecommodo.js)
+ *                            es el respaldo del script de Ecommodo, no el buscador principal
  *   FOTOS_BUCKET   (Text)    el bucket de Storage; si falta, el de src/shared/sitio.js
  */
 
@@ -167,20 +171,72 @@ export function candidatosDeGoogle(resultados, { nombre, color, esAccesorio = fa
   return out.sort((a, b) => (b.color - a.color) || (b.ancho * b.alto - a.ancho * a.alto));
 }
 
+// Lo que cambia el producto si aparece en el título y no en lo que se busca: "iPhone 16"
+// no es "iPhone 16 Pro Max" ni "iPhone 16e".
+const VARIANTES = ['pro', 'max', 'plus', 'ultra', 'mini', 'air', 'lite', 'fe', 'se', 'neo', 'slim'];
+
 /**
- * Todos los candidatos para elegir a mano: Amazon (la original de cada resultado que
- * coincide) y Google Imágenes (grandes). Sin bajar nada: la elección es del dueño.
+ * Las candidatas para revisar a mano, a partir de los resultados de una búsqueda
+ * ({title, thumbnail}). Exportado para el test.
+ *
+ * Es más permisivo que `elegirImagenes` porque nada se guarda sin que el dueño lo vea: el
+ * color no se exige (los títulos de DuckDuckGo vienen cortados), solo se anota si
+ * aparece. Pero compara palabras enteras, así "16" no coincide con "16e", y descarta lo
+ * que es de otra variante, los accesorios y los banners de publicidad de Amazon (solo
+ * valen las fotos de producto, las de `/images/I/`).
+ */
+export function candidatasDeResultados(resultados, { nombre, color, esAccesorio = false, max = 12 } = {}) {
+  const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  // "3rd", "3nd" (así lo escribe Amazon a veces) son el 3.
+  const palabrasDe = s => norm(s).split(/[^a-z0-9]+/).filter(Boolean).map(w => w.replace(/^(\d+)(st|nd|rd|th)$/, '$1'));
+  const pedidas = palabrasDe(nombreParaAmazon(nombre)).filter(w => w !== 'apple' && !/^\d+(gb|tb|mm)$/.test(w));
+  const colores = palabrasDe(nombreParaAmazon(color));
+  const suelto = esAccesorio || /watch|cable|charger|cargador|parlante|speaker/i.test(nombre);
+  const minimo = Math.max(1, suelto ? Math.ceil(pedidas.length * 0.6) : pedidas.length);
+  // Un accesorio PARA el producto ("Case for iPad", "compatible with"), no un producto que
+  // trae su estuche: los AirPods se titulan "with MagSafe Charging Case".
+  const ACCESORIO = /\b(case|cover|funda|shell|skin|sleeve|protector|holder|mount|stand|strap|band|cable|charger|cargador|adapter|keyboard)s?\s+(for|para|compatible)\b|\bcompatible (with|con)\b|\bscreen protector\b|\btempered glass\b/;
+  const vistas = new Set(), out = [];
+  for (const r of Array.isArray(resultados) ? resultados : []) {
+    const titulo = norm(r.title);
+    const enTitulo = new Set(palabrasDe(r.title));
+    if (pedidas.filter(w => enTitulo.has(w)).length < minimo) continue;
+    if (!suelto && VARIANTES.some(v => enTitulo.has(v) && !pedidas.includes(v))) continue;
+    // "16e", "s25fe": el número pedido seguido de letras es otro modelo.
+    if (!suelto && pedidas.some(w => /^[a-z]?\d+$/.test(w) && [...enTitulo].some(t => t !== w && new RegExp(`^${w}[a-z]{1,2}$`).test(t)))) continue;
+    if (!esAccesorio && ACCESORIO.test(titulo)) continue;
+    const img = String(r.thumbnail || r.image || '');
+    if (!urlImagenPermitida(img) || !/\/images\/I\//.test(img)) continue;
+    // Sin el sufijo de tamaño (._AC_SX679_.) Amazon entrega la original.
+    const url = img.replace(/\._[^./]*_\./, '.');
+    if (vistas.has(url)) continue;
+    vistas.add(url);
+    out.push({ url, thumb: url.replace(/\.(jpg|jpeg|png|webp)$/i, '._AC_UL320_.$1'), ancho: 0, alto: 0, fuente: 'Amazon', titulo: String(r.title || '').slice(0, 120), color: colores.length > 0 && colores.every(c => enTitulo.has(c)) });
+  }
+  // Primero las que nombran el color pedido; dentro de cada grupo, el orden de la búsqueda.
+  return out.sort((a, b) => b.color - a.color).slice(0, max);
+}
+
+/**
+ * Las candidatas para elegir a mano, sin bajar nada: la elección es del dueño. Primero el
+ * script de Ecommodo; SerpApi solo si no trajo ninguna que sirva. `motor` dice quién
+ * contestó.
  */
 export async function candidatosDeFotos(env, { nombre, gb, color, esAccesorio }) {
   const q = [nombreParaAmazon(nombre), gb, nombreParaAmazon(color)].filter(Boolean).join(' ');
+  const opciones = { nombre, color, esAccesorio };
+  const propio = await buscarComoEcommodo(q);
+  let candidatos = candidatasDeResultados(propio.resultados, opciones), motor = 'ecommodo';
+  if (!candidatos.length && env.SERPAPI_KEY) {
+    const pagos = await buscarEnSerpApi(env, q).catch(e => { console.log('serpapi', e.message); return []; });
+    candidatos = candidatasDeResultados(pagos, opciones);
+    motor = 'serpapi';
+  }
+  if (!candidatos.length) console.log('fotos sin candidatas', q, JSON.stringify(propio.fuentes));
   // Google Imágenes trae mucha basura para esto (lo vio Juni el 12/10/2026): queda apagado
   // salvo que FOTOS_GOOGLE sea "si". Lo manual de verdad es pegar el link de la foto.
-  const [amazon, google] = await Promise.all([
-    buscarEnAmazon(env, q).catch(e => { console.log('amazon', e.message); return []; }),
-    env.FOTOS_GOOGLE === 'si' ? buscarEnGoogleImagenes(env, q).catch(e => { console.log('google imágenes', e.message); return []; }) : Promise.resolve([]),
-  ]);
-  const deAmazon = elegirImagenes(amazon, { nombre, color, esAccesorio, max: 6 }).map(url => ({ url, thumb: url.replace(/\.jpg$/, '._AC_UL320_.jpg'), ancho: 0, alto: 0, fuente: 'Amazon', titulo: '', color: true }));
-  return { consulta: q, candidatos: [...candidatosDeGoogle(google, { nombre, color, esAccesorio }), ...deAmazon] };
+  const google = env.FOTOS_GOOGLE === 'si' ? await buscarEnGoogleImagenes(env, q).catch(e => { console.log('google imágenes', e.message); return []; }) : [];
+  return { consulta: q, motor: candidatos.length ? motor : '', candidatos: [...candidatos, ...candidatosDeGoogle(google, opciones)] };
 }
 
 /**
@@ -201,22 +257,25 @@ export async function traerFotos(env, { base, desde, urls }, token) {
   return { subidos, fallidas };
 }
 
+/** Los resultados de Amazon vía SerpApi. Gasta una consulta del cupo. */
+async function buscarEnSerpApi(env, q) {
+  const u = `${SERP}?engine=amazon&amazon_domain=amazon.com&k=${encodeURIComponent(q)}&api_key=${env.SERPAPI_KEY}`;
+  const r = await fetch(u);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(`SerpApi: ${d.error || r.status}`);
+  return d.organic_results || [];
+}
+
+/**
+ * Los resultados de una búsqueda: primero el script de Ecommodo, que no usa ninguna
+ * clave; si no trae nada, SerpApi (cuando hay clave).
+ */
 export async function buscarEnAmazon(env, q) {
-  let falla = '';
-  if (env.SERPAPI_KEY) {
-    try {
-      const u = `${SERP}?engine=amazon&amazon_domain=amazon.com&k=${encodeURIComponent(q)}&api_key=${env.SERPAPI_KEY}`;
-      const r = await fetch(u);
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok || d.error) throw new Error(`SerpApi: ${d.error || r.status}`);
-      if (d.organic_results?.length) return d.organic_results;
-    } catch (e) { falla = e.message; }
-  }
-  // Sin clave, sin cupo o sin resultados: la búsqueda de Ecommodo, que no usa ninguna.
   const { resultados, fuentes } = await buscarComoEcommodo(q);
-  if (!resultados.length) console.log('fotos sin resultados', q, falla, JSON.stringify(fuentes));
-  if (!resultados.length && falla && Object.values(fuentes).every(v => typeof v === 'string')) throw new Error(falla);
-  return resultados;
+  if (resultados.length) return resultados;
+  console.log('el script de fotos no trajo nada', q, JSON.stringify(fuentes));
+  if (!env.SERPAPI_KEY) return [];
+  return buscarEnSerpApi(env, q);
 }
 
 /** Baja una imagen. Devuelve {bytes, ext} o null si no es una imagen. `externa`: una URL que eligió el dueño, de cualquier host público. */

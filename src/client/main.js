@@ -31,6 +31,8 @@ import { inicializarListas } from './modulos/listas.js';
 import { inicializarArca } from './modulos/arca.js';
 import { inicializarCatalogo } from './modulos/catalogo.js';
 import { inicializarImportarLista } from './modulos/importar-lista.js';
+import { inicializarDuplicados } from './modulos/duplicados.js';
+import { inicializarFotosFaltantes } from './modulos/fotos-faltantes.js';
 import { inicializarAsistente } from './modulos/asistente.js';
 import { inicializarFacturador } from './modulos/facturador.js';
 import { inicializarSesion } from './core/sesion.js';
@@ -70,6 +72,8 @@ export async function iniciarSistema() {
   inicializarArca();
   inicializarCatalogo();
   inicializarImportarLista();
+  inicializarDuplicados();
+  inicializarFotosFaltantes();
   inicializarAsistente();
   inicializarFacturador();
   inicializarSesion();

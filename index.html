@@ -102,6 +102,90 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="duplicados-modal">
+  <div class="modal modal-ancho">
+    <div class="modal-header">
+      <h2>Duplicados entre listas</h2>
+      <button class="modal-close" data-click="cerrarDuplicados">×</button>
+    </div>
+
+    <div id="dup-revisar">
+      <p class="imp-ayuda" id="dup-ayuda"></p>
+      <div class="dup-barra">
+        <label for="dup-regla">Precio que queda en la tienda</label>
+        <select id="dup-regla" data-change="dupRegla" data-args='["$value"]'></select>
+        <label id="dup-regla-todos-fila" class="dup-todos"><input type="checkbox" id="dup-regla-todos"> aplicarlo también a los <span id="dup-regla-todos-n"></span> ya unificados</label>
+      </div>
+      <div id="dup-grupos" class="dup-grupos"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-click="cerrarDuplicados">Cancelar</button>
+        <button class="btn-save" id="btn-dup-unificar" data-click="unificarDuplicados">Unificar</button>
+      </div>
+    </div>
+
+    <div id="dup-listo" style="display:none;">
+      <div class="imp-avance"><div class="imp-av ok">✓ <span id="dup-resultado"></span></div>
+        <div class="imp-av espera">· Falta publicar: la tienda sigue mostrando lo de antes hasta que toques Publicar.</div></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-click="cerrarDuplicados">Ver los productos</button>
+        <button class="btn-save" data-click="dupPublicar">🌐 Publicar ahora</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="fotos-faltantes-modal">
+  <div class="modal modal-ancho">
+    <div class="modal-header">
+      <h2>Fotos que faltan</h2>
+      <button class="modal-close" data-click="cerrarFotosFaltantes">×</button>
+    </div>
+
+    <div id="ff-paso-1">
+      <p class="imp-ayuda" id="ff-intro"></p>
+      <div class="imp-opciones">
+        <label><input type="checkbox" id="ff-op-ia" checked> Mejorar títulos, categorías, descripciones y etiquetas SEO con IA</label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-click="cerrarFotosFaltantes">Cancelar</button>
+        <button class="btn-save" id="btn-ff-buscar" data-click="ffBuscar">Buscar fotos</button>
+      </div>
+    </div>
+
+    <div id="ff-paso-2" style="display:none;">
+      <div class="ff-espera">
+        <div class="ff-rueda"></div>
+        <b id="ff-espera-titulo">Buscando fotos…</b>
+        <span id="ff-espera-detalle"></span>
+        <div class="ff-barra"><i id="ff-espera-barra"></i></div>
+        <small>No cierres esta ventana.</small>
+      </div>
+    </div>
+
+    <div id="ff-paso-3" style="display:none;">
+      <p class="imp-ayuda" id="ff-resumen"></p>
+      <p class="ff-ia" id="ff-ia"></p>
+      <div id="ff-productos" class="ff-productos"></div>
+      <div class="imp-opciones">
+        <label><input type="checkbox" id="ff-op-publicar" checked> Publicar la tienda al terminar</label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-click="cerrarFotosFaltantes">Cancelar</button>
+        <button class="btn-save" id="btn-ff-cargar" data-click="ffCargar">Cargar productos</button>
+      </div>
+    </div>
+
+    <div id="ff-paso-4" style="display:none;">
+      <div id="ff-final" class="imp-avance"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" data-click="abrirTiendaPublica">↗ Ver tienda</button>
+        <button class="btn-secondary" id="btn-ff-seguir" style="display:none;" data-click="ffSeguir">Seguir con los que faltan</button>
+        <button class="btn-save" data-click="cerrarFotosFaltantes">Listo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="stock-edit-modal">
   <div class="modal">
     <div class="modal-header">
