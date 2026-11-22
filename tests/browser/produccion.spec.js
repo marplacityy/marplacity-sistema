@@ -70,7 +70,8 @@ test('la tienda junta en una tarjeta los colores de un modelo, aunque vengan esc
   await expect(iphone.locator('.prod-detalle')).toHaveText('128GB · 2 colores');
   await expect(iphone.locator('.precio')).toContainText('775');
   const samsung = page.locator('.prod', { hasText: 'Samsung' });
-  await expect(samsung.locator('.prod-nombre')).toHaveText('Samsung S26 Ultra 12+');
+  // "12+" es la RAM, como la anota ese proveedor: no es parte del nombre del modelo.
+  await expect(samsung.locator('.prod-nombre')).toHaveText('Samsung S26 Ultra');
   await expect(samsung.locator('.prod-detalle')).toHaveText('256GB · 512GB · 2 colores');
 
   await iphone.click();
@@ -80,5 +81,52 @@ test('la tienda junta en una tarjeta los colores de un modelo, aunque vengan esc
   await expect(page.locator('.producto-nombre')).toHaveText('Apple iPhone 15 128GB Blue (SIM física + eSIM)');
   // El título de la pestaña no repite la capacidad ni el color que el título ya dice.
   await expect(page).toHaveTitle(/^Apple iPhone 15 128GB Blue \(SIM física \+ eSIM\) — /);
+  expect(errores).toEqual([]);
+});
+
+test('cada modelo va en una tarjeta aunque dos proveedores lo escriban distinto, y MacBooks y Notebooks son secciones aparte', async ({ page }) => {
+  const errores = [];
+  page.on('pageerror', e => errores.push(e.message));
+  const valor = dato => Array.isArray(dato) ? { arrayValue: { values: dato.map(valor) } }
+    : typeof dato === 'object' ? { mapValue: { fields: Object.fromEntries(Object.entries(dato).map(([k, v]) => [k, valor(v)])) } }
+      : typeof dato === 'number' ? { doubleValue: dato } : { stringValue: dato };
+  const P = (id, nombre, gb, color, precioUSD, extra = {}) => ({ id: 'lista_' + id, tipo: 'pedido', nombre, gb, color, condicion: 'nuevo', categoria: 'iPhone nuevos', precioUSD, fotos: [], ...extra });
+  const datos = { local: { nombre: 'Local ficticio', whatsapp: '2235555555' }, productos: [
+    // El mismo iPhone 17 en dos listas: una lo tiene en el local, la otra a pedido y más barato.
+    P('a1', 'iPhone 17', '256GB', 'Black', 1035, { tipo: 'equipo' }), P('a2', 'iPhone 17', '256GB', 'Blue', 1035, { tipo: 'equipo' }),
+    P('b1', 'iPhone 17 Black // SIM + eSIM', '256GB', '', 1020), P('b2', 'iPhone 17 Sage // SIM + eSIM', '256GB', '', 1020),
+    // El "con SIM" es mucho más caro: otro producto.
+    P('c1', 'iPhone 18 Pro Max', '256GB', 'Glacier', 1505), P('c2', 'iPhone 18 Pro Max', '512GB', 'Glacier', 1720), P('c3', 'iPhone 18 Pro Max', '1TB', 'Glacier', 1950),
+    P('d1', 'iPhone 18 Pro Max con SIM', '256GB', 'Glacier', 1765), P('d2', 'iPhone 18 Pro Max con SIM', '256GB', 'Burgundy', 1765),
+    // Una lista carga la RAM donde va la capacidad y el disco en el nombre.
+    P('m1', "MacBook Air 15'' M5 RAM 512gb Silver", '16GB', '', 1610, { categoria: 'MacBook nuevas' }), P('m2', 'MacBook Air M5 15" 16GB', '512GB', 'Midnight', 1640, { categoria: 'MacBook nuevas' }),
+    P('n1', 'Lenovo 83RR Intel Core 7 16GB RAM 15.3"', '512GB', 'Blue', 900, { categoria: 'Notebooks' }),
+    P('n2', 'Acer A15 Intel Core i9 16GB RAM 15.6"', '512GB', 'Gray', 800, { categoria: 'Notebooks' }),
+    P('n3', 'Acer SFG16 AMD Ryzen AI 7 16GB RAM 16"', '1TB', 'Black', 1000, { categoria: 'Notebooks' }),
+  ] };
+  await page.route('https://firestore.googleapis.com/**', route => route.fulfill({ json: { fields: valor(datos).mapValue.fields } }));
+  const tarjetas = () => page.locator('.grilla .prod').evaluateAll(lista => lista.map(p => [p.querySelector('.prod-nombre').textContent.trim(), p.querySelector('.prod-detalle')?.textContent.trim() || '', p.querySelector('.precio').textContent.replace('desde', '').trim()].join(' | ').replace(/\s+/g, ' ')));
+
+  await page.goto('/catalogo.html#r=iphone-nuevos');
+  await expect(page.locator('.grilla .prod')).toHaveCount(3);
+  expect(await tarjetas()).toEqual([
+    'iPhone 18 Pro Max | 256GB · 512GB · 1TB | u$s 1.505',
+    'iPhone 18 Pro Max con SIM | 256GB · 2 colores | u$s 1.765',
+    'iPhone 17 | 256GB · 3 colores | u$s 1.020',
+  ]);
+  await expect(page.locator('#nav-rubros')).toContainText('MacBooks');
+  await expect(page.locator('#nav-rubros')).toContainText('Notebooks');
+
+  // El Black de la lista a pedido quedó repetido: su link abre el que se muestra, el del local.
+  await page.goto('/catalogo.html#p=lista_b1');
+  await expect(page.locator('.producto-nombre')).toHaveText('iPhone 17');
+  await expect(page.locator('.variantes .opc')).toHaveText(['Black', 'Blue', 'Sage']);
+  await expect(page.locator('.producto-precio, .ficha-precio, .precio').first()).toContainText('1.035');
+
+  await page.goto('/catalogo.html#r=macbooks');
+  expect(await tarjetas()).toEqual(['MacBook Air 15" M5 | 512GB · 2 colores | u$s 1.610']);
+  // Las notebooks, por marca y de mayor a menor precio.
+  await page.goto('/catalogo.html#r=notebooks');
+  expect((await tarjetas()).map(t => t.split(' | ')[0].split(' ').slice(0, 2).join(' '))).toEqual(['Acer SFG16', 'Acer A15', 'Lenovo 83RR']);
   expect(errores).toEqual([]);
 });

@@ -94,7 +94,7 @@ for (const [c, esperado] of [
   ['Galaxy Watch', 'Smartwatch'], ['Aires acondicionados', 'Electrodomésticos'], ['Tablets Samsung', 'Tablets'], ['Gaming', 'Consolas'],
   ['iPhone usados premium', 'iPhone usados'], ['Celulares Motorola', 'Celulares Motorola'], ['Cosas varias', 'Otros'],
   // Lo que pidió Juni: el iPad con sus Pencil y teclados, y los cargadores con los accesorios de Apple.
-  ['Accesorios iPad', 'iPad'], ['Accesorios de carga', 'Accesorios Apple'], ['AirPods', 'Parlantes y auriculares'], ['MacBook nuevas', 'Notebooks'],
+  ['Accesorios iPad', 'iPad'], ['Accesorios de carga', 'Accesorios Apple'], ['AirPods', 'Parlantes y auriculares'], ['MacBook nuevas', 'MacBooks'], ['Notebooks', 'Notebooks'], ['Mac y iMac', 'MacBooks'], ['Laptops gamer', 'Notebooks'],
 ]) assert.equal(rubroDe(c), esperado, `${c} → ${esperado}`);
 
 // ── separarColor: el color sale del nombre, para que la tienda junte las variantes ──

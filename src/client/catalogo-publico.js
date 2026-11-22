@@ -2,6 +2,7 @@ import { esc, on } from '../shared/seguridad.js';
 import { ajusteDeMiniatura } from '../shared/calidad-foto.js';
 import { rangoDeModelo, compararPesos } from '../shared/orden-tienda.js';
 import { RUBROS_CATALOGO, rubroDe, cantidadMaxima, capacidadPareja, separarColor } from '../shared/catalogo.js';
+import { agruparModelos } from '../shared/modelos-tienda.js';
 import { activarEventos } from './core/eventos.js';
 activarEventos();
 import { cargarConfiguracion } from './core/config-publica.js';
@@ -14,7 +15,9 @@ const PROYECTO = 'mis-gastos-21e7b';
 const CLAVE = 'AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg';
 const URL = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/catalogo/publico?key=${CLAVE}`;
 
-let PRODUCTOS = [], LOCAL = {}, COBRO = {}, CATEGORIAS = [];
+// PRODUCTOS es todo lo publicado (un link o un carrito pueden nombrar cualquiera); VISIBLES,
+// lo que se muestra: sin la misma variante repetida por otro proveedor.
+let PRODUCTOS = [], VISIBLES = [], LOCAL = {}, COBRO = {}, CATEGORIAS = [];
 
 // El Worker que cobra. La página no tiene credenciales de nada: le manda el pedido y él
 // arma el link de pago con el precio publicado, no con el que diga la página.
@@ -143,7 +146,8 @@ window.abrirFicha = id => { location.hash = '#p=' + encodeURIComponent(id); };
  * puede pegar en WhatsApp o Instagram y cae directo acá.
  */
 function paginaProducto(id){
-  const p = PRODUCTOS.find(x => x.id === id);
+  // Un link viejo a una variante que quedó repetida abre la que se muestra en su lugar.
+  const p = PRODUCTOS.find(x => x.id === (MODELOS.repetidos.get(id) || id));
   if (!p) {
     mostrarPagina(`<div class="vacio"><div class="vacio-icono">🔍</div><h2>Producto no encontrado</h2>
       <p>Puede que ya se haya vendido.</p><a class="btn-primario" href="#">Volver a la tienda</a></div>`);
@@ -665,14 +669,21 @@ const tipoDe = p => p.tipo || 'equipo';
 // muestran como una sola tarjeta con "desde" y, en la ficha, selectores de capacidad y
 // color. Los usados no: cada unidad es única (batería, estado) y eso es lo que vende.
 // Los productos siguen publicados uno por uno; la agrupación es solo al mostrar.
+//
+// Qué es "el mismo modelo" lo decide shared/modelos-tienda.js: no importa cómo lo escriba
+// cada proveedor, y si dos ofrecen la misma variante se muestra una sola.
 let GRUPOS = new Map();   // clave → [productos]
+let MODELOS = { grupoDe: new Map(), nombres: new Map(), capacidad: new Map(), repetidos: new Map() };
 
-const claveGrupo = p => (p.condicion === 'nuevo' && tipoDe(p) !== 'accesorio')
-  ? `${catDe(p)}|${String(p.nombre || '').trim().toLowerCase()}` : null;
+const claveGrupo = p => MODELOS.grupoDe.get(p.id) || null;
 
 function armarGrupos(){
+  MODELOS = agruparModelos(PRODUCTOS, { categoriaDe: catDe });
+  // La capacidad de verdad: hay listas que cargan la RAM en ese campo y el disco en el nombre.
+  for (const p of PRODUCTOS) if (MODELOS.capacidad.has(p.id)) p.gb = MODELOS.capacidad.get(p.id);
+  VISIBLES = PRODUCTOS.filter(p => !MODELOS.repetidos.has(p.id));
   GRUPOS = new Map();
-  for (const p of PRODUCTOS) {
+  for (const p of VISIBLES) {
     const k = claveGrupo(p);
     if (k) (GRUPOS.get(k) || GRUPOS.set(k, []).get(k)).push(p);
   }
@@ -683,7 +694,8 @@ const numGb = g => parseFloat(String(g).replace(/[^\d.]/g, '')) * (/tb/i.test(g)
 
 /**
  * Cómo se llama un grupo en su tarjeta: el título pulido sin la capacidad ni el color
- * (eso se elige adentro), si todas las variantes dicen lo mismo; si no, el nombre del modelo.
+ * (eso se elige adentro), si todas las variantes dicen lo mismo; si no, el nombre del
+ * modelo, limpio de lo que cada proveedor le agrega.
  */
 function nombreDeGrupo(lista){
   const literal = v => String(v).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -691,7 +703,7 @@ function nombreDeGrupo(lista){
     ? [p.gb, p.color].filter(Boolean).reduce((t, v) => t.replace(new RegExp('\\s*' + literal(v), 'i'), ''), String(p.titulo)).replace(/\s+/g, ' ').trim()
     : '';
   const titulos = new Set(lista.map(sinVariante));
-  return titulos.size === 1 && [...titulos][0] || lista[0].nombre;
+  return titulos.size === 1 && [...titulos][0] || MODELOS.nombres.get(claveGrupo(lista[0])) || lista[0].nombre;
 }
 
 /** La tarjeta de un grupo: la foto de la primera variante que tenga, "desde" el precio más bajo. */
@@ -751,7 +763,7 @@ const catDe = p => p.categoria || 'Otros';
 const rubroDeProd = p => rubroDe(catDe(p));
 /** Las categorías en el orden publicado, más las que aparezcan sin estar en la lista. */
 function categorias(){
-  const vistas = [...new Set(PRODUCTOS.map(catDe))];
+  const vistas = [...new Set(VISIBLES.map(catDe))];
   return [...CATEGORIAS.filter(c => vistas.includes(c)), ...vistas.filter(c => !CATEGORIAS.includes(c))];
 }
 /** Los rubros con productos, en el orden del menú; adentro, sus categorías publicadas. */
@@ -764,14 +776,15 @@ function rubros(){
   }
   return [...porRubro].sort((a, b) => orden.indexOf(a[0]) - orden.indexOf(b[0])).map(([nombre, cats]) => ({ nombre, categorias: cats }));
 }
-const delRubro = r => PRODUCTOS.filter(p => rubroDeProd(p) === r);
-const deCategoria = c => PRODUCTOS.filter(p => catDe(p) === c);
+const delRubro = r => VISIBLES.filter(p => rubroDeProd(p) === r);
+const deCategoria = c => VISIBLES.filter(p => catDe(p) === c);
 
 const pasaFiltros = p => (!COND || (p.condicion || 'nuevo') === COND) && (!ENTREGA || (tipoDe(p) === 'pedido' ? 'pedido' : 'inmediato') === ENTREGA);
 /**
  * El orden por defecto de una sección: primero las tarjetas con varias opciones de
  * capacidad y color, y dentro de cada tanda el modelo más nuevo y más alto arriba
- * (shared/orden-tienda.js). Las variantes de un modelo quedan juntas.
+ * (shared/orden-tienda.js). Las variantes de un modelo quedan juntas. Cada peso es
+ * `[tieneVariantes, marca, generación, nivel, variantes, precio]`.
  */
 function porRelevancia(lista){
   const tarjetas = new Map();
@@ -779,9 +792,16 @@ function porRelevancia(lista){
     const k = claveGrupo(p) && GRUPOS.has(claveGrupo(p)) ? claveGrupo(p) : p.id;
     (tarjetas.get(k) || tarjetas.set(k, []).get(k)).push(p);
   }
+  // Las notebooks de otras marcas se nombran por su ficha técnica (procesador, RAM,
+  // pantalla): ahí el nombre no dice cuál es más nueva. Van por marca, y adentro de cada
+  // una de mayor a menor precio.
+  const esNotebook = p => rubroDeProd(p) === 'Notebooks';
+  const marcaDe = p => String(p.titulo || p.nombre || '').trim().split(/\s+/)[0].toLowerCase();
+  const marcas = [...new Set(lista.filter(esNotebook).map(marcaDe))].sort();
   const peso = ps => {
     const grupo = grupoDe(ps[0]);
-    return [grupo ? 1 : 0, ...rangoDeModelo(ps[0].nombre), grupo ? grupo.length : 1, Math.max(...ps.map(p => Number(p.precioUSD) || 0))];
+    const cola = [grupo ? grupo.length : 1, Math.max(...ps.map(p => Number(p.precioUSD) || 0))];
+    return esNotebook(ps[0]) ? [grupo ? 1 : 0, -marcas.indexOf(marcaDe(ps[0])), 0, 0, ...cola] : [grupo ? 1 : 0, 0, ...rangoDeModelo(ps[0].nombre), ...cola];
   };
   return [...tarjetas.values()].map(ps => ({ ps, peso: peso(ps) })).sort((a, b) => compararPesos(a.peso, b.peso)).flatMap(x => x.ps);
 }
@@ -815,7 +835,7 @@ const textoConteo = n => `${n} producto${n === 1 ? '' : 's'}`;
 
 /** Los filtros del costado: categorías por rubro, condición, entrega, precio y orden. */
 function pintarFiltros(){
-  const base = RUBRO ? (FILTRO !== 'todo' ? deCategoria(FILTRO) : delRubro(RUBRO)) : PRODUCTOS;
+  const base = RUBRO ? (FILTRO !== 'todo' ? deCategoria(FILTRO) : delRubro(RUBRO)) : VISIBLES;
   const conds = new Set(base.map(p => p.condicion || 'nuevo'));
   const entregas = new Set(base.map(p => tipoDe(p) === 'pedido' ? 'pedido' : 'inmediato'));
   const radio = (grupo, clave, valor, texto, marcado, extra = '') => `<label class="radio${extra}">
@@ -896,7 +916,7 @@ function pintarProductos(){
   }
 
   if (!portada) {
-    const base = q ? PRODUCTOS.filter(coincide) : RUBRO ? (FILTRO !== 'todo' ? deCategoria(FILTRO) : delRubro(RUBRO)) : PRODUCTOS;
+    const base = q ? VISIBLES.filter(coincide) : RUBRO ? (FILTRO !== 'todo' ? deCategoria(FILTRO) : delRubro(RUBRO)) : VISIBLES;
     const lista = ordenar(base.filter(p => pasaFiltros(p) && pasaPrecio(p)));
     const titulo = q ? '' : `<h2 class="listado-titulo">${esc(FILTRO !== 'todo' ? FILTRO : RUBRO || 'Todos los productos')}</h2>`;
     conteo.textContent = lista.length ? textoConteo(cuenta(lista)) + (q ? ` para “${q}”` : '') : '';
@@ -904,7 +924,7 @@ function pintarProductos(){
     return;
   }
 
-  conteo.textContent = textoConteo(cuenta(PRODUCTOS));
+  conteo.textContent = textoConteo(cuenta(VISIBLES));
   salida.innerHTML = rubros().map(r => {
     const lista = delRubro(r.nombre);
     return `<section class="seccion">

@@ -36,9 +36,9 @@ export function rangoDeModelo(nombre) {
 }
 
 /**
- * Compara dos tarjetas ya pesadas (de mayor a menor): con variantes antes que sin,
- * después generación, nivel, cantidad de variantes y precio. Cada peso es
- * `[tieneVariantes, generación, nivel, variantes, precio]`.
+ * Compara dos tarjetas ya pesadas (de mayor a menor), número por número: con variantes
+ * antes que sin, después lo que la tienda ponga en el medio (generación y nivel; en
+ * Notebooks, la marca), cantidad de variantes y precio.
  */
 export function compararPesos(a, b) {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return b[i] - a[i];
