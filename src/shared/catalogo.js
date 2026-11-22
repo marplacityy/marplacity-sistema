@@ -94,11 +94,12 @@ export function categoriaDe(p) {
   if (t(/pencil|keyboard folio|smart folio|smart cover/i) || t(/teclado|keyboard/i) && t(/ipad/i)) return 'Accesorios iPad';
   if (t(/funda|case|cover|vidrio|templado|glass|protector|magsafe|wallet/i) && t(/iphone|magsafe/i)) return 'Accesorios iPhone';
   if (t(/funda|case|cover|teclado|keyboard/i) && t(/ipad/i)) return 'Accesorios iPad';
-  if (t(/funda|\bcase\b|cover|vidrio|templado|glass|protector|hidrogel/i)) return 'Fundas y protectores';
+  // Un equipo que viene con su funda ("Bundle + Cover") sigue siendo el equipo.
+  if (t(/funda|\bcase\b|cover|vidrio|templado|glass|protector|hidrogel/i) && !t(/bundle|\+\s*(cover|funda|case)/i)) return 'Fundas y protectores';
   // Audio.
   if (t(/airpods|earpods|beats/i)) return 'AirPods';
   if (t(/auricular|headphone|earbuds|\bbuds\b|headset|vincha/i)) return 'Auriculares';
-  if (t(/parlante|speaker|soundbar|barra de sonido|subwoofer|bafle/i)) return 'Parlantes';
+  if (t(/parlante|speaker|soundbar|barra de sonido|subwoofer|bafle|\bjbl\b|boombox|party ?box/i)) return 'Parlantes';   // los JBL que no dicen "parlante"
   // Relojes.
   if (t(/galaxy watch|smartwatch|smart watch|amazfit|mi band|smart band|garmin|huawei watch|redmi watch|reloj inteligente/i)) return 'Otros smartwatch';
   if (t(/apple watch|\bwatch\b|malla|band/i) && !t(/samsung|xiaomi|galaxy/i)) return 'Apple Watch nuevos';

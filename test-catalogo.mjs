@@ -5,6 +5,7 @@
  *
  * Importa funciones puras, sin arrancar Firebase ni depender del formato del HTML.
  */
+import { rangoDeModelo, compararPesos } from './src/shared/orden-tienda.js';
 import { armarMapaFotos, categoriaDe, slugFoto, rubroDe, borradorDescripcion, capacidadPareja, CATEGORIAS_CATALOGO, RUBROS_CATALOGO } from './src/shared/catalogo.js';
 import assert from 'node:assert/strict';
 
@@ -76,6 +77,11 @@ const casos = [
   [{ nombre: 'Xiaomi Redmi Pad 2 11" 4GB RAM' }, 'Tablets'],
   [{ nombre: 'Xiaomi Poco Pad X1 11.2" 8GB RAM WiFi (BR)' }, 'Tablets'],
   [{ nombre: 'Xiaomi Redmi Note 14 256GB' }, 'Celulares Xiaomi'],
+  [{ nombre: 'Xiaomi Redmi Pad 2 11" 8GB RAM WiFi Bundle + Cover' }, 'Tablets'],
+  [{ nombre: 'JBL Party Box Ultimate Bivolt' }, 'Parlantes'],
+  [{ nombre: 'JBL Flip 7' }, 'Parlantes'],
+  [{ nombre: 'JBL Boombox 4' }, 'Parlantes'],
+  [{ nombre: 'JBL Tune Buds' }, 'Auriculares'],
 ];
 for (const [p, esperado] of casos) assert.equal(categoriaDe(p), esperado, `${p.nombre} → ${esperado}`);
 
@@ -92,6 +98,21 @@ for (const [c, esperado] of [
 
 // ── capacidadPareja: cada proveedor la escribe distinto y es la misma ──
 for (const [de, a] of [['256gb', '256GB'], ['256 GB', '256GB'], ['1tb', '1TB'], [' 512GB ', '512GB'], ['', ''], [null, ''], ['8/256GB', '8/256GB']]) assert.equal(capacidadPareja(de), a, `${de} → ${a}`);
+
+// ── El orden de una sección: con variantes primero, y el modelo más nuevo y más alto arriba ──
+for (const [nombre, esperado] of [
+  ['iPhone 18 Pro Max', [18, 4]], ['iPhone 18 Pro', [18, 3]], ['iPhone 17', [17, 2]], ['iPhone 17E', [17, 1]], ['iPhone Duo', [0, 2]],
+  ['Samsung S26 Ultra 12+', [26, 4]], ['Samsung S26 12+', [26, 2]], ['Samsung S25 Ultra 12+', [25, 4]],
+  ["MacBook Pro 14'' M5 PRO RAM 1TB", [5, 3]], ['MacBook Air M5 13"', [5, 2.5]], ['iPad A16 11"', [16, 2]],
+  ['Apple Watch Ultra 4 49mm', [4, 4]], ['Watch S12 46mm Black', [12, 2]], ['AirPods Pro 3', [3, 3]], ['AirPods 5', [5, 2]],
+  ['JBL Flip 7', [0, 2]], ['Cargador 20W (Original)', [0, 2]],
+]) assert.deepEqual(rangoDeModelo(nombre), esperado, nombre);
+{
+  // [tieneVariantes, generación, nivel, variantes, precio]
+  const tarjetas = { 'iPhone 17 Pro Max (suelto)': [0, 17, 4, 1, 1335], 'iPhone 16': [1, 16, 2, 5, 855], 'iPhone 18 Pro': [1, 18, 3, 11, 1400], 'iPhone 18 Pro Max': [1, 18, 4, 11, 1505], 'iPhone Duo': [1, 0, 2, 4, 2520] };
+  const orden = Object.keys(tarjetas).sort((a, b) => compararPesos(tarjetas[a], tarjetas[b]));
+  assert.deepEqual(orden, ['iPhone 18 Pro Max', 'iPhone 18 Pro', 'iPhone 16', 'iPhone Duo', 'iPhone 17 Pro Max (suelto)']);
+}
 
 // ── slugFoto: el estado entre paréntesis no es parte del modelo ──
 assert.equal(slugFoto('iPhone 13 (Usado Grado A, 100% Ampsentrix)'), 'iphone-13');

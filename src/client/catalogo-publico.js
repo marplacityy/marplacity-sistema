@@ -1,5 +1,6 @@
 import { esc, on } from '../shared/seguridad.js';
 import { ajusteDeMiniatura } from '../shared/calidad-foto.js';
+import { rangoDeModelo, compararPesos } from '../shared/orden-tienda.js';
 import { RUBROS_CATALOGO, rubroDe, cantidadMaxima, capacidadPareja } from '../shared/catalogo.js';
 import { activarEventos } from './core/eventos.js';
 activarEventos();
@@ -749,8 +750,25 @@ const delRubro = r => PRODUCTOS.filter(p => rubroDeProd(p) === r);
 const deCategoria = c => PRODUCTOS.filter(p => catDe(p) === c);
 
 const pasaFiltros = p => (!COND || (p.condicion || 'nuevo') === COND) && (!ENTREGA || (tipoDe(p) === 'pedido' ? 'pedido' : 'inmediato') === ENTREGA);
+/**
+ * El orden por defecto de una sección: primero las tarjetas con varias opciones de
+ * capacidad y color, y dentro de cada tanda el modelo más nuevo y más alto arriba
+ * (shared/orden-tienda.js). Las variantes de un modelo quedan juntas.
+ */
+function porRelevancia(lista){
+  const tarjetas = new Map();
+  for (const p of lista) {
+    const k = claveGrupo(p) && GRUPOS.has(claveGrupo(p)) ? claveGrupo(p) : p.id;
+    (tarjetas.get(k) || tarjetas.set(k, []).get(k)).push(p);
+  }
+  const peso = ps => {
+    const grupo = grupoDe(ps[0]);
+    return [grupo ? 1 : 0, ...rangoDeModelo(ps[0].nombre), grupo ? grupo.length : 1, Math.max(...ps.map(p => Number(p.precioUSD) || 0))];
+  };
+  return [...tarjetas.values()].map(ps => ({ ps, peso: peso(ps) })).sort((a, b) => compararPesos(a.peso, b.peso)).flatMap(x => x.ps);
+}
 const ordenar = lista => ORDEN === 'menor' ? [...lista].sort((a, b) => a.precioUSD - b.precioUSD)
-  : ORDEN === 'mayor' ? [...lista].sort((a, b) => b.precioUSD - a.precioUSD) : lista;
+  : ORDEN === 'mayor' ? [...lista].sort((a, b) => b.precioUSD - a.precioUSD) : porRelevancia(lista);
 
 const pasaPrecio = p => (!PRECIO_MIN || p.precioUSD >= Number(PRECIO_MIN)) && (!PRECIO_MAX || p.precioUSD <= Number(PRECIO_MAX));
 
@@ -876,7 +894,7 @@ function pintarProductos(){
         <h2 class="seccion-titulo">${esc(r.nombre)}</h2>
         <a class="vertodos" href="#r=${slug(r.nombre)}">Ver todos (${cuenta(lista)}) <span aria-hidden="true">→</span></a>
       </div>
-      <div class="fila">${entradasLista(lista.slice(0, 12)).join('')}</div>
+      <div class="fila">${entradasLista(porRelevancia(lista)).slice(0, 12).join('')}</div>
     </section>`;
   }).join('');
 }
