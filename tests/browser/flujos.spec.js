@@ -706,3 +706,47 @@ test('se seleccionan varios productos y se les buscan fotos desde la barra; al q
   await expect(page.locator('#cat-bulk')).toBeHidden();
   expect(errores).toEqual([]);
 });
+
+test('el precio de venta de un equipo se corrige desde la lista de stock, sin abrir la ficha', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await page.evaluate(async () => {
+    const d = window.__datosPrueba;
+    await d.cargar('stock/equipo-2', { ...d.leer('stock/equipo-1'), nombre: 'iPhone 13', color: 'Midnight', imei: '223456789012345', valorUSD: 250, precioVentaUSD: 330 });
+    await d.cargar('stock/equipo-3', { ...d.leer('stock/equipo-1'), nombre: 'iPhone 12', imei: '323456789012345', valorUSD: 200, status: 'vendido' });
+  });
+  await ir(page, 'stock');
+  const fila = nombre => page.locator('.stock-item', { has: page.locator('.stock-nombre', { hasText: nombre }) });
+  // El costo queda rotulado y al lado va el precio de venta, con lo que se gana.
+  await expect(fila('iPhone 13').locator('.stock-val')).toContainText('Costo');
+  await expect(fila('iPhone 13').locator('.stock-venta-in')).toHaveValue('330');
+  await expect(fila('iPhone 13').locator('.stock-venta .stock-sub')).toHaveText('gana u$s 80');
+  await expect(fila('iPhone 15').locator('.stock-venta-in')).toHaveValue('');
+  // Un equipo vendido ya no tiene precio para corregir.
+  await expect(fila('iPhone 12').locator('.stock-venta-in')).toHaveCount(0);
+
+  // Se escribe, Enter: se guarda y el cursor pasa al renglón siguiente.
+  const campos = page.locator('#stock-list-body .stock-venta-in');
+  await campos.nth(0).fill('600');
+  await campos.nth(0).press('Enter');
+  await expect(page.locator('#toast')).toContainText('venta u$s 600');
+  await expect(campos.nth(1)).toBeFocused();
+  const primero = await campos.nth(0).getAttribute('data-id');
+  expect(await page.evaluate(id => window.__datosPrueba.leer('stock/' + id).precioVentaUSD, primero)).toBe(600);
+  await expect(page.locator('.stock-item').nth(0).locator('.stock-venta .stock-sub')).toContainText('gana');
+  await page.locator('#stock-list-body').screenshot({ path: '.runtime/stock-precio-venta.png' });
+
+  // Vaciarlo lo deja sin precio; y por debajo del costo avisa que pierde.
+  await campos.nth(1).fill('');
+  await campos.nth(1).blur();
+  await expect(page.locator('#toast')).toContainText('sin precio de venta');
+  const segundo = await campos.nth(1).getAttribute('data-id');
+  expect(await page.evaluate(id => window.__datosPrueba.leer('stock/' + id).precioVentaUSD, segundo)).toBeNull();
+  await campos.nth(0).fill('100');
+  await campos.nth(0).blur();
+  await expect(page.locator('.stock-item').nth(0).locator('.stock-venta .stock-sub')).toContainText('pierde');
+  // El catálogo toma ese precio para el producto.
+  await ir(page, 'catalogo');
+  await expect(page.locator('#cat-grid')).toContainText('100');
+  expect(errores).toEqual([]);
+});

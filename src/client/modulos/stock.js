@@ -202,7 +202,12 @@ export function renderStock() {
   // Tope de filas (las métricas de arriba siguen sobre todo el filtro)
   const _totS = items.length;
   if (_totS > 100) items = items.slice(0, 100);
-  document.getElementById('stock-list-body').innerHTML = (_totS > 100 ? `<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totS} — refiná los filtros para ver el resto.</div>` : '') + items.map(s => {
+  // El precio de venta se edita en la misma lista. Cada guardado vuelve a dibujarla: se
+  // recuerda en qué campo estaba el cursor (y lo que se venía escribiendo) para devolverlo.
+  const cuerpo = document.getElementById('stock-list-body');
+  const activo = document.activeElement;
+  const enfocado = cuerpo.contains(activo) && activo.classList.contains('stock-venta-in') ? { id: activo.dataset.id, valor: activo.value } : null;
+  cuerpo.innerHTML = (_totS > 100 ? `<div class="empty" style="padding:.5rem;">Mostrando 100 de ${_totS} — refiná los filtros para ver el resto.</div>` : '') + items.map(s => {
     const vendido = s.status === 'vendido';
     const badge = vendido ? '<span class="stock-badge-vend">Vendido</span>' : '<span class="stock-badge-en">● En stock</span>';
     const tipoBadge = s.tipo === 'propio' ? '<span class="consig-tipo tipo-propio">💰 Propio</span>' : '<span class="consig-tipo tipo-permuta">💱 Permuta</span>';
@@ -223,9 +228,16 @@ export function renderStock() {
           ${fechaVentaStr ? `<span>${fechaVentaStr}</span>` : ''}
         </div>
       </div>
-      <div class="stock-val">
+      <div class="stock-val" title="Lo que te costó">
+        <div class="stock-rotulo">Costo</div>
         ${s.valorUSD != null ? `<div class="stock-usd" style="${vendido ? 'color:var(--text3)' : ''}">${contextoApp.fmtUSD(s.valorUSD)}</div>` : ''}
         ${s.valorARS != null ? `<div class="stock-sub">${contextoApp.fmtARS(s.valorARS)}</div>` : ''}
+      </div>
+      <div class="stock-venta">${vendido ? '' : `
+        <label class="stock-rotulo" for="stock-venta-${esc(s.id)}">Venta u$s</label>
+        <input type="number" class="stock-venta-in" id="stock-venta-${esc(s.id)}" data-id="${esc(s.id)}" min="0" step="1" inputmode="decimal" placeholder="—" value="${s.precioVentaUSD || ''}"
+          title="Precio de venta al público, en dólares. Se guarda al salir del campo o con Enter" ${on('change', 'precioVentaStock', s.id, '$value')} data-enter="siguientePrecioStock">
+        ${gananciaHTML(s)}`}
       </div>
       <div class="ei-actions">
         <button class="ei-btn" ${on('click', 'labelEquipo', s.id)} title="Imprimir etiqueta 62x100mm">🏷</button>
@@ -235,10 +247,49 @@ export function renderStock() {
       </div>
     </div>`;
   }).join('');
+  if (enfocado) {
+    const campo = [...cuerpo.querySelectorAll('.stock-venta-in')].find(c => c.dataset.id === enfocado.id);
+    if (campo) { campo.value = enfocado.valor; campo.focus(); }
+  }
+}
+
+/** Cuánto se gana si se vende a ese precio: venta menos costo, cuando están los dos en dólares. */
+function gananciaHTML(s) {
+  const venta = Number(s.precioVentaUSD) || 0, costo = Number(s.valorUSD);
+  if (!venta || !Number.isFinite(costo)) return '';
+  const gana = Math.round((venta - costo) * 100) / 100;
+  return `<div class="stock-sub${gana < 0 ? ' pierde' : ''}">${gana < 0 ? 'pierde' : 'gana'} ${contextoApp.fmtUSD(Math.abs(gana))}</div>`;
 }
 
 // ── Stock edit ──
 export function inicializarStock() {
+  /** El precio de venta de un equipo, cambiado desde la lista. Vacío o 0 lo deja sin precio. */
+  window.precioVentaStock = async function (id, valor) {
+    const s = contextoApp.stockItems.find(x => x.id === id);
+    if (!s) return;
+    const n = parseFloat(String(valor).replace(',', '.'));
+    const precio = Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+    if (precio === (s.precioVentaUSD || null)) return;
+    setSyncDot('syncing');
+    try {
+      await updateDoc(doc(contextoApp.db, 'stock', id), { precioVentaUSD: precio });
+      setSyncDot('ok');
+      showToast(precio ? `${s.nombre || 'Equipo'}: venta ${contextoApp.fmtUSD(precio)} ✓` : `${s.nombre || 'Equipo'}: quedó sin precio de venta`);
+    } catch (e) {
+      setSyncDot('error');
+      showToast('No se pudo guardar el precio', true);
+    }
+  };
+  /**
+   * Enter en un precio pasa al del renglón siguiente (y al salir del campo, el que se dejó
+   * se guarda). Recibe los mismos argumentos que el cambio: un elemento lleva un solo data-args.
+   */
+  window.siguientePrecioStock = function (id) {
+    const campos = [...document.querySelectorAll('#stock-list-body .stock-venta-in')];
+    const i = campos.findIndex(c => c.dataset.id === id);
+    if (i < 0) return;
+    if (campos[i + 1]) { campos[i + 1].focus(); campos[i + 1].select(); } else campos[i].blur();
+  };
   window.import3uTools = function (prefix) {
     const fileInput = document.getElementById(prefix + '-3u-file');
     const file = fileInput.files[0];
