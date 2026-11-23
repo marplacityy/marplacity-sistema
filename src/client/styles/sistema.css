@@ -126,6 +126,10 @@
   .cat-cand img{display:block;width:112px;height:112px;object-fit:contain;background:#fff;}
   .cat-cand .d{font-size:10px;color:var(--text3);margin-top:3px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .cat-foto-acciones{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  /* Elegir de las guardadas: los títulos de cada tanda y el buscador entre todas. */
+  .cat-guardadas-t{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);margin-top:14px;}
+  .cat-guardadas-q{width:100%;box-sizing:border-box;margin-top:8px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-family:inherit;font-size:12.5px;color:var(--text);}
+  .cat-guardadas-nada{grid-column:1/-1;font-size:12.5px;color:var(--text3);padding:6px 0;}
   .cat-foto-acciones .btn-secondary{width:auto;padding:7px 12px;font-size:12.5px;}
   .cat-foto-acciones .btn-secondary:disabled{opacity:.6;cursor:default;}
   .cat-dos{display:grid;grid-template-columns:1fr 1fr;gap:12px;}

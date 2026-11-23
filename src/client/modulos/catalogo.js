@@ -1,6 +1,7 @@
 import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion, capacidadPareja, separarColor } from '../../shared/catalogo.js';
 import { idDeItemLista, migrarIdsDeLista, gruposDuplicados, precioUnificado, ofertaMasBarata, REGLAS_PRECIO } from '../../shared/duplicados.js';
 import { cajaDeFoto, ajusteDeMiniatura } from '../../shared/calidad-foto.js';
+import { fotosGuardadasPara, buscarEntreGuardadas } from '../../shared/fotos-guardadas.js';
 import { on } from '../../shared/seguridad.js';
 import { configuracion } from '../core/config-publica.js';
 /** modulos/catalogo: lógica preservada de la aplicación original. */
@@ -566,6 +567,8 @@ export function renderFichaCatalogo() {
   const meta = (contextoApp.cfg.catalogoMeta || {})[p.id] || {};
   const clave = contextoApp.claveFotoDe(p);
   const archivos = contextoApp.FOTOS[clave] || [];
+  // Cuántas de las fotos ya guardadas parecen de este producto: se avisa en el botón.
+  const guardadasIguales = fotosGuardadasDe(p).filter(x => x.parecido === 'igual').length;
   const tituloSeo = meta.titulo || [p.nombre, p.gb, p.color].filter(Boolean).join(' ');
   const descSeo = meta.seoDescripcion || p.descripcion || `${p.nombre}${p.gb ? ' ' + p.gb : ''}${p.color ? ' ' + p.color : ''} a ${contextoApp.fmtUSD(p.precioUSD)} en MarplaCity, Mar del Plata.`;
   const urlProd = contextoApp.LINK_CATALOGO + '#p=' + encodeURIComponent(p.id);
@@ -630,6 +633,7 @@ export function renderFichaCatalogo() {
       </div>
       <div class="cat-foto-acciones">
         <button class="btn-secondary" id="btn-cat-buscar-fotos" ${on('click', 'buscarFotosProducto', p.id)}>🛒 Buscar en Amazon</button>
+        <button class="btn-secondary" id="btn-cat-guardadas" title="Las fotos que ya subiste: te propone las de este mismo modelo y color, o las buscás a mano" ${on('click', 'abrirFotosGuardadas', p.id)}>🖼️ Elegir de las guardadas${guardadasIguales ? ` (${guardadasIguales})` : ''}</button>
         <span style="font-size:11.5px;color:var(--text3);align-self:center;">Te muestra lo que encuentra y elegís cuáles quedan. Archivo: <code>${esc(clave)}.jpg</code></span>
       </div>
       <div class="cat-link-foto">
@@ -637,6 +641,7 @@ export function renderFichaCatalogo() {
         <button class="btn-secondary" id="btn-cat-link-foto" ${on('click', 'traerFotoPorLink', p.id)}>⬇️ Traer</button>
       </div>
       ${contextoApp.catCandidatos?.id === p.id ? candidatasHTML(p) : ''}
+      ${contextoApp.catGuardadas?.id === p.id ? guardadasHTML(p) : ''}
     </div>
 
     <div class="cat-sec">
@@ -767,6 +772,55 @@ function candidatasHTML(p) {
     <div class="cat-foto-acciones">
       <button class="btn-add" id="btn-cat-traer" style="width:auto;padding:8px 14px;font-size:13px;" ${on('click', 'guardarFotosElegidas', p.id)} ${elegidas ? '' : 'disabled'}>⬇️ Guardar ${elegidas || ''} elegida${elegidas === 1 ? '' : 's'}</button>
       <button class="btn-secondary" ${on('click', 'cancelarCandidatas')}>Cancelar</button>
+    </div>`;
+}
+
+// ── Elegir de las guardadas ──────────────────────────────────
+//
+// Las fotos que ya están en Storage, para ponérselas a un producto sin volver a buscarlas:
+// arriba las que son de su mismo modelo y color (ya marcadas), después las del mismo modelo
+// en otro color, y abajo todas las demás con un buscador (shared/fotos-guardadas.js).
+
+/** Las fotos sin producto: la IA o el dueño las miraron y no las asignaron a ninguno. */
+const fotosSueltas = () => Object.keys(contextoApp.FOTOS_CLAS).filter(a => !contextoApp.FOTOS_CLAS[a]?.clave);
+const fotosGuardadasDe = p => fotosGuardadasPara(p, contextoApp.claveFotoDe(p), contextoApp.FOTOS, fotosSueltas());
+
+const MAX_GUARDADAS_A_LA_VISTA = 36;
+const fotoGuardadaHTML = (x, elegidas) => `
+      <label class="cat-cand${elegidas.has(x.archivo) ? ' on' : ''}" title="${esc(x.archivo)}">
+        <input type="checkbox" ${elegidas.has(x.archivo) ? 'checked' : ''} ${on('change', 'marcarFotoGuardada', x.archivo, '$checked')}>
+        <img src="${esc(contextoApp.FOTOS_BASE + encodeURIComponent(x.archivo))}" loading="lazy" alt="">
+        <div class="d">${esc(x.clave || 'sin producto')}</div>
+      </label>`;
+
+/** La grilla de "todas las demás", según lo que se escribió en el buscador. */
+function restoDeGuardadasHTML() {
+  const g = contextoApp.catGuardadas;
+  const resto = buscarEntreGuardadas(g.lista.filter(x => !x.parecido), g.q);
+  if (!resto.length) return `<div class="cat-guardadas-nada">${g.q ? 'Ninguna foto guardada coincide con esa búsqueda.' : 'No hay más fotos guardadas.'}</div>`;
+  const aLaVista = resto.slice(0, MAX_GUARDADAS_A_LA_VISTA);
+  return aLaVista.map(x => fotoGuardadaHTML(x, g.elegidas)).join('')
+    + (resto.length > aLaVista.length ? `<div class="cat-guardadas-nada">Hay ${resto.length - aLaVista.length} más: escribí el modelo o el color para encontrarlas.</div>` : '');
+}
+
+function guardadasHTML(p) {
+  const g = contextoApp.catGuardadas;
+  const iguales = g.lista.filter(x => x.parecido === 'igual'), delModelo = g.lista.filter(x => x.parecido === 'modelo');
+  const n = g.elegidas.size;
+  const grupo = (titulo, lista) => lista.length ? `<div class="cat-guardadas-t">${titulo}</div><div class="cat-cands">${lista.map(x => fotoGuardadaHTML(x, g.elegidas)).join('')}</div>` : '';
+  const queEncontro = iguales.length ? `encontré <b>${iguales.length}</b> de este mismo modelo y color: ${iguales.length === 1 ? 'ya está marcada' : 'ya están marcadas'}`
+    : delModelo.length ? 'no hay de este color; te muestro las del mismo modelo'
+      : g.lista.length ? 'no encontré ninguna de este modelo: buscala abajo entre todas' : 'todavía no hay otras fotos guardadas';
+  return `<div class="cat-cands-cab" id="cat-guardadas"><b>Fotos guardadas</b> · ${queEncontro}</div>
+    ${grupo('De este modelo y color', iguales)}
+    ${grupo('Del mismo modelo, en otro color', delModelo)}
+    <div class="cat-guardadas-t">Todas las demás</div>
+    <input type="search" id="cat-guardadas-q" class="cat-guardadas-q" placeholder="Buscar por modelo o color: iphone 16, pink…" value="${esc(g.q)}" ${on('input', 'filtrarFotosGuardadas', '$value')}>
+    <div class="cat-cands" id="cat-guardadas-resto">${restoDeGuardadasHTML()}</div>
+    <div class="cat-foto-acciones">
+      <button class="btn-add" id="btn-cat-usar-guardadas" style="width:auto;padding:8px 14px;font-size:13px;" ${on('click', 'usarFotosGuardadas', p.id)} ${n ? '' : 'disabled'}>✓ Usar ${n || ''} foto${n === 1 ? '' : 's'}</button>
+      <button class="btn-secondary" ${on('click', 'cerrarFotosGuardadas')}>Cancelar</button>
+      <span style="font-size:11.5px;color:var(--text3);align-self:center;">Si otro producto ya usa esa foto, se le hace una copia: no la pierde.</span>
     </div>`;
 }
 
@@ -1445,6 +1499,7 @@ export function inicializarCatalogo() {
   contextoApp.claveFotoDe = p => slugFoto(p.nombre) + (p.color ? '-' + slugFoto(p.color) : '');
   contextoApp.catFichaId = null;
   window.abrirFichaCatalogo = function (id) {
+    if (contextoApp.catGuardadas?.id !== id) contextoApp.catGuardadas = null;
     contextoApp.catFichaId = id;
     renderFichaCatalogo();
     document.getElementById('cat-panel-fondo').classList.add('open');
@@ -1640,6 +1695,94 @@ export function inicializarCatalogo() {
     const btn = document.getElementById('btn-cat-traer');
     if (btn) { btn.disabled = true; btn.textContent = `Trayendo ${urls.length}…`; }
     await traerFotosDeUrls(id, urls);
+  };
+
+  // ── Elegir de las guardadas ──
+  contextoApp.catGuardadas = null;   // { id, lista: [{archivo, clave, parecido}], elegidas: Set(archivos), q }
+
+  /** Abre el panel con las guardadas ordenadas para este producto y las de su modelo y color ya marcadas. */
+  window.abrirFotosGuardadas = function (id) {
+    const p = catalogoCandidatos().find(x => x.id === id);
+    if (!p) return;
+    const lista = fotosGuardadasDe(p);
+    contextoApp.catCandidatos = null;
+    contextoApp.catGuardadas = { id, lista, elegidas: new Set(lista.filter(x => x.parecido === 'igual').slice(0, 6).map(x => x.archivo)), q: '' };
+    renderFichaCatalogo();
+    document.getElementById('cat-guardadas')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  };
+  window.cerrarFotosGuardadas = () => { contextoApp.catGuardadas = null; renderFichaCatalogo(); };
+  window.marcarFotoGuardada = (archivo, marcada) => {
+    const g = contextoApp.catGuardadas;
+    if (!g) return;
+    if (marcada) g.elegidas.add(archivo); else g.elegidas.delete(archivo);
+    renderFichaCatalogo();
+  };
+  /** Mientras se escribe solo se redibuja la grilla de abajo: el buscador no pierde el foco. */
+  window.filtrarFotosGuardadas = texto => {
+    const g = contextoApp.catGuardadas;
+    if (!g) return;
+    g.q = String(texto || '');
+    const caja = document.getElementById('cat-guardadas-resto');
+    if (caja) caja.innerHTML = restoDeGuardadasHTML();
+  };
+
+  /**
+   * Le pone al producto las fotos elegidas. Una foto es de un solo producto: si la que se
+   * eligió no la usa nadie más (quedó de un nombre viejo, o estaba sin asignar) se mueve; si
+   * otro producto la está usando, el Worker tienda hace una copia y ese no la pierde.
+   */
+  window.usarFotosGuardadas = async function (id) {
+    if (!requiereDuenoDelLocal()) return;
+    const g = contextoApp.catGuardadas;
+    const p = catalogoCandidatos().find(x => x.id === id);
+    if (!g || g.id !== id || !p || !g.elegidas.size) return;
+    const clave = contextoApp.claveFotoDe(p);
+    const enUso = new Set(catalogoCandidatos().map(contextoApp.claveFotoDe));
+    const claveDe = Object.fromEntries(g.lista.map(x => [x.archivo, x.clave]));
+    const elegidas = [...g.elegidas].filter(a => a in claveDe);
+    const copiar = elegidas.filter(a => claveDe[a] && enUso.has(claveDe[a])).slice(0, 6);   // lo que acepta /fotos/traer
+    const mover = elegidas.filter(a => !claveDe[a] || !enUso.has(claveDe[a]));
+    const btn = document.getElementById('btn-cat-usar-guardadas');
+    if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+    setSyncDot('syncing');
+    let clasificacion = { ...contextoApp.FOTOS_CLAS };
+    for (const a of mover) clasificacion = { ...clasificacion, [a]: { ...(clasificacion[a] || {}), clave, manual: true } };
+    const conocidos = archivosConocidos();
+    let copiadas = 0, error = '';
+    if (copiar.length) {
+      // El número desde el que nombrar las copias: después de las que tiene, de las que se mueven y de cualquier archivo con ese nombre.
+      let desde = (contextoApp.FOTOS[clave] || []).length + mover.length + 1;
+      while ([...conocidos].some(a => a.startsWith(`${clave}${desde > 1 ? '-' + desde : ''}.`))) desde++;
+      try {
+        const r = await fetch(urlTiendaRemota() + '/fotos/traer', {
+          method: 'POST',
+          headers: await workerHeaders(),
+          body: JSON.stringify({ base: clave, desde, urls: copiar.map(a => contextoApp.FOTOS_BASE + encodeURIComponent(a)) })
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || `el Worker respondió ${r.status}`);
+        for (const a of d.subidos || []) {
+          conocidos.add(a);
+          clasificacion = { ...clasificacion, [a]: { clave, vista: '', manual: true } };
+        }
+        copiadas = d.subidos?.length || 0;
+      } catch (e) {
+        error = e.message;
+      }
+    }
+    try {
+      contextoApp.FOTOS_CLAS = clasificacion;
+      if (mover.length || copiadas) await guardarFotos([...conocidos]);
+      const n = mover.length + copiadas;
+      const faltaron = copiar.length - copiadas;
+      contextoApp.catGuardadas = null;
+      setSyncDot(error ? 'error' : 'ok');
+      showToast(n ? `${n} foto${n === 1 ? '' : 's'} en el producto ✓${faltaron ? ` · ${faltaron} no se ${faltaron === 1 ? 'pudo' : 'pudieron'} copiar${error ? ': ' + error : ''}` : ''}` : `No se pudieron copiar: ${error || 'el servicio no las entregó'}`, !n);
+    } catch (e) {
+      setSyncDot('error');
+      showToast('No pude guardar: ' + e.message, true);
+    }
+    renderFichaCatalogo();
   };
 
   /** Un link de foto pegado a mano: la baja en su tamaño original y la asigna al producto. */
