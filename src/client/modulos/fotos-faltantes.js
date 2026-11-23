@@ -23,9 +23,13 @@
  *
  * Las fotos son del modelo y el color: las capacidades de un mismo equipo comparten
  * fotos, así que se busca una vez por modelo y color, de a tandas.
+ *
+ * Con una selección (botón "📷 Buscar fotos" de la barra de seleccionados) trabaja sobre
+ * esos productos. A los que ya tienen foto no les busca, salvo que se marque "buscarles
+ * más": ahí suma hasta completar las de siempre, sin repetir las que ya tiene.
  */
 import { on } from '../../shared/seguridad.js';
-import { elegirFotos, fondoBlanco, huellaDeFoto, LADO_MEDICION, FOTOS_POR_PRODUCTO } from '../../shared/calidad-foto.js';
+import { elegirFotos, fondoBlanco, huellaDeFoto, distanciaDeHuellas, LADO_MEDICION, FOTOS_POR_PRODUCTO } from '../../shared/calidad-foto.js';
 import { SISTEMA_MEJORAR, MAX_PRODUCTOS_POR_PEDIDO, productosParaMejorar, categoriasParaMejorar, mensajeParaMejorar, limpiarMejoras, jsonDeTexto, etiquetasBase } from '../../shared/mejorar-producto.js';
 import { configuracion } from '../core/config-publica.js';
 import { contextoApp } from '../core/estado.js';
@@ -44,9 +48,11 @@ const el = id => document.getElementById(id);
 const plural = (n, uno, muchos) => `${n} ${n === 1 ? uno : muchos}`;
 const urlTienda = () => configuracion.api.tiendaRemota || contextoApp.TIENDA_URL;
 
-// El trabajo en curso: { productos, fotos: { clave: { candidatas, error } }, restantes, cancelado }
+// El trabajo en curso: { productos, fotos: { clave: { candidatas, error, yaTiene, buscada } }, restantes, cancelado, deSeleccion }
 let T = null;
 let OCUPADO = false;
+// Si se pidió buscarles más a los que ya tienen foto. null: todavía no se tocó (vale lo que se propone).
+let MAS_ELEGIDO = null;
 
 function paso(n) {
   for (const k of [1, 2, 3, 4]) el('ff-paso-' + k).style.display = k === n ? '' : 'none';
@@ -124,10 +130,32 @@ const detalleDeFuentes = fuentes => Object.entries(fuentes && typeof fuentes ===
   .map(([k, v]) => `${NOMBRE_DE_FUENTE[k] || k}: ${typeof v === 'number' ? plural(v, 'foto', 'fotos') : String(v).slice(0, 60)}`).join(' · ');
 
 /**
- * Las candidatas de un producto, ya medidas y con las mejores marcadas. `titulo` es el
- * nombre que armó la IA (o el que ya tenía): de ahí sale la búsqueda.
+ * La huella de las fotos que un producto ya tiene, para no sumarle la misma otra vez. Se
+ * piden al Worker tienda (el bucket no deja leerlas desde acá); la que no se pueda leer no
+ * se compara.
  */
-async function candidatasDe(p, titulo) {
+async function huellasDeGuardadas(archivos) {
+  const headers = await workerHeaders();
+  const una = async archivo => {
+    try {
+      const r = await fetch(`${urlTienda()}/fotos/leer?archivo=${encodeURIComponent(archivo)}`, { headers });
+      if (!r.ok) return '';
+      const mapa = await createImageBitmap(await r.blob());
+      return medirPixeles(mapa, mapa.width, mapa.height).huella;
+    } catch {
+      return '';
+    }
+  };
+  return (await Promise.all(archivos.slice(0, MAX_FOTOS).map(una))).filter(Boolean);
+}
+
+/**
+ * Las candidatas de un producto, ya medidas y con las mejores marcadas. `titulo` es el
+ * nombre que armó la IA (o el que ya tenía): de ahí sale la búsqueda. `yaTiene` son las
+ * huellas de las fotos que el producto ya tiene (esas no se vuelven a ofrecer marcadas) y
+ * `max`, cuántas se eligen solas.
+ */
+async function candidatasDe(p, titulo, { yaTiene = [], max = FOTOS_POR_PRODUCTO } = {}) {
   const r = await fetch(urlTienda() + '/fotos/buscar', {
     method: 'POST',
     headers: await workerHeaders(),
@@ -143,10 +171,13 @@ async function candidatasDe(p, titulo) {
   // Con color cargado solo se eligen solas las fotos cuyo título nombra ese color: mostrar
   // un teléfono azul con el cartel "Red" es peor que no mostrar nada. Las demás quedan a
   // la vista, sin marcar.
+  const repetida = c => !!c.huella && yaTiene.some(h => distanciaDeHuellas(h, c.huella) <= 4);
+  const nuevas = medidas.filter(c => !repetida(c));
   return {
     candidatas: [
-      ...elegirFotos(medidas.filter(c => !c.deOtroColor)),
-      ...elegirFotos(medidas.filter(c => c.deOtroColor)).map(c => ({ ...c, elegida: false, nota: c.nota || 'color sin confirmar' })),
+      ...elegirFotos(nuevas.filter(c => !c.deOtroColor), { max }),
+      ...elegirFotos(nuevas.filter(c => c.deOtroColor)).map(c => ({ ...c, elegida: false, nota: c.nota || 'color sin confirmar' })),
+      ...medidas.filter(repetida).map(c => ({ ...c, elegida: false, nota: 'ya la tiene' })),
     ],
     detalle: detalleDeFuentes(d.fuentes),
   };
@@ -193,10 +224,12 @@ function fotosHTML(x, i) {
     const n = f.candidatas.filter(c => c.elegida).length;
     return `<div class="ff-nota">Usa las mismas ${n ? plural(n, 'foto', 'fotos') : 'fotos'} que <b>${esc(T.productos[x.comparteCon].nombreCompleto)}</b>: son del mismo modelo y color.</div>`;
   }
-  if (f.yaTiene) return `<div class="ff-nota">Ya tiene ${plural(f.yaTiene, 'foto', 'fotos')}: no se le buscan más.</div>`;
-  if (f.error) return `<div class="ff-nota mal">No pude buscar: ${esc(f.error)}</div>`;
+  if (f.yaTiene && !f.buscada) return `<div class="ff-nota">Ya tiene ${plural(f.yaTiene, 'foto', 'fotos')}: no se le buscan más.</div>`;
+  const antes = f.yaTiene ? `<div class="ff-nota">Ya tiene ${plural(f.yaTiene, 'foto', 'fotos')}: las que marques acá se suman.</div>` : '';
+  if (f.error) return `${antes}<div class="ff-nota mal">No pude buscar: ${esc(f.error)}</div>`;
+  if (!f.candidatas.length && f.yaTiene) return `${antes}<div class="ff-nota">No encontré otras fotos de este modelo.</div>`;
   if (!f.candidatas.length) return `<div class="ff-nota mal">No encontré fotos de este modelo en Amazon, MercadoLibre ni BestBuy. Después se pueden subir o pegar el link desde la ficha del producto.${f.detalle ? `<span class="ff-fuentes">${esc(f.detalle)}</span>` : ''}</div>`;
-  return `<div class="cat-cands ff-cands">${f.candidatas.map((c, j) => `
+  return `${antes}<div class="cat-cands ff-cands">${f.candidatas.map((c, j) => `
     <label class="cat-cand${c.elegida ? ' on' : ''}">
       <input type="checkbox" ${c.elegida ? 'checked' : ''} ${on('change', 'ffFoto', i, j, '$checked')}>
       <img src="${esc(c.url)}" loading="lazy" alt="" referrerpolicy="no-referrer">
@@ -270,7 +303,9 @@ async function buscar() {
       fuera: false,
     });
   }
-  T = { productos, fotos: {}, restantes: claves.length - tanda.size, cancelado: false, ia: { nombre: '', error: '' } };
+  // Buscarles más a los que ya tienen foto solo se ofrece (y vale) sobre una selección.
+  const mas = contextoApp.catSeleccion.size > 0 && el('ff-op-mas').checked;
+  T = { productos, fotos: {}, restantes: claves.length - tanda.size, cancelado: false, ia: { nombre: '', error: '' }, deSeleccion: contextoApp.catSeleccion.size > 0 };
   // Primero las fichas: la búsqueda de fotos sale del título que arme la IA.
   if (el('ff-op-ia').checked) {
     for (let i = 0; i < productos.length && !T.ia.error; i += MAX_PRODUCTOS_POR_PEDIDO) {
@@ -299,13 +334,16 @@ async function buscar() {
   for (let i = 0; i < unicos.length; i++) {
     if (T.cancelado) return false;
     const x = unicos[i];
-    if (x.p.fotos.length) { T.fotos[x.clave] = { candidatas: [], error: '', yaTiene: x.p.fotos.length }; continue; }
+    const tiene = x.p.fotos.length;
+    if (tiene && !mas) { T.fotos[x.clave] = { candidatas: [], error: '', yaTiene: tiene }; continue; }
     espera('Buscando fotos…', `${i + 1} de ${unicos.length} · ${x.nombreCompleto}`, i, unicos.length);
-    if (cortar) { T.fotos[x.clave] = { candidatas: [], error: cortar }; continue; }
+    if (cortar) { T.fotos[x.clave] = { candidatas: [], error: cortar, yaTiene: tiene, buscada: true }; continue; }
     try {
-      T.fotos[x.clave] = { ...await candidatasDe(x.p, x.titulo), error: '' };
+      // Al que ya tiene se le suman hasta completar las de siempre, sin repetir las que hay.
+      const opciones = tiene ? { yaTiene: await huellasDeGuardadas(contextoApp.FOTOS[x.clave] || []), max: Math.max(0, FOTOS_POR_PRODUCTO - tiene) } : {};
+      T.fotos[x.clave] = { ...await candidatasDe(x.p, x.titulo, opciones), error: '', yaTiene: tiene, buscada: true };
     } catch (e) {
-      T.fotos[x.clave] = { candidatas: [], error: e.message };
+      T.fotos[x.clave] = { candidatas: [], error: e.message, yaTiene: tiene, buscada: true };
       // Sin permiso o sin servicio no tiene sentido seguir probando uno por uno.
       if (/no autorizado|401|403|Failed to fetch|NetworkError|Load failed/i.test(e.message)) cortar = e.message;
     }
@@ -385,8 +423,23 @@ function linea(texto, estado) {
 }
 
 export function inicializarFotosFaltantes() {
-  window.abrirFotosFaltantes = function () {
+  /** Qué dice el botón de buscar, según lo que haya para trabajar y si se pidió buscarles más a los que ya tienen. */
+  function etiquetaDeBuscar() {
+    const todos = objetivo();
+    const mas = contextoApp.catSeleccion.size > 0 && el('ff-op-mas').checked;
+    const tanda = [...new Set(todos.map(contextoApp.claveFotoDe))].slice(0, TANDA);
+    const aBuscar = tanda.filter(clave => todos.some(p => contextoApp.claveFotoDe(p) === clave && (mas || !p.fotos.length))).length;
+    el('btn-ff-buscar').textContent = aBuscar ? `Buscar fotos de ${plural(aBuscar, 'modelo', 'modelos')}` : `Armar ${plural(Math.min(todos.length, TANDA), 'ficha', 'fichas')}`;
+  }
+  window.ffOpcionMas = function () {
+    MAS_ELEGIDO = el('ff-op-mas').checked;
+    etiquetaDeBuscar();
+  };
+
+  /** `continua`: se sigue con lo que quedó de una tanda anterior (se conserva lo que se había elegido). */
+  window.abrirFotosFaltantes = function (continua) {
     if (!requiereDuenoDelLocal() || OCUPADO) return;
+    if (continua !== true) MAS_ELEGIDO = null;
     const todos = objetivo();
     const haySeleccion = contextoApp.catSeleccion.size > 0;
     if (!todos.length) {
@@ -395,15 +448,20 @@ export function inicializarFotosFaltantes() {
     }
     const sinFotos = todos.filter(p => !p.fotos.length);
     const modelos = new Set(todos.map(contextoApp.claveFotoDe)).size;
-    const ahora = Math.min(modelos, TANDA);
     T = null;
     el('ff-intro').textContent = (haySeleccion
       ? `${plural(todos.length, 'producto seleccionado', 'productos seleccionados')}, ${sinFotos.length} sin foto`
       : plural(todos.length, 'producto de la tienda no tiene foto', 'productos de la tienda no tienen foto'))
       + ` (${plural(modelos, 'modelo distinto', 'modelos distintos')}: las capacidades de un mismo equipo comparten fotos). `
-      + `Las fotos se buscan en Amazon y de cada producto se eligen hasta ${FOTOS_POR_PRODUCTO}: fondo blanco, la mayor resolución y sin repetir. Antes de cargar nada vas a ver todo junto para revisarlo y corregirlo.`
+      + `Las fotos se buscan en Amazon, MercadoLibre y BestBuy, y de cada producto se eligen hasta ${FOTOS_POR_PRODUCTO}: fondo blanco, la mayor resolución y sin repetir. Antes de cargar nada vas a ver todo junto para revisarlo y corregirlo.`
       + (modelos > TANDA ? ` Van de a ${TANDA} modelos por vez: al terminar seguís con los que falten.` : '');
-    el('btn-ff-buscar').textContent = sinFotos.length ? `Buscar fotos de ${plural(ahora, 'modelo', 'modelos')}` : `Armar ${plural(Math.min(todos.length, TANDA), 'ficha', 'fichas')}`;
+    // Sobre una selección, a los que ya tienen foto se les puede buscar más. Si todos los
+    // elegidos ya tienen, es lo único que hay para buscar: viene marcado.
+    const conFotos = todos.length - sinFotos.length;
+    el('ff-op-mas-fila').style.display = haySeleccion && conFotos ? '' : 'none';
+    el('ff-op-mas').checked = haySeleccion && conFotos > 0 && (MAS_ELEGIDO ?? !sinFotos.length);
+    el('ff-op-mas-texto').textContent = `Buscarles más fotos también a ${conFotos === 1 ? 'el que ya tiene' : `los ${conFotos} que ya tienen`} (se suman a las que hay, sin repetir)`;
+    etiquetaDeBuscar();
     paso(1);
     el('fotos-faltantes-modal').classList.add('open');
   };
@@ -473,7 +531,7 @@ export function inicializarFotosFaltantes() {
       if (sinFotos) linea(`${plural(sinFotos, 'producto', 'productos')} sin fotos nuevas: se pueden subir o pegar el link desde la ficha`, 'espera');
       for (const e of r.errores.slice(0, 4)) linea(e, 'mal');
       linea(publicar ? 'La tienda quedó publicada' : 'Falta publicar: tocá "Publicar" para que se vea en la tienda', publicar ? 'ok' : 'espera');
-      if (T.restantes) linea(`Quedan ${plural(T.restantes, 'modelo', 'modelos')} sin foto para otra tanda`, 'espera');
+      if (T.restantes) linea(T.deSeleccion ? `Quedan ${plural(T.restantes, 'modelo', 'modelos')} de la selección para otra tanda` : `Quedan ${plural(T.restantes, 'modelo', 'modelos')} sin foto para otra tanda`, 'espera');
       el('btn-ff-seguir').style.display = T.restantes ? '' : 'none';
       setSyncDot('ok');
     } catch (e) {
@@ -483,14 +541,16 @@ export function inicializarFotosFaltantes() {
       setSyncDot('error');
     }
     OCUPADO = false;
+    // De una selección más grande que la tanda quedan seleccionados los que faltan, para seguir con ellos.
+    if (T?.deSeleccion && T.restantes) for (const x of T.productos) contextoApp.catSeleccion.delete(x.id);
+    else contextoApp.catSeleccion.clear();
     T = null;
-    contextoApp.catSeleccion.clear();
     renderCatalogo();
     paso(4);
   };
 
   window.ffSeguir = function () {
     el('fotos-faltantes-modal').classList.remove('open');
-    window.abrirFotosFaltantes();
+    window.abrirFotosFaltantes(true);
   };
 }

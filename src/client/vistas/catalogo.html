@@ -28,7 +28,7 @@
         <!-- Las dos tareas sobre todo el catálogo: juntar lo repetido entre listas y completar las fotos. -->
         <div class="cat-tareas">
           <button class="btn-secondary" id="btn-cat-duplicados" data-click="abrirDuplicados" title="El mismo producto en varias listas: queda uno solo, al precio que elijas, y se anota qué lista lo tiene más barato">🔎 Buscar duplicados</button>
-          <button class="btn-secondary" id="btn-cat-fotos-faltan" data-click="abrirFotosFaltantes" title="Busca en Amazon las fotos de los productos de la tienda que no tienen, y te las muestra para revisar antes de cargarlas">📷 Buscar fotos que faltan</button>
+          <button class="btn-secondary" id="btn-cat-fotos-faltan" data-click="abrirFotosFaltantes" title="Busca en Amazon, MercadoLibre y BestBuy las fotos de los productos de la tienda que no tienen, y te las muestra para revisar antes de cargarlas">📷 Buscar fotos que faltan</button>
         </div>
         <div class="cat-filtros">
           <input type="search" id="cat-q" placeholder="Buscar producto…" data-input="filtrarCatalogo">
@@ -53,6 +53,7 @@
           <button class="btn-add" style="width:auto;padding:6px 12px;font-size:12.5px;" data-click="accionCatalogo" data-args='["sale", true]'>🌐 Mandar a la tienda</button>
           <button class="btn-danger" data-click="accionCatalogo" data-args='["sale", false]'>Sacar de la tienda</button>
           <button class="btn-secondary" data-click="describirSeleccionados" title="Escribe la descripción de los que no tienen, con los datos del producto y la IA">✨ Describir</button>
+          <button class="btn-secondary" id="btn-cat-bulk-fotos" data-click="abrirFotosFaltantes" title="Busca fotos en Amazon, MercadoLibre y BestBuy para los seleccionados, y te las muestra para revisar antes de cargarlas">📷 Buscar fotos</button>
           <button class="btn-secondary" data-click="accionCatalogo" data-args='["entrega", "inmediato"]'>Inmediato</button>
           <button class="btn-secondary" data-click="accionCatalogo" data-args='["entrega", "pedido"]'>A pedido</button>
           <button class="btn-secondary" style="margin-left:auto;" data-click="seleccionarCatalogo" data-args='[null, false]'>✕</button>

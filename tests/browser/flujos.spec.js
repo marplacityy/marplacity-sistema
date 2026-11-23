@@ -640,3 +640,69 @@ test('desde la ficha se eligen fotos ya guardadas: propone las del mismo modelo 
   await expect(page.locator('#cat-guardadas')).toHaveCount(0);
   expect(errores).toEqual([]);
 });
+
+test('se seleccionan varios productos y se les buscan fotos desde la barra; al que ya tiene se le suman sin repetir', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await page.evaluate(async () => {
+    const d = window.__datosPrueba;
+    await d.cargar('config/usuario-prueba', { ...d.leer('config/usuario-prueba'), catalogoIdsV2: true });
+    await d.cargar('catalogo/publico', { productos: [] });
+    // El iPhone 15 del stock ya tiene una foto; los otros tres productos, ninguna.
+    await d.cargar('catalogo/fotos', { userId: 'usuario-prueba', clasificacion: {}, mapa: { 'iphone-15-negro': ['iphone-15-negro.jpg'] } });
+  });
+  // Dos candidatas de fondo blanco distintas. La primera es la misma foto que el iPhone 15 ya tiene guardada.
+  const [laQueYaTiene, otra] = await page.evaluate(() => {
+    const dibujar = pintar => { const c = document.createElement('canvas'); c.width = c.height = 600; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 600, 600); pintar(x); return c.toDataURL('image/png'); };
+    return [dibujar(x => { x.fillStyle = '#111'; x.fillRect(200, 80, 200, 440); }), dibujar(x => { x.fillStyle = '#246'; x.fillRect(120, 220, 360, 160); })];
+  });
+  const buscados = [], traidos = [];
+  await page.route('**/fotos/buscar', route => { buscados.push(route.request().postDataJSON().nombre); return route.fulfill({ json: { consulta: 'x', fuentes: { bing: 2 }, candidatos: [laQueYaTiene, otra].map(url => ({ url, fuente: 'Amazon' })) } }); });
+  await page.route('**/fotos/leer?*', route => route.fulfill({ contentType: 'image/png', body: Buffer.from(laQueYaTiene.split(',')[1], 'base64') }));
+  await page.route('**/fotos/traer', route => {
+    const { base, desde, urls } = route.request().postDataJSON();
+    traidos.push({ base, desde, urls: urls.length });
+    return route.fulfill({ json: { subidos: urls.map((_, i) => `${base}${desde + i > 1 ? '-' + (desde + i) : ''}.png`), fallidas: [] } });
+  });
+
+  await ir(page, 'catalogo');
+  await expect(page.locator('#cat-bulk')).toBeHidden();
+  await page.locator('#cat-sel-todos-btn').click();
+  await expect(page.locator('#cat-bulk-n')).toHaveText('4 seleccionados');
+  await page.locator('#btn-cat-bulk-fotos').click();
+  await expect(page.locator('#fotos-faltantes-modal')).toHaveClass(/open/);
+  await expect(page.locator('#ff-intro')).toContainText('4 productos seleccionados, 3 sin foto');
+  // Al que ya tiene no se le busca, salvo que se pida.
+  await expect(page.locator('#btn-ff-buscar')).toHaveText('Buscar fotos de 3 modelos');
+  await expect(page.locator('#ff-op-mas-fila')).toContainText('Buscarles más fotos también a el que ya tiene');
+  await page.locator('#ff-op-mas').check();
+  await expect(page.locator('#btn-ff-buscar')).toHaveText('Buscar fotos de 4 modelos');
+  await page.locator('#ff-op-ia').uncheck();
+  await page.locator('#btn-ff-buscar').click();
+
+  await expect(page.locator('#ff-paso-3')).toBeVisible();
+  await expect(page.locator('.ff-prod')).toHaveCount(4);
+  expect(buscados.sort()).toEqual(['Funda iPhone 15', 'Pantalla iPhone 13', 'iPhone 14', 'iPhone 15']);
+  // El iPhone 15: la foto que ya tiene no se vuelve a marcar; la otra sí.
+  const quince = page.locator('.ff-prod', { has: page.locator('.ff-cab b', { hasText: /^iPhone 15/ }) });
+  await expect(quince.locator('.ff-nota')).toContainText('Ya tiene 1 foto: las que marques acá se suman');
+  await expect(quince.locator('.cat-cand')).toHaveCount(2);
+  await expect(quince.locator('.cat-cand.on')).toHaveCount(1);
+  await expect(quince.locator('.cat-cands')).toContainText('ya la tiene');
+  // El iPhone 14 no tenía ninguna: van las dos.
+  await expect(page.locator('.ff-prod', { has: page.locator('.ff-cab b', { hasText: /^iPhone 14/ }) }).locator('.cat-cand.on')).toHaveCount(2);
+
+  await page.locator('#ff-op-publicar').uncheck();
+  await page.locator('#btn-ff-cargar').click();
+  await expect(page.locator('#ff-paso-4')).toBeVisible();
+  // Las del iPhone 15 se numeran después de la que ya tenía.
+  expect(traidos).toContainEqual({ base: 'iphone-15-negro', desde: 2, urls: 1 });
+  expect(traidos).toContainEqual({ base: 'iphone-14', desde: 1, urls: 2 });
+  const fotos = await page.evaluate(() => window.__datosPrueba.leer('catalogo/fotos'));
+  expect(fotos.mapa['iphone-15-negro']).toEqual(['iphone-15-negro.jpg', 'iphone-15-negro-2.png']);
+  expect(fotos.mapa['iphone-14']).toEqual(['iphone-14.png', 'iphone-14-2.png']);
+  // Terminó: no queda nada seleccionado.
+  await page.locator('#ff-paso-4 .btn-save').click();
+  await expect(page.locator('#cat-bulk')).toBeHidden();
+  expect(errores).toEqual([]);
+});
