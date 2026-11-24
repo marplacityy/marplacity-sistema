@@ -97,3 +97,21 @@ test('las pulgadas y la RAM separan modelos, salvo que haya una sola posible', (
   assert.notEqual([...r.grupoDe.values()][0], [...r.grupoDe.values()][1]);
   assert.deepEqual(agruparModelos(null), { grupoDe: new Map(), nombres: new Map(), capacidad: new Map(), repetidos: new Map() });
 });
+
+test('los relojes de un modelo van en una tarjeta: el tamaño de la caja se elige como la capacidad', () => {
+  assert.deepEqual(modeloDe({ nombre: 'Apple Watch Series 12', gb: '46mm', color: 'Dark Bronze - Olive Sport Band' }),
+    { clave: '12 series watch', pulgadas: '', ram: '', capacidad: '46mm', color: 'band bronze dark olive sport' });
+  const reloj = (nombre, gb, color, precio) => P(nombre, gb, color, precio, { categoria: 'Apple Watch nuevos' });
+  assert.deepEqual(tarjetas([
+    reloj('Apple Watch Series 12', '42mm', 'Black Sport Band', 485), reloj('Apple Watch Series 12', '46mm', 'Black Sport Band', 545),
+    reloj('Apple Watch Series 12', '46mm', 'Dark Bronze - Olive Sport Band', 545),
+    reloj('Apple Watch Ultra 4', '49mm', 'Black - Translucent Black Ocean Band', 905),
+    // El Cellular es otro producto: tiene su tarjeta.
+    reloj('Apple Watch SE 3', '40mm', 'Starlight', 365), reloj('Apple Watch SE 3 + Cellular', '40mm', 'Starlight', 385),
+  ]), {
+    'Apple Watch Series 12': ['42mm Black Sport Band 485', '46mm Black Sport Band 545', '46mm Dark Bronze - Olive Sport Band 545'],
+    'Apple Watch Ultra 4': ['49mm Black - Translucent Black Ocean Band 905'],
+    'Apple Watch SE 3': ['40mm Starlight 365'],
+    'Apple Watch SE 3 + Cellular': ['40mm Starlight 385'],
+  });
+});

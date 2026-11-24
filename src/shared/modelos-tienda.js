@@ -20,6 +20,8 @@ import { palabrasDeItem } from './duplicados.js';
 export const MUCHO_MAS_CARO = 0.10;
 
 const ES_CAPACIDAD = /^\d+(gb|tb)$/;
+// El tamaño de la caja de un reloj: se elige adentro de la tarjeta, como la capacidad.
+const ES_TAMANO = /^\d{2}mm$/;
 const palabrasDe = texto => palabrasDeItem({ producto: texto }).fuertes;
 
 /**
@@ -29,14 +31,15 @@ const palabrasDe = texto => palabrasDeItem({ producto: texto }).fuertes;
  *   pulgadas   "13in", o '' si el nombre no lo dice
  *   ram        "16GB", o ''
  *   capacidad  la de almacenamiento: la más grande que aparezca, venga en el nombre o en
- *              su campo ("RAM 512gb" + 16GB → 512GB)
+ *              su campo ("RAM 512gb" + 16GB → 512GB). En un reloj, el tamaño de la caja
+ *              ("46mm"): es lo que se elige en su lugar
  *   color      el color, como lo escribe la mayoría ("Lavander" → "lavender")
  */
 export function modeloDe(p) {
   const w = palabrasDeItem({ producto: p?.nombre, gb: p?.gb, color: p?.color, condicion: p?.condicion });
   const delColor = new Set(palabrasDe(p?.color));
   let pulgadas = (w.debiles.pulgadas || []).join('+');
-  const base = w.fuertes.filter(x => !ES_CAPACIDAD.test(x) && !delColor.has(x));
+  const base = w.fuertes.filter(x => !ES_CAPACIDAD.test(x) && !ES_TAMANO.test(x) && !delColor.has(x));
   // En un iPad o una MacBook, "11" o "13" sueltos son el tamaño aunque no lleven comillas
   // ("iPad 11 (A16)"); en un iPhone son el modelo.
   if (!pulgadas && base.some(x => x === 'ipad' || x === 'macbook')) {
@@ -47,7 +50,7 @@ export function modeloDe(p) {
     clave: base.join(' '),
     pulgadas,
     ram: ((w.debiles.ram || [])[0] || '').toUpperCase(),
-    capacidad: (w.fuertes.find(x => ES_CAPACIDAD.test(x)) || '').toUpperCase(),
+    capacidad: (w.fuertes.find(x => ES_CAPACIDAD.test(x)) || '').toUpperCase() || w.fuertes.find(x => ES_TAMANO.test(x)) || '',
     color: [...delColor].sort().join(' '),
   };
 }

@@ -1,7 +1,7 @@
 import { CATEGORIAS_CATALOGO, esUsado, slugFoto, armarMapaFotos, categoriaDe, rubroDe, borradorDescripcion, capacidadPareja, separarColor } from '../../shared/catalogo.js';
 import { idDeItemLista, migrarIdsDeLista, gruposDuplicados, precioUnificado, ofertaMasBarata, REGLAS_PRECIO } from '../../shared/duplicados.js';
 import { cajaDeFoto, ajusteDeMiniatura } from '../../shared/calidad-foto.js';
-import { fotosGuardadasPara, buscarEntreGuardadas } from '../../shared/fotos-guardadas.js';
+import { fotosGuardadasPara, buscarEntreGuardadas, indiceDeFotos, fotosCompartidas } from '../../shared/fotos-guardadas.js';
 import { on } from '../../shared/seguridad.js';
 import { configuracion } from '../core/config-publica.js';
 /** modulos/catalogo: lógica preservada de la aplicación original. */
@@ -78,11 +78,35 @@ export
  *
  * La genérica queda para los equipos sin color cargado, donde no hay con qué
  * contradecirse.
+ *
+ * Si no tiene fotos propias, usa las de otro artículo que SE VE igual —mismo modelo y
+ * mismo color—: el 18 Pro Max con SIM y sin SIM, la MacBook con Ñ y sin Ñ, los AirPods 4
+ * con y sin cancelación (`fotosPrestadas`). La regla del color vale igual: nunca toma las
+ * de otro color.
  */
 function fotosDe(nombre, color) {
   const modelo = slugFoto(nombre);
-  const archivos = color ? contextoApp.FOTOS[`${modelo}-${slugFoto(color)}`] || [] : contextoApp.FOTOS[modelo] || [];
+  const clave = color ? `${modelo}-${slugFoto(color)}` : modelo;
+  const propias = contextoApp.FOTOS[clave] || [];
+  const archivos = propias.length ? propias : fotosPrestadas(nombre, color, clave)?.archivos || [];
   return archivos.map(f => contextoApp.FOTOS_BASE + f);
+}
+
+// Las fotos guardadas, ordenadas por cómo se ve lo que muestran, y lo ya resuelto para
+// cada producto. Se rehacen cuando cambia el mapa de fotos (cada snapshot trae uno nuevo):
+// esto se consulta por cada producto en cada dibujo de la pantalla.
+let FOTOS_INDIZADAS = null, INDICE_FOTOS = new Map(), PRESTADAS = new Map();
+
+/** Las fotos de otro artículo que se ve igual: `{ clave, archivos }`, o null si no hay. */
+function fotosPrestadas(nombre, color, clave) {
+  if (FOTOS_INDIZADAS !== contextoApp.FOTOS) {
+    FOTOS_INDIZADAS = contextoApp.FOTOS;
+    INDICE_FOTOS = indiceDeFotos(contextoApp.FOTOS);
+    PRESTADAS = new Map();
+  }
+  const k = `${nombre}\u0000${color || ''}`;
+  if (!PRESTADAS.has(k)) PRESTADAS.set(k, fotosCompartidas({ nombre, color }, clave, INDICE_FOTOS));
+  return PRESTADAS.get(k);
 }
 
 /** Un equipo, con lo justo para mostrarlo. Es el único lugar que decide qué es público. */
@@ -567,6 +591,8 @@ export function renderFichaCatalogo() {
   const meta = (contextoApp.cfg.catalogoMeta || {})[p.id] || {};
   const clave = contextoApp.claveFotoDe(p);
   const archivos = contextoApp.FOTOS[clave] || [];
+  // Sin fotos propias puede estar usando las de otro artículo que se ve igual.
+  const prestadas = archivos.length ? null : fotosPrestadas(p.nombre, p.color, clave);
   // Cuántas de las fotos ya guardadas parecen de este producto: se avisa en el botón.
   const guardadasIguales = fotosGuardadasDe(p).filter(x => x.parecido === 'igual').length;
   const tituloSeo = meta.titulo || [p.nombre, p.gb, p.color].filter(Boolean).join(' ');
@@ -614,7 +640,11 @@ export function renderFichaCatalogo() {
     </div>
 
     <div class="cat-sec">
-      <div class="cat-sec-t">Fotos <span class="n">· ${archivos.length ? archivos.length + ' foto' + (archivos.length === 1 ? '' : 's') + ' · la primera es la principal' : 'sin foto: en la tienda sale el recuadro con el modelo'}</span></div>
+      <div class="cat-sec-t">Fotos <span class="n">· ${archivos.length ? archivos.length + ' foto' + (archivos.length === 1 ? '' : 's') + ' · la primera es la principal' : prestadas ? `usa ${prestadas.archivos.length === 1 ? 'la foto' : 'las ' + prestadas.archivos.length + ' fotos'} de otro artículo que se ve igual` : 'sin foto: en la tienda sale el recuadro con el modelo'}</span></div>
+      ${prestadas ? `<div class="cat-prestadas">
+        <div class="cat-imgs">${prestadas.archivos.map(a => `<div class="cat-img"><img src="${srcFoto(a)}" loading="lazy" alt=""></div>`).join('')}</div>
+        <div class="nota">Son las de <code>${esc(prestadas.clave)}</code>: mismo modelo y mismo color, así que la foto es la misma. Si a este le subís fotos propias, pasa a usar las suyas.</div>
+      </div>` : ''}
       ${archivos.length ? `<div class="cat-imgs">${archivos.map((a, k) => {
     const c = contextoApp.FOTOS_CLAS[a] || {};
     return `
@@ -878,7 +908,10 @@ export function renderFotosCatalogo() {
          </div>`).join('')}</div>` : ''}`;
 }
 /** El archivo de la foto principal de un producto (la primera de su modelo y color). */
-const fotoPrincipalDe = p => (contextoApp.FOTOS[contextoApp.claveFotoDe(p)] || [])[0] || '';
+const fotoPrincipalDe = p => {
+  const clave = contextoApp.claveFotoDe(p);
+  return (contextoApp.FOTOS[clave] || [])[0] || fotosPrestadas(p.nombre, p.color, clave)?.archivos[0] || '';
+};
 
 /**
  * Mide dónde está el producto dentro de cada foto: `{ archivo: [x0, y0, x1, y1, proporción] }`.

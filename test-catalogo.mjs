@@ -6,7 +6,7 @@
  * Importa funciones puras, sin arrancar Firebase ni depender del formato del HTML.
  */
 import { rangoDeModelo, compararPesos } from './src/shared/orden-tienda.js';
-import { separarColor } from './src/shared/catalogo.js';
+import { separarColor, separarReloj } from './src/shared/catalogo.js';
 import { armarMapaFotos, categoriaDe, slugFoto, rubroDe, borradorDescripcion, capacidadPareja, CATEGORIAS_CATALOGO, RUBROS_CATALOGO } from './src/shared/catalogo.js';
 import assert from 'node:assert/strict';
 
@@ -120,6 +120,22 @@ for (const [producto, color, nombre, sale] of [
   ['Apple Pencil Pro', '', 'Apple Pencil Pro', ''], ['Airpods 4 Noise Cancelling', '', 'Airpods 4 Noise Cancelling', ''],
   ['Black', '', 'Black', ''], ['', '', '', ''], [null, null, '', ''],
 ]) assert.deepEqual(separarColor(producto, color), { nombre, color: sale }, String(producto));
+
+// ── separarReloj: el modelo, el tamaño de la caja y lo que se elige adentro ──
+for (const [producto, color, nombre, tamano, sale] of [
+  ['Watch S12 46mm Black SB M/L - MJEL4LS', '', 'Apple Watch Series 12', '46mm', 'Black Sport Band'],
+  ['Watch S12 42mm Dark Bronze - Olive SB S/M', '', 'Apple Watch Series 12', '42mm', 'Dark Bronze - Olive Sport Band'],
+  ['Watch Ultra 4 49mm Black - Translucent Black Ocean Band - MJAY4', '', 'Apple Watch Ultra 4', '49mm', 'Black - Translucent Black Ocean Band'],
+  ['Apple Watch Ultra 4 49mm', 'Black Titanium Black Ocean Band', 'Apple Watch Ultra 4', '49mm', 'Black Titanium Black Ocean Band'],
+  ['Apple Watch Serie 11 46mm', 'Jet Black', 'Apple Watch Series 11', '46mm', 'Jet Black'],
+  ['Apple Watch SE 3 40mm', 'Starlight Al Sand SportBand S/M', 'Apple Watch SE 3', '40mm', 'Starlight Al Sand Sport Band'],
+  // El Cellular cambia el producto y el precio: se queda en el nombre.
+  ['Apple Watch SE 3 Gen 40mm + Cell', 'Starlight', 'Apple Watch SE 3 + Cellular', '40mm', 'Starlight'],
+  ['Apple Watch SE 3 40mm Black (GPS + Cellular)', '', 'Apple Watch SE 3 + Cellular', '40mm', 'Black'],
+  // Los de otra marca conservan la suya.
+  ['Samsung Galaxy Watch 8 44mm', 'Graphite', 'Samsung Galaxy Watch 8', '44mm', 'Graphite'],
+]) assert.deepEqual(separarReloj(producto, color), { nombre, tamano, color: sale }, producto);
+for (const noEsReloj of ['iPhone 17', 'Apple Watch Ultra 4', 'Malla Ocean Band 49mm', '', null]) assert.equal(separarReloj(noEsReloj, ''), null, String(noEsReloj));
 
 // ── capacidadPareja: cada proveedor la escribe distinto y es la misma ──
 for (const [de, a] of [['256gb', '256GB'], ['256 GB', '256GB'], ['1tb', '1TB'], [' 512GB ', '512GB'], ['', ''], [null, ''], ['8/256GB', '8/256GB']]) assert.equal(capacidadPareja(de), a, `${de} → ${a}`);

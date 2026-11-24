@@ -1,8 +1,9 @@
 import { esc, on } from '../shared/seguridad.js';
 import { ajusteDeMiniatura } from '../shared/calidad-foto.js';
 import { rangoDeModelo, compararPesos } from '../shared/orden-tienda.js';
-import { RUBROS_CATALOGO, rubroDe, cantidadMaxima, capacidadPareja, separarColor } from '../shared/catalogo.js';
+import { RUBROS_CATALOGO, rubroDe, cantidadMaxima, capacidadPareja, separarColor, separarReloj } from '../shared/catalogo.js';
 import { agruparModelos } from '../shared/modelos-tienda.js';
+import { prestarFotos } from '../shared/fotos-guardadas.js';
 import { activarEventos } from './core/eventos.js';
 activarEventos();
 import { cargarConfiguracion } from './core/config-publica.js';
@@ -14,6 +15,15 @@ const configuracion = await cargarConfiguracion();
 const PROYECTO = 'mis-gastos-21e7b';
 const CLAVE = 'AIzaSyCxT-g9yMRhrRcjwI5uz3ITTWUB8ddeZCg';
 const URL = `https://firestore.googleapis.com/v1/projects/${PROYECTO}/databases/(default)/documents/catalogo/publico?key=${CLAVE}`;
+
+/**
+ * Un reloj nuevo, con el modelo, el tamaño de la caja y el color cada uno en su lugar:
+ * así todos los de un modelo van en una tarjeta. El tamaño ocupa el lugar de la capacidad.
+ */
+function comoReloj(p){
+  const r = (p.condicion || 'nuevo') === 'nuevo' && !p.gb ? separarReloj(p.nombre, p.color) : null;
+  return r ? { ...p, nombre: r.nombre, gb: r.tamano, color: r.color } : p;
+}
 
 // PRODUCTOS es todo lo publicado (un link o un carrito pueden nombrar cualquiera); VISIBLES,
 // lo que se muestra: sin la misma variante repetida por otro proveedor.
@@ -750,7 +760,7 @@ function selectoresVariante(p, grupo){
   const conGb = gb => grupo.find(x => x.gb === gb && x.color === p.color) || grupo.find(x => x.gb === gb);
   const conColor = c => grupo.find(x => x.gb === p.gb && x.color === c) || grupo.find(x => x.color === c);
   return `<div class="variantes">
-    ${gbs.length > 1 ? `<div><div class="t">Capacidad</div><div class="opciones">${gbs.map(gb =>
+    ${gbs.length > 1 ? `<div><div class="t">${gbs.every(g => /mm$/i.test(g)) ? 'Tamaño' : 'Capacidad'}</div><div class="opciones">${gbs.map(gb =>
       `<button class="opc${gb === p.gb ? ' on' : ''}" ${on('click', 'abrirFicha', conGb(gb).id)}>${esc(gb)}</button>`).join('')}</div></div>` : ''}
     ${colores.length > 1 ? `<div><div class="t">Color</div><div class="opciones">${colores.map(c =>
       `<button class="opc${c === p.color ? ' on' : ''}" ${on('click', 'abrirFicha', conColor(c).id)}>${esc(c)}</button>`).join('')}</div></div>` : ''}
@@ -980,7 +990,10 @@ function pie(actualizado){
     // La capacidad y el color se acomodan al leer, no solo al publicar: lo ya publicado
     // puede traer "256gb" y "256GB", o el color adentro del nombre ("iPhone 15 Black //
     // SIM + eSIM"), y así cada color salía como un producto aparte.
-    PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0).map(p => ({ ...p, gb: capacidadPareja(p.gb), ...separarColor(p.nombre, p.color) }));
+    PRODUCTOS = (d.productos || []).filter(p => p && p.precioUSD > 0).map(p => ({ ...p, gb: capacidadPareja(p.gb), ...separarColor(p.nombre, p.color) })).map(comoReloj);
+    // El que no tiene foto usa las de otro artículo que se ve igual: el mismo modelo y
+    // color con SIM o sin SIM, con Ñ o sin Ñ, WiFi o Cellular.
+    prestarFotos(PRODUCTOS);
     armarGrupos();
     LOCAL = d.local || {};
     COBRO = d.cobro || {};

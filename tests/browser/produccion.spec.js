@@ -130,3 +130,44 @@ test('cada modelo va en una tarjeta aunque dos proveedores lo escriban distinto,
   expect((await tarjetas()).map(t => t.split(' | ')[0].split(' ').slice(0, 2).join(' '))).toEqual(['Acer SFG16', 'Acer A15', 'Lenovo 83RR']);
   expect(errores).toEqual([]);
 });
+
+test('los relojes van por modelo con su tamaño y color, y el que no tiene foto usa la del que se ve igual', async ({ page }) => {
+  const errores = [];
+  page.on('pageerror', e => errores.push(e.message));
+  const valor = dato => Array.isArray(dato) ? { arrayValue: { values: dato.map(valor) } }
+    : typeof dato === 'object' ? { mapValue: { fields: Object.fromEntries(Object.entries(dato).map(([k, v]) => [k, valor(v)])) } }
+      : typeof dato === 'number' ? { doubleValue: dato } : { stringValue: dato };
+  const P = (id, nombre, color, precioUSD, extra = {}) => ({ id: 'lista_' + id, tipo: 'pedido', nombre, gb: '', color, condicion: 'nuevo', categoria: 'Apple Watch nuevos', precioUSD, fotos: [], ...extra });
+  const datos = { local: { nombre: 'Local ficticio', whatsapp: '2235555555' }, productos: [
+    // Como los trae una lista: todo junto en el nombre, con el código del proveedor.
+    P('w1', 'Watch S12 46mm Black SB M/L - MJEL4LS', '', 545), P('w2', 'Watch S12 46mm Dark Bronze - Olive SB M/L', '', 545),
+    P('w3', 'Watch S12 42mm Black SB S/M', '', 485),
+    P('w4', 'Apple Watch SE 3 Gen 40mm', 'Starlight', 365), P('w5', 'Apple Watch SE 3 Gen 40mm + Cell', 'Starlight', 385),
+    // El 18 Pro Max con SIM no tiene foto; el común, del mismo color, sí: es la misma.
+    // (La foto es un archivo que existe en el paquete: una que no carga se cambia por el recuadro.)
+    P('i1', 'iPhone 18 Pro Max', 'Glacier', 1505, { gb: '256GB', categoria: 'iPhone nuevos', fotos: ['/icon-192.png'] }),
+    P('i2', 'iPhone 18 Pro Max con SIM', 'Glacier', 1765, { gb: '256GB', categoria: 'iPhone nuevos' }),
+    P('i3', 'iPhone 18 Pro Max con SIM', 'Burgundy', 1765, { gb: '256GB', categoria: 'iPhone nuevos' }),
+  ] };
+  await page.route('https://firestore.googleapis.com/**', route => route.fulfill({ json: { fields: valor(datos).mapValue.fields } }));
+  const tarjetas = () => page.locator('.grilla .prod').evaluateAll(lista => lista.map(p => [p.querySelector('.prod-nombre').textContent.trim(), p.querySelector('.prod-detalle')?.textContent.trim() || ''].join(' | ').replace(/\s+/g, ' ')));
+
+  await page.goto('/catalogo.html#r=smartwatch');
+  await expect(page.locator('.grilla .prod')).toHaveCount(3);
+  expect(await tarjetas()).toEqual([
+    'Apple Watch Series 12 | 42mm · 46mm · 2 colores',
+    'Apple Watch SE 3 + Cellular | 40mm · Starlight',
+    'Apple Watch SE 3 | 40mm · Starlight',
+  ]);
+  await page.locator('.prod', { hasText: 'Series 12' }).click();
+  await expect(page.locator('.variantes .t')).toHaveText(['Tamaño', 'Color']);
+  await expect(page.locator('.variantes .opc')).toContainText(['42mm', '46mm', 'Black Sport Band']);
+
+  // Con SIM y sin SIM, mismo color: la misma foto. El Burgundy no tiene de dónde tomarla.
+  await page.goto('/catalogo.html#p=lista_i2');
+  await expect(page.locator('.producto-nombre')).toHaveText('iPhone 18 Pro Max con SIM');
+  await expect(page.locator('#ficha img[src$="/icon-192.png"]').first()).toBeAttached();
+  await page.goto('/catalogo.html#p=lista_i3');
+  await expect(page.locator('#ficha img[src$="/icon-192.png"]')).toHaveCount(0);
+  expect(errores).toEqual([]);
+});

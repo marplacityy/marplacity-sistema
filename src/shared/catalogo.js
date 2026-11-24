@@ -108,6 +108,41 @@ export function separarColor(producto, color) {
   return { nombre: palabras.join(' ') + (aclaracion ? ` (${aclaracion})` : ''), color: elColor };
 }
 
+/**
+ * Un reloj, separado en lo que es (el modelo), el tamaño de la caja y lo que se elige
+ * adentro de su tarjeta (el color de la caja y la malla). null si no es un reloj con el
+ * tamaño en el nombre.
+ *
+ * Las listas los traen de a uno, con todo junto y a su manera: "Watch S12 46mm Dark
+ * Bronze - Olive SB M/L - MJEL4LS". Así la tienda mostraba ocho tarjetas del mismo
+ * reloj. Separado queda "Apple Watch Series 12", 46mm, "Dark Bronze - Olive Sport Band":
+ * una tarjeta por modelo, y adentro el tamaño y el color, como un iPhone con su
+ * capacidad. Lo que cambia el producto y el precio (Cellular) se queda en el nombre.
+ */
+export function separarReloj(nombre, color) {
+  const m = /^(.*?\bwatch\b.*?)\s+(\d{2})\s?mm\b\s*(.*)$/i.exec(String(nombre ?? '').replace(/\s+/g, ' ').trim());
+  if (!m) return null;
+  let modelo = m[1].replace(/\bwatch\s+s(\d{1,2})\b/i, 'Watch Series $1').replace(/\bserie\b/i, 'Series').replace(/\bgen\b\.?/i, ' ');
+  let resto = m[3]
+    .replace(/\s*-\s*(?=[A-Z0-9]*\d)[A-Z0-9]{5,}\s*$/, '')          // " - MJEL4LS": el código del proveedor
+    .replace(/\bSB\b/g, 'Sport Band').replace(/\bsportband\b/gi, 'Sport Band')
+    .replace(/\b[SML]\/[SML]\b/g, ' ');                              // el largo de la malla va con el tamaño de la caja
+  // "+ Cell", "(GPS + Cellular)": es otro producto, más caro. Va con el modelo.
+  const red = /\(?\s*(?:gps\s*)?\+?\s*\b(?:cell(?:ular)?|lte)\b\s*\)?/i.exec(resto);
+  if (red) { modelo += ' + Cellular'; resto = resto.replace(red[0], ' '); }
+  resto = resto.replace(/\(\s*gps\s*\)|\bgps\b/gi, ' ');
+  const limpio = t => String(t ?? '').replace(/\bSB\b/g, 'Sport Band').replace(/\bsportband\b/gi, 'Sport Band').replace(/\b[SML]\/[SML]\b/g, ' ')
+    .replace(/\s+/g, ' ').replace(/^[\s·+-]+|[\s·+-]+$/g, '').trim();
+  modelo = limpio(modelo);
+  // Un Apple Watch se llama así aunque la lista diga solo "Watch"; los de otras marcas ya traen la suya.
+  if (!/^apple\b/i.test(modelo) && !/galaxy|samsung|xiaomi|redmi|huawei|garmin|amazfit|pixel|fitbit/i.test(modelo)) modelo = 'Apple ' + modelo;
+  const delNombre = limpio(resto), delCampo = limpio(color);
+  // El color puede venir en el nombre, en su campo o repetido en los dos.
+  const elColor = !delNombre ? delCampo : !delCampo || delNombre.toLowerCase().includes(delCampo.toLowerCase()) ? delNombre
+    : delCampo.toLowerCase().includes(delNombre.toLowerCase()) ? delCampo : `${delNombre} · ${delCampo}`;
+  return { nombre: modelo, tamano: `${m[2]}mm`, color: elColor };
+}
+
 export const esUsado = p => /usad|refurb|reacond|impecab|\d+\s*\/\s*10/i.test(p.estado || '') || p.bateria != null && !/nuev|sellad/i.test(p.estado || '');
 
 /**

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parecidoDeFoto, fotosGuardadasPara, buscarEntreGuardadas } from '../src/shared/fotos-guardadas.js';
+import { parecidoDeFoto, fotosGuardadasPara, buscarEntreGuardadas, indiceDeFotos, fotosCompartidas, prestarFotos } from '../src/shared/fotos-guardadas.js';
 
 test('una foto guardada es del producto si es su mismo modelo y color, esté escrita como esté', () => {
   const rosa = { nombre: 'iPhone 16 (SIM + eSIM)', color: 'Pink' };
@@ -48,4 +48,57 @@ test('las guardadas se ordenan para el producto: las suyas, las del modelo y des
   assert.equal(buscarEntreGuardadas(lista, '  ').length, lista.length);
   assert.deepEqual(buscarEntreGuardadas(lista, 'no existe'), []);
   assert.deepEqual(fotosGuardadasPara({ nombre: 'x' }, 'x', null), []);
+});
+
+test('dos artículos que se ven igual comparten la foto: con SIM o sin, con Ñ o sin, con cancelación o sin', () => {
+  // Lo que pidió Juni: son productos distintos (y precios distintos), pero la foto es la misma.
+  for (const [producto, clave] of [
+    [{ nombre: 'iPhone 18 Pro Max con SIM', color: 'Glacier' }, 'iphone-18-pro-max-glacier'],
+    [{ nombre: 'iPhone 18 Pro Max', color: 'Glacier' }, 'iphone-18-pro-max-con-sim-glacier'],
+    [{ nombre: 'MacBook Air M5 13" con Ñ', color: 'Midnight' }, 'macbook-air-m5-13-midnight'],
+    [{ nombre: 'MacBook Air M5 13" Teclado Español', color: 'Midnight' }, 'macbook-air-m5-13-midnight'],
+    [{ nombre: 'MacBook Air M5 13"', color: 'Midnight' }, 'macbook-air-m5-13-teclado-ingles-midnight'],
+    [{ nombre: 'Apple AirPods 4 (Noise Cancelling)', color: '' }, 'airpods-4'],
+    [{ nombre: 'AirPods 4', color: '' }, 'airpods-4-con-cancelacion-de-ruido'],
+    [{ nombre: 'iPad A16 11" + CELL', color: 'Silver' }, 'ipad-a16-11-silver'],
+    [{ nombre: 'Apple Watch SE 3 40mm GPS + Cellular', color: 'Starlight' }, 'apple-watch-se-3-40mm-starlight'],
+    [{ nombre: 'Watch Ultra 4 49mm - MJAY4', color: 'Black' }, 'apple-watch-ultra-4-49mm-black'],
+  ]) assert.equal(parecidoDeFoto(producto, clave), 'igual', `${producto.nombre} ↔ ${clave}`);
+  // Lo que sí cambia cómo se ve sigue separando: otro modelo, otro tamaño, otro color.
+  assert.equal(parecidoDeFoto({ nombre: 'iPhone 18 Pro con SIM', color: 'Glacier' }, 'iphone-18-pro-max-glacier'), '');
+  assert.equal(parecidoDeFoto({ nombre: 'AirPods Pro 3', color: '' }, 'airpods-4'), '');
+  assert.equal(parecidoDeFoto({ nombre: 'MacBook Air M5 15" con Ñ', color: 'Midnight' }, 'macbook-air-m5-13-midnight'), '');
+  assert.equal(parecidoDeFoto({ nombre: 'iPhone 18 Pro Max con SIM', color: 'Burgundy' }, 'iphone-18-pro-max-glacier'), 'modelo');
+});
+
+test('un producto sin fotos propias usa las del que se ve igual, nunca las de otro color', () => {
+  const mapa = {
+    'iphone-18-pro-max-glacier': ['a.jpg', 'a-2.jpg'], 'iphone-18-pro-max-black': ['b.jpg'],
+    'apple-iphone-18-pro-max-glacier': ['c.jpg'], 'airpods-4': ['d.jpg'], 'vacia': [],
+  };
+  const indice = indiceDeFotos(mapa);
+  // Entre dos claves que se ven igual, la que más fotos tiene.
+  assert.deepEqual(fotosCompartidas({ nombre: 'iPhone 18 Pro Max con SIM', color: 'Glacier' }, 'iphone-18-pro-max-con-sim-glacier', indice), { clave: 'iphone-18-pro-max-glacier', archivos: ['a.jpg', 'a-2.jpg'] });
+  assert.deepEqual(fotosCompartidas({ nombre: 'Apple AirPods 4 (Noise Cancelling)', color: '' }, 'apple-airpods-4', indice), { clave: 'airpods-4', archivos: ['d.jpg'] });
+  // Otro color, o sin color cuando el producto tiene uno: nada.
+  assert.equal(fotosCompartidas({ nombre: 'iPhone 18 Pro Max con SIM', color: 'Burgundy' }, 'x', indice), null);
+  assert.equal(fotosCompartidas({ nombre: 'AirPods 4', color: 'Black' }, 'airpods-4-black', indice), null);
+  // Su propia clave no cuenta como "otro".
+  assert.equal(fotosCompartidas({ nombre: 'AirPods 4', color: '' }, 'airpods-4', indice), null);
+  assert.equal(fotosCompartidas({ nombre: 'x' }, 'x', new Map()), null);
+  assert.equal(indiceDeFotos(null).size, 0);
+});
+
+test('en lo publicado, el que no tiene foto toma las del que se ve igual', () => {
+  const productos = [
+    { id: 'a', nombre: 'iPhone 18 Pro Max', color: 'Glacier', fotos: [] },
+    { id: 'b', nombre: 'iPhone 18 Pro Max con SIM', color: 'Glacier', fotos: ['glacier.jpg', 'glacier-2.jpg'], fotoCaja: [1, 2, 3, 4, 1] },
+    { id: 'c', nombre: 'iPhone 18 Pro Max con SIM', color: 'Burgundy', fotos: [] },
+    { id: 'd', nombre: 'iPhone 18 Pro Max', color: 'Burgundy', fotos: ['burgundy.jpg'] },
+    { id: 'e', nombre: 'iPhone 18 Pro', color: 'Glacier' },
+  ];
+  assert.equal(prestarFotos(productos), 2);
+  assert.deepEqual(productos.map(p => (p.fotos || []).join(',')), ['glacier.jpg,glacier-2.jpg', 'glacier.jpg,glacier-2.jpg', 'burgundy.jpg', 'burgundy.jpg', '']);
+  assert.deepEqual(productos[0].fotoCaja, [1, 2, 3, 4, 1], 'con el recuadro de su miniatura');
+  assert.equal(prestarFotos(null), 0);
 });
