@@ -26,6 +26,7 @@
 
 import { construirSystem, productosParaElBot, MARCA_CANAL } from './prompt.js';
 import { TIENDA_PUBLICA } from '../../../src/shared/sitio.js';
+import { chatPausado, seMetioElDueno, PAUSA_EN_MANO } from '../../../src/shared/pausa-bot.js';
 
 // La tienda web publica. Es la misma direccion que usa el sistema (LINK_CATALOGO).
 const URL_CATALOGO = TIENDA_PUBLICA;
@@ -199,7 +200,8 @@ async function procesarMensaje(ev, env) {
   // Pausado en ESTE chat: la charla la lleva Juni a mano. No se llama a la IA —no hay
   // respuesta que redactar y cada llamada se paga— pero el mensaje se guarda igual y
   // sube a la bandeja, que es donde ella lo va a ver.
-  const pausado = previo ? previo.botPausado === true : false;
+  // La pausa que arranca cuando Juni contesta a mano vence sola (shared/pausa-bot.js).
+  const pausado = chatPausado(previo);
 
   // EL INTERRUPTOR SE LEE ACA, ANTES DE LA IA, Y ESA ES TODA LA GRACIA.
   //
@@ -243,6 +245,18 @@ async function procesarMensaje(ev, env) {
   //
   // Lo que no salga se saca después: es mucho más barato corregir un envío fallado —que
   // es raro— que perder lo que Juni escribió, que no se puede recuperar de ningún lado.
+  // MIENTRAS LA IA PENSABA, JUNI PUDO HABER CONTESTADO ELLA. La llamada tarda unos
+  // segundos y su respuesta a mano entra por otro lado (el eco). Si ya escribió después
+  // de este mensaje, o el chat quedó en pausa en el medio, lo redactado se tira: mandar
+  // igual es contestarle encima. Pasó el 23/11/2026, con el bot recién prendido.
+  if (ia.mensajes.length && idToken) {
+    const ahora = await leerDoc(env, idToken, `conversaciones/${senderId}`);
+    if (ahora && (chatPausado(ahora) || seMetioElDueno(ahora.historial, fechaMensaje))) {
+      console.log('le contestaste vos mientras la IA pensaba — el bot no manda nada a', senderId);
+      ia = { ...EN_MANO };
+    }
+  }
+
   const nuevas = [linea('cliente', texto || (adjuntos[0] ? `[${adjuntos[0]}]` : ''), fechaMensaje)];
   ia.mensajes.forEach(t => nuevas.push(linea('bot', t, new Date())));
   if (idToken) await anotarEnHistorial(env, idToken, senderId, nuevas);
@@ -292,6 +306,13 @@ async function procesarMensaje(ev, env) {
   //
   // Se pausa el chat, que es exactamente lo que Juni haria a mano con el semaforo. El
   // bot no vuelve a contestar ahi hasta que ella lo despause desde la bandeja.
+  // La pausa por haber contestado a mano venció y el bot volvió a atender: el semáforo
+  // de la bandeja tiene que quedar en verde.
+  if (previo && previo.botPausado === true && !pausado) {
+    doc.botPausado = false;
+    doc.motivoPausa = null;
+  }
+
   if (ia.pasoAHumano && !pausado) {
     doc.botPausado = true;
     // Que se note POR QUE quedo pausado: sin esto aparece en rojo en la bandeja y no se
@@ -424,11 +445,19 @@ async function anotarEco(ev, env) {
     return;
   }
 
-  // Se anota `historial` y NADA más. En particular no se toca `ultimoMensajeCliente`:
-  // ese campo es la ventana de 24 h de Meta, y la corre el cliente cuando escribe, no
-  // nosotros cuando le contestamos. Moverlo daría 24 h de aire que Meta no dio.
-  const ok = await anotarEnHistorial(env, idToken, cliente, [linea('juni', texto, new Date(ev.timestamp || Date.now()))]);
-  console.log(ok ? `eco anotado: le contestaste a mano a ${cliente}` : 'eco: no se pudo anotar');
+  // SI CONTESTÁS VOS, EL BOT SE CORRE DE ESE CHAT. Hasta el 23/11/2026 tu respuesta se
+  // anotaba y nada más: al mensaje siguiente del cliente el bot contestaba igual, encima
+  // tuyo. Ahora el chat queda en pausa con un motivo propio, que vence solo a las horas de
+  // tu último mensaje (shared/pausa-bot.js). Si ya estaba pausado por otra cosa —el
+  // semáforo, o el bot prometió algo— esa pausa manda y no se toca.
+  const pausadoPorOtraCosa = previo.botPausado === true && previo.motivoPausa !== PAUSA_EN_MANO;
+  const pausa = pausadoPorOtraCosa ? {} : { botPausado: true, motivoPausa: PAUSA_EN_MANO };
+
+  // Se anota el historial y la pausa, y NADA más. En particular no se toca
+  // `ultimoMensajeCliente`: ese campo es la ventana de 24 h de Meta, y la corre el cliente
+  // cuando escribe, no nosotros cuando le contestamos. Moverlo daría 24 h de aire que Meta no dio.
+  const ok = await anotarEnHistorial(env, idToken, cliente, [linea('juni', texto, new Date(ev.timestamp || Date.now()))], pausa);
+  console.log(ok ? `eco anotado: le contestaste a mano a ${cliente}${pausa.botPausado ? ' — el bot se corre de ese chat' : ''}` : 'eco: no se pudo anotar');
 }
 
 /**
@@ -454,7 +483,7 @@ const docConversacion = (env, igUserId) =>
  * un cliente nuevo): sin ese campo el doc queda sin dueño y las reglas rechazan el
  * update siguiente entero.
  */
-async function anotarEnHistorial(env, idToken, igUserId, lineas) {
+async function anotarEnHistorial(env, idToken, igUserId, lineas, otros = {}) {
   if (!lineas.length) return true;
 
   const previo = await leerDoc(env, idToken, `conversaciones/${igUserId}`);
@@ -465,6 +494,7 @@ async function anotarEnHistorial(env, idToken, igUserId, lineas) {
   // blanca de firestore.rules.
   const name = docConversacion(env, igUserId);
   return patchDoc(env, idToken, name, {
+    ...otros,
     historial: [...historial, ...lineas].slice(-MAX_HISTORIAL),
     userId: env.OWNER_UID,
   });
@@ -825,8 +855,13 @@ async function reanudar(request, env) {
   // El ultimo mensaje del cliente va como "el mensaje de ahora"; todo lo anterior, de
   // contexto. Es el mismo reparto que hace el webhook.
   const ia = await pensarRespuesta(String(ultima.texto || ''), [], env, historial.slice(0, -1), { producto: previo.ultimoProducto || null });
+  // Igual que en el webhook: lo que va a salir se anota ANTES de mandarlo. Si no, el eco
+  // de cada DM llega primero, parece escrito a mano y —desde que contestar a mano pausa
+  // el chat— lo volvería a pausar recién retomado.
+  await anotarEnHistorial(env, idToken, igUserId, ia.mensajes.map(txt => linea('bot', txt, new Date())));
   const enviados = await mandarAutomatico(env, igUserId, ia.mensajes, { cfg });
   const quedoSinMandar = enviados < ia.mensajes.length;
+  if (quedoSinMandar) await sacarDelHistorial(env, idToken, igUserId, ia.mensajes.slice(enviados));
 
   const doc = {
     mensajes: ia.mensajes,
@@ -835,7 +870,6 @@ async function reanudar(request, env) {
     necesitaAtencion: ia.necesitaAtencion || quedoSinMandar,
     motivo: quedoSinMandar ? (ia.motivo || 'no_supe_responder') : ia.motivo,
     prioridad: quedoSinMandar ? Math.min(ia.prioridad, 8) : ia.prioridad,
-    historial: [...historial, ...ia.mensajes.slice(0, enviados).map(txt => linea('bot', txt, new Date()))].slice(-MAX_HISTORIAL),
   };
 
   // Si el modelo no nombro un equipo, el campo no viaja y el doc conserva el anterior.
@@ -1531,7 +1565,7 @@ async function correrSeguimientos(env) {
     // Pausado a mano: ese chat lo lleva Juni. Ni seguimiento ni `visto` — se deja como
     // esta y se retoma cuando lo vuelva a prender. Un "te sigue interesando?" automatico
     // arriba de una charla que esta atendiendo una persona es lo peor de los dos mundos.
-    if (doc.botPausado === true) { console.log('cron: chat pausado, lo salteo', name); continue; }
+    if (chatPausado(doc)) { console.log('cron: chat pausado, lo salteo', name); continue; }
 
     // Se pasó la ventana de Meta: el bot no le escribe, va derecho a la bandeja.
     // `seguimientoEnviado` se marca igual, para no volver a mirarlo cada hora.
@@ -1555,7 +1589,12 @@ async function correrSeguimientos(env) {
     // no sale y la conversación queda para que la mande Juni.
     // El `pausado` va igual, aunque el `continue` de arriba ya los saco: si alguna vez
     // se agrega otra salida, el chequeo tiene que estar en el embudo y no en el camino.
-    const salio = await mandarAutomatico(env, doc.igUserId, [texto], { pausado: doc.botPausado === true }) > 0;
+    // El seguimiento se anota en la charla antes de salir, como todo lo que manda el bot:
+    // así su eco se reconoce como propio (si no, parecía escrito por Juni) y el bot sabe
+    // después que ya lo mandó.
+    await anotarEnHistorial(env, idToken, doc.igUserId, [linea('bot', texto, new Date())]);
+    const salio = await mandarAutomatico(env, doc.igUserId, [texto], { pausado: chatPausado(doc) }) > 0;
+    if (!salio) await sacarDelHistorial(env, idToken, doc.igUserId, [texto]);
 
     // Si el envío no salió, la conversación no se pierde: sube a la bandeja. Y se marca
     // igual como seguida, para no reintentar el mismo mensaje cada hora.

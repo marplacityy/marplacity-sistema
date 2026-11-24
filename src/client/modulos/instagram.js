@@ -6,6 +6,7 @@ import { esc, showToast, requiereDuenoDelLocal } from '../core/interfaz.js';
 import { setSyncDot } from '../core/datos.js';
 import { setDoc, serverTimestamp, updateDoc, doc, getDocs, writeBatch } from 'firebase/firestore';
 import { workerHeaders } from './reportes.js';
+import { chatPausado, PAUSA_EN_MANO, HORAS_EN_MANO } from '../../shared/pausa-bot.js';
 
 export
 // Los timestamps llegan como Timestamp del SDK; si algún doc quedó con el string ISO
@@ -96,6 +97,9 @@ async function pausarChat(id, pausado, aviso) {
   try {
     await updateDoc(doc(contextoApp.db, 'conversaciones', id), {
       botPausado: pausado,
+      // El semáforo tocado a mano manda sobre cualquier pausa anterior: sin su motivo
+      // viejo, una pausa puesta acá no vence sola ni dice "te lo dejó el bot".
+      motivoPausa: null,
       pausadoPor: contextoApp.currentUser && contextoApp.currentUser.email || contextoApp.uid,
       pausadoEn: serverTimestamp()
     });
@@ -189,17 +193,20 @@ export function renderBandeja() {
     const abierta = contextoApp.bdAbiertas.has(x.id);
     const quien = x.igUsuario ? '@' + x.igUsuario : 'IG ' + (x.igUserId || '—');
     const borrador = contextoApp.bdBorradores[x.id] ?? (x.mensajes || []).join('\n');
-    const pausado = x.botPausado === true;
+    // Pausado de verdad: la pausa que arranca cuando contestás a mano vence sola.
+    const pausado = chatPausado(x);
+    const enMano = pausado && x.motivoPausa === PAUSA_EN_MANO;
 
     // El semáforo va en la fila cerrada también: de un vistazo tenés que poder ver qué
     // chats está llevando el bot y cuáles estás llevando vos.
     // Un chat puede estar en rojo porque lo pausaste vos o porque el bot prometió algo y
     // se calló solo. Son situaciones distintas —una la decidiste, la otra te la dejaron
     // en la mesa— así que el semáforo lo dice.
-    const solo = pausado && !!x.motivoPausa;
+    // Y una tercera: le contestaste vos, y el bot se corrió solo de esa charla.
+    const solo = pausado && !!x.motivoPausa && !enMano;
     const semaforo = `<button class="bd-semaforo ${pausado ? 'sem-off' : 'sem-on'}"
-      title="${pausado ? solo ? esc(x.motivoPausa) + '. Tocá para que el bot vuelva a contestar.' : 'El bot no contesta este chat. Tocá para que vuelva a contestar.' : 'El bot contesta este chat solo. Tocá para pausarlo y seguirlo vos.'}"
-      ${on('click', 'toggleBotChat', x.id)}>${pausado ? solo ? '🔴 Te lo dejó' : '🔴 Pausado' : '🟢 Bot'}</button>`;
+      title="${enMano ? `Le contestaste vos: el bot no se mete en este chat y vuelve solo a las ${HORAS_EN_MANO} h de tu último mensaje. Tocá para que vuelva a contestar ahora.` : pausado ? solo ? esc(x.motivoPausa) + '. Tocá para que el bot vuelva a contestar.' : 'El bot no contesta este chat. Tocá para que vuelva a contestar.' : 'El bot contesta este chat solo. Tocá para pausarlo y seguirlo vos.'}"
+      ${on('click', 'toggleBotChat', x.id)}>${enMano ? '🔴 Lo llevás vos' : pausado ? solo ? '🔴 Te lo dejó' : '🔴 Pausado' : '🟢 Bot'}</button>`;
     const etiqueta = x.necesitaAtencion ? `<span class="est-badge ${vencida ? 'est-abandono' : 'est-recibido'}" style="font-size:9px;white-space:nowrap;">PRIORIDAD ${x.prioridad ?? '—'}</span>` : `<span class="consig-tipo tipo-consig" style="white-space:nowrap;">Al día</span>`;
     const bajada = x.necesitaAtencion ? esc(contextoApp.MOTIVOS_BOT[x.motivo] || x.motivo || 'Sin motivo') : (x.respondido ? 'Lo contestó el bot' : 'El bot no contestó');
     // En la fila cerrada va lo último que escribió el cliente, en vez del resumen que
@@ -345,7 +352,7 @@ export function inicializarInstagram() {
     const x = contextoApp.convsItems.find(c => c.id === id);
     if (!x) return;
     const quien = x.igUsuario ? '@' + x.igUsuario : 'IG ' + (x.igUserId || '—');
-    if (!x.botPausado) {
+    if (!chatPausado(x)) {
       if (!confirm(`¿Pausar el bot en el chat de ${quien}?\n\nDeja de contestarle solo a esta persona: le contestás vos desde Instagram. Todo lo que entre, y todo lo que le escribas, se sigue guardando acá.\n\nAl resto de los clientes les sigue contestando igual.`)) return;
       await pausarChat(id, true, 'Bot pausado en este chat — contestale vos');
       return;
