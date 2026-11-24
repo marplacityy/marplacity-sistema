@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { limpiarJson, normalizar, expandirCanal, aFields, momentoDeSeguir, fechaAR, motivoDeLaFalla, turnosParaLaIA, esEcoPropio, nombreLindo, textoSeguimiento, sinLasQueNoSalieron, proveedorIA, claveIA, turnosParaDeepSeek } from './worker-ig.js';
-import { construirSystem as _construirSystem, productosParaElBot } from './prompt.js';
+import { construirSystem as _construirSystem, productosParaElBot, bloquePermutas } from './prompt.js';
 // construirSystem devuelve bloques (por el cache del prompt); los tests miran el texto.
 const construirSystem = o => _construirSystem(o).map(b => b.text).join('\n\n');
 
@@ -507,6 +507,34 @@ console.log('\n── la query del cron pasa las reglas ──');
   ok(/if \(!doc\.ultimoProducto\)/.test(src.slice(src.indexOf('async function correrSeguimientos'))), 'sin equipo consultado, el cron no manda seguimiento');
   ok(indices.includes('userId,seguimientoEnviado,necesitaAtencion,ultimoMensajeCliente'),
      'firestore.indexes.json tiene el indice de la query del cron, con userId', indices.join(' | '));
+}
+
+console.log('\n── Valor de permutas: con la lista del dueño, el bot pasa el aproximado ──');
+{
+  const lista = 'iPhone 13: 220\niPhone 13 Pro: 300\niPhone 15 Pro Max: 550 a 600';
+  const base = { catalogo: { local: { whatsapp: '2235551234' }, productos: [] }, urlCatalogo: 'https://x/tienda' };
+  const con = construirSystem({ ...base, conocimiento: { valorPermutas: lista } });
+  ok((con.match(/^## PERMUTAS/gm) || []).length === 1, 'queda una sola sección de permutas');
+  ok(!con.includes('Vos no tasás'), 'la regla vieja ("vos no tasás") se va: no puede contradecir a la lista');
+  ok(con.includes('iPhone 15 Pro Max: 550 a 600'), 'lleva la lista tal cual la escribió el dueño');
+  ok(/puede ser más o menos según la estética, el almacenamiento, el\s+funcionamiento y cómo se ven las cámaras/.test(con), 'aclara por qué puede variar');
+  ok(/el valor final se define en el local/.test(con), 'y que el valor final se define en el local');
+  ok(con.includes('mandame un whatsapp al 2235551234 con fotos del equipo y los detalles'), 'si no está en la lista: WhatsApp del local con fotos, o pasar');
+  ok(/NO inventes un valor/.test(con) && /roto o tiene una falla/.test(con), 'no inventa valores, ni usa la lista para un equipo roto');
+  ok(/## PERMUTAS[\s\S]*## REPARACIONES/.test(con), 'el resto del prompt sigue en su lugar');
+  // Sin lista, todo como antes: no pasa números y deriva.
+  const sin = construirSystem({ ...base, conocimiento: { valorPermutas: '   ' } });
+  ok(sin.includes('Vos no tasás') && !sin.includes('VALOR DE PERMUTAS'), 'sin lista cargada sigue la regla de siempre');
+  ok(sin === construirSystem({ ...base, conocimiento: null }), 'y un campo vacío es lo mismo que no tenerlo');
+  // Sin teléfono del local no inventa uno: manda al local.
+  ok(!/whatsapp al/.test(bloquePermutas(lista, '')) && /pasate por el local con el equipo/.test(bloquePermutas(lista, '')), 'sin WhatsApp cargado, invita al local');
+  ok(bloquePermutas('', '223') === '' && bloquePermutas(null) === '', 'sin lista no hay bloque');
+  // Un prompt editado por el dueño que ya no tiene esa sección: la nueva va al final y manda.
+  const editado = construirSystem({ ...base, base: 'Sos un vendedor.\n\n## OTRA COSA\nx', conocimiento: { valorPermutas: lista } });
+  ok(/## OTRA COSA[\s\S]*## PERMUTAS[\s\S]*reemplaza cualquier otra indicación sobre permutas/.test(editado), 'con el prompt editado, se agrega al final');
+  // Va en el bloque de las reglas (el que se cachea), no en el del catálogo.
+  const bloques = _construirSystem({ ...base, conocimiento: { valorPermutas: lista } });
+  ok(bloques[0].text.includes('VALOR DE PERMUTAS') && !bloques[1].text.includes('VALOR DE PERMUTAS'), 'viaja con las reglas');
 }
 
 console.log(fallos ? `\n${fallos} FALLA(S)\n` : '\nTodo verde\n');

@@ -307,7 +307,7 @@ export function inicializarConocimiento() {
   // libre (lo que el bot contesta tal cual), y la colección listas_precios, un doc
   // por lista cargada. OJO: el precio de esas listas YA ES el precio final al
   // público — no se le aplica margen en ningún punto del flujo.
-  contextoApp.KB_CAMPOS = ['tono', 'entrenamiento', 'horarios', 'direccion', 'mediosPago', 'garantia', 'politicaSena', 'comoLlegar', 'notasExtra'];
+  contextoApp.KB_CAMPOS = ['tono', 'entrenamiento', 'valorPermutas', 'horarios', 'direccion', 'mediosPago', 'garantia', 'politicaSena', 'comoLlegar', 'notasExtra'];
   // id → nombre de cada proveedor, siempre al día con lo guardado (el catálogo lo recorre).
   Object.defineProperty(contextoApp, 'KB_ORIGENES', { configurable: true, get: () => Object.fromEntries(proveedores().map(p => [p.id, p.nombre])) });
   contextoApp.kbParseada = {};   // origen → lo interpretado y todavía no guardado
@@ -436,7 +436,7 @@ export function inicializarConocimiento() {
   // Guarda TODO el conocimiento, lo llame el botón del tono o el de los datos: los dos
   // escriben el mismo doc y los campos se leen de la misma lista.
   window.guardarConocimiento = async function () {
-    const btns = ['btn-kb-guardar-tono', 'btn-kb-guardar-entrenamiento', 'btn-kb-guardar-datos'].map(id => document.getElementById(id)).filter(Boolean);
+    const btns = ['btn-kb-guardar-tono', 'btn-kb-guardar-entrenamiento', 'btn-kb-guardar-permutas', 'btn-kb-guardar-datos'].map(id => document.getElementById(id)).filter(Boolean);
     btns.forEach(b => {
       b.disabled = true;
       b.textContent = 'Guardando...';

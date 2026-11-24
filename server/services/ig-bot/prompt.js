@@ -771,6 +771,80 @@ ${cats.map(c => `- ${c} (${conteo[c]} producto${conteo[c] === 1 ? '' : 's'}): ${
 }
 
 /**
+ * Las permutas cuando el dueño cargó su lista de valores (conocimiento.valorPermutas,
+ * tarjeta "Valor de permutas" de la Base de conocimiento). Devuelve '' si no hay lista.
+ *
+ * Reemplaza a la sección PERMUTAS del prompt, que dice lo contrario ("nunca digas un
+ * número, vos no tasás"): con las dos a la vista el modelo no sabría a cuál hacerle caso.
+ * Lo pidió Juni el 24/11/2026: que el bot pase el aproximado de la lista aclarando que
+ * puede variar y que el valor final se define en el local; y si el equipo no está, que
+ * mande a escribir por WhatsApp con fotos o a pasar por el local, sin inventar un número.
+ *
+ * La lista vive en la base del dueño y no en este archivo: el repositorio es público.
+ */
+export function bloquePermutas(lista, whatsapp) {
+  const valores = String(lista || '').trim().slice(0, 3000);
+  if (!valores) return '';
+  const numero = String(whatsapp || '').replace(/[^\d+ ]/g, '').trim();
+  const comoSaberlo = numero
+    ? `- para decirte en cuanto te lo tomo mandame un whatsapp al ${numero} con fotos del equipo y los detalles
+- o si queres pasate por el local y lo vemos en el momento`
+    : `- para decirte en cuanto te lo tomo pasate por el local con el equipo y lo vemos en el momento`;
+  return `## PERMUTAS
+
+Te ofrecen un equipo en parte de pago, o te preguntan en cuánto se lo tomás. Tenés una
+lista de valores de referencia que cargó el dueño, VALOR DE PERMUTAS. Son APROXIMADOS, en
+dólares, para un equipo sano y en buen estado.
+
+### VALOR DE PERMUTAS
+
+${valores}
+
+### SI EL EQUIPO ESTÁ EN LA LISTA
+
+Le pasás el aproximado y le aclarás ahí mismo que es eso, un aproximado. Van siempre las
+tres cosas: el número; que puede ser más o menos según la estética, el almacenamiento, el
+funcionamiento y cómo se ven las cámaras; y que el valor final se define en el local
+cuando se ve el equipo. Si la lista trae un rango (550/600), pasá el rango.
+
+(los números de este ejemplo son de mentira: el valor sale de la lista de arriba)
+- un 13 pro te lo tomo en 300 usd aprox
+- puede ser un poco mas o un poco menos segun la estetica, la capacidad, como funcione y como se vean las camaras
+- el valor final lo vemos en el local cuando lo traes
+
+### SI NO ESTÁ EN LA LISTA
+
+Otro modelo, otra marca, o no queda claro cuál es: NO inventes un valor ni lo calcules a
+partir de otros de la lista. Decile cómo saberlo:
+
+${comoSaberlo}
+
+Lo mismo si el equipo está roto o tiene una falla (pantalla, cámara, batería, no enciende,
+Face ID), aunque el modelo esté en la lista: esos valores son para un equipo sano.
+
+### SIEMPRE
+
+- Si te dicen qué modelo se quieren llevar (ej: 17 pro max), anotalo y seguí con la
+  venta: no lo discutas ni le ofrezcas otro.
+- Nunca digas que no hacés permutas.
+- Una consulta de permuta que resolviste así NO va a NEED ATTENTION ni se pasa el chat: ya
+  le dijiste cómo seguir. No prometas "te confirmo" ni "ahora te digo".
+- Marcá NEED ATTENTION con motivo permuta solo si pide hablar con alguien o discute el
+  valor. Tampoco ahí prometas nada: se ve por WhatsApp o en el local.`;
+}
+
+/**
+ * Las reglas con la sección PERMUTAS cambiada por la de la lista. Si el dueño editó el
+ * prompt y esa sección ya no está con su título, la nueva va al final diciendo que manda.
+ */
+function conPermutas(reglas, bloque) {
+  const seccion = /^## PERMUTAS\n[\s\S]*?(?=^## )/m;
+  return seccion.test(reglas)
+    ? reglas.replace(seccion, () => bloque + '\n\n')
+    : `${reglas}\n\n${bloque}\n\nEsta sección reemplaza cualquier otra indicación sobre permutas que haya más arriba.`;
+}
+
+/**
  * Arma el system prompt final, EN DOS BLOQUES, y el orden no es estético.
  *
  * El prompt entero viaja en cada mensaje que contesta el bot, y es lo que más se paga. La
@@ -789,10 +863,14 @@ ${cats.map(c => `- ${c} (${conteo[c]} producto${conteo[c] === 1 ? '' : 's'}): ${
  * al final y sin marcar.
  */
 export function construirSystem({ base, conocimiento, catalogo, urlCatalogo, fotos } = {}) {
+  // `base` es la versión que el dueño editó desde el sistema. Si no editó nunca, o si
+  // borró todo el texto, se usa la de este archivo.
+  const reglas = (base && String(base).trim()) ? String(base).trim() : SYSTEM_PROMPT;
+  // Con la lista de valores cargada, las permutas se contestan con ella. El WhatsApp es
+  // el del local, el mismo que usa la tienda (viaja en lo publicado).
+  const permutas = bloquePermutas(conocimiento && conocimiento.valorPermutas, catalogo && catalogo.local && catalogo.local.whatsapp);
   const fijo = [
-    // `base` es la versión que el dueño editó desde el sistema. Si no editó nunca, o
-    // si borró todo el texto, se usa la de este archivo.
-    (base && String(base).trim()) ? String(base).trim() : SYSTEM_PROMPT,
+    permutas ? conPermutas(reglas, permutas) : reglas,
     bloqueConocimiento(conocimiento),
     bloqueTono(conocimiento && conocimiento.tono),
     bloqueEntrenamiento(conocimiento && conocimiento.entrenamiento),

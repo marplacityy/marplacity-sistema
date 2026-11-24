@@ -750,3 +750,15 @@ test('el precio de venta de un equipo se corrige desde la lista de stock, sin ab
   await expect(page.locator('#cat-grid')).toContainText('100');
   expect(errores).toEqual([]);
 });
+
+test('el valor de permutas se carga en la base de conocimiento del bot', async ({ page }) => {
+  const errores = await preparar(page);
+  await entrar(page);
+  await ir(page, 'conocimiento');
+  await expect(page.locator('#kb-valorPermutas')).toBeVisible();
+  await page.locator('#kb-valorPermutas').fill('iPhone 13: 220\niPhone 13 Pro: 300');
+  await page.locator('#btn-kb-guardar-permutas').click();
+  await expect(page.locator('#toast')).toContainText('el bot lo usa desde el próximo mensaje');
+  expect(await page.evaluate(() => window.__datosPrueba.leer('conocimiento/usuario-prueba').valorPermutas)).toBe('iPhone 13: 220\niPhone 13 Pro: 300');
+  expect(errores).toEqual([]);
+});
